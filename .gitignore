@@ -1,0 +1,70 @@
+# Environment variables
+.env
+.env.local
+.env.production
+.env.example
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+terminalshop
+server_bin
+terminalshop_*
+
+# Go test/coverage files
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Dependency directories
+vendor/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.claude/
+
+// ssh config
+.ssh/
+
+# Logs
+*.log
+output.log
+logs/
+
+# Database files (if using SQLite for development)
+*.db
+*.sqlite
+*.sqlite3
+
+# SSH keys
+ssh_host_key
+ssh_host_key.pub
+*.pem
+*.key
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS-specific
+Thumbs.db
+.DS_Store
+
+# Don't commit the cloned reference repo (optional - you might want to keep it)
+# terminal-shop-source/
+
+# API documentation (auto-generated)
+api/docs/
+
+# Migration state (if using a migration tool that creates state files)
+migrations/*.state

@@ -1,0 +1,57 @@
+package models
+
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
+
+// Coffee represents a coffee product
+type Coffee struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	Name        string         `gorm:"size:255;not null" json:"name"`
+	RoastType   string         `gorm:"size:100" json:"roast_type"`
+	Ounces      int            `json:"ounces"`
+	BeanType    string         `gorm:"size:100" json:"bean_type"`
+	Price       float64        `gorm:"not null" json:"price"`
+	Color       string         `gorm:"size:7" json:"color"` // Hex color for background
+	Description string         `gorm:"type:text" json:"description"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type Socks struct {
+	ID          uint
+	Name        string
+	Color       string
+	Size        uint
+	Price       float64
+	Description string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	DeletedAt   time.Time
+}
+
+// TableName specifies the table name for the Coffee model
+func (Coffee) TableName() string {
+	return "coffees"
+}
+
+func (Socks) TableNameSocks() string {
+	return "socks"
+}
+
+// CartItem represents an item in the cart
+type CartItem struct {
+	Coffee   Coffee
+	Socks    Socks
+	Quantity int
+}
+
+// Account menu items
+var AccountMenuItems = []string{
+	"order history",
+	"faq",
+	"about",
+}
