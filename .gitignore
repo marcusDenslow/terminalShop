@@ -32,7 +32,7 @@ vendor/
 .DS_Store
 .claude/
 
-// ssh config
+# ssh config
 .ssh/
 
 # Logs
@@ -59,6 +59,14 @@ temp/
 # OS-specific
 Thumbs.db
 .DS_Store
+
+
+# random stuff like ai and shit
+CLAUDE.md 
+AGENTS.md 
+MODELS.md 
+REFACTORING.md 
+TODO.md
 
 # Don't commit the cloned reference repo (optional - you might want to keep it)
 # terminal-shop-source/
