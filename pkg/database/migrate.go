@@ -16,10 +16,10 @@ func Migrate(db *gorm.DB) error {
 	// It will NOT delete unused columns or change column types
 	if err := db.AutoMigrate(
 		&models.Coffee{},
-		&models.User{}, // SSH key-based authentication
-		// Add other models here as they're created
-		// &models.Cart{},
-		// &models.Order{},
+		&models.User{},      // SSH key-based authentication
+		&models.Card{},      // Saved payment methods
+		&models.Order{},     // Completed purchases
+		&models.OrderItem{}, // Line items within orders
 	); err != nil {
 		return fmt.Errorf("migration failed: %w", err)
 	}

@@ -42,7 +42,7 @@ func main() {
 	}
 
 	// Setup routes
-	router := routes.SetupRoutes(version)
+	router := routes.SetupRoutes(version, cfg.StripeSecretKey)
 
 	// Create HTTP server
 	server := &http.Server{

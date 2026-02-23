@@ -11,10 +11,11 @@ import (
 type User struct {
 	ID                uint           `gorm:"primaryKey" json:"id"`
 	SSHKeyFingerprint string         `gorm:"uniqueIndex;size:100;not null" json:"ssh_key_fingerprint"` // SHA256 fingerprint - PRIMARY identifier
-	SSHPublicKey      string         `gorm:"uniqueIndex;type:text;not null" json:"-"`                   // Full SSH public key
-	Name              string         `gorm:"size:255" json:"name,omitempty"`                            // Real name (for shipping labels)
-	Email             string         `gorm:"size:255" json:"email,omitempty"`                           // Email (for receipts)
-	Anonymous         bool           `gorm:"default:false" json:"anonymous"`                            // True if connected without SSH key
+	SSHPublicKey      string         `gorm:"uniqueIndex;type:text;not null" json:"-"`                  // Full SSH public key
+	Name              string         `gorm:"size:255" json:"name,omitempty"`                           // Real name (for shipping labels)
+	Email             string         `gorm:"size:255" json:"email,omitempty"`                          // Email (for receipts)
+	Anonymous         bool           `gorm:"default:false" json:"anonymous"`                           // True if connected without SSH key
+	StripeCustomerID  string         `gorm:"size:255" json:"-"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
 	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`

@@ -1,14 +1,14 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	gossh "golang.org/x/crypto/ssh"
-
-	"github.com/stripe/stripe-go/v78"
-	"github.com/stripe/stripe-go/v78/token"
 
 	"terminalShop/pkg/api"
 	"terminalShop/pkg/models"
@@ -48,6 +48,10 @@ type Model struct {
 	AddressCursor  int
 	StripeKey      string // Stripe publishable key for client-side tokenization
 	ShippoKey      string // Shippo API key for address validation
+
+	// Order history
+	Orders       []models.Order
+	OrdersLoaded bool
 }
 
 // ProductsMsg is sent when products are fetched from API
@@ -174,9 +178,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// kick off Stripe tokenization (runs async)
 			return m, m.tokenizeCard(msg)
 		case StripeTokenMsg:
-			// Tokenization completed, move to confirmation
-			m.CheckoutStep = 3
 			m.PaymentForm = nil
+			return m, m.submitCheckout(msg)
+		case CheckoutResultMsg:
+			if msg.Err != nil {
+				m.ErrorMsg = fmt.Sprintf("checkout failed: %v", msg.Err)
+				m.CheckoutStep = 2
+				m.PaymentForm = m.InitPaymentForm()
+				return m, m.PaymentForm.form.Init()
+			}
+			m.CheckoutStep = 3
 			return m, nil
 		case StripeTokenErrMsg:
 			// Tokenization failed, show error and let user retry
@@ -268,6 +279,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case OrdersMsg:
+		if msg.Err == nil {
+			m.Orders = msg.Orders
+			m.OrdersLoaded = true
+		}
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.WindowWidth = msg.Width
 		m.WindowHeight = msg.Height
@@ -302,6 +320,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ShippingForm = nil
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
+			if !m.OrdersLoaded {
+				return m, m.fetchOrdersCmd()
+			}
 
 		case "p", "enter":
 			// Proceed to checkout from cart
@@ -515,33 +536,119 @@ type StripeTokenErrMsg struct {
 	Err error
 }
 
+type CheckoutResultMsg struct {
+	OrderID uint
+	Total   int
+	Err     error
+}
+
+// OrdersMsg is sent when order history is fetched from the API
+type OrdersMsg struct {
+	Orders []models.Order
+	Err    error
+}
+
+func (m Model) fetchOrdersCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return OrdersMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		orders, err := m.APIClient.GetOrders(m.User.SSHKeyFingerprint)
+		return OrdersMsg{Orders: orders, Err: err}
+	}
+}
+
 func (m Model) tokenizeCard(card PaymentFormCompleteMsg) tea.Cmd {
 	return func() tea.Msg {
-		stripe.Key = m.StripeKey
+		// Use Stripe's HTTP API directly with the publishable key.
+		// The Go SDK's token.New() is blocked for raw card numbers
+		// unless your account has direct PCI compliance enabled.
+		// This HTTP POST mimics what a browser does with Stripe.js.
+		pubKey := m.StripeKey
 
-		params := &stripe.TokenParams{
-			Card: &stripe.CardParams{
-				Number:   stripe.String(card.CardNumber),
-				ExpMonth: stripe.String(card.ExpiryMonth),
-				ExpYear:  stripe.String(card.ExpiryYear),
-				CVC:      stripe.String(card.CVC),
-			},
-		}
+		data := fmt.Sprintf(
+			"card[number]=%s&card[exp_month]=%s&card[exp_year]=%s&card[cvc]=%s",
+			card.CardNumber, card.ExpiryMonth, card.ExpiryYear, card.CVC,
+		)
 
-		tok, err := token.New(params)
+		req, err := http.NewRequest("POST", "https://api.stripe.com/v1/tokens", strings.NewReader(data))
 		if err != nil {
 			return StripeTokenErrMsg{Err: err}
 		}
-		last4 := ""
-		if tok.Card != nil {
-			last4 = tok.Card.Last4
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Authorization", "Bearer "+pubKey)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return StripeTokenErrMsg{Err: err}
+		}
+		defer resp.Body.Close()
+
+		var result struct {
+			ID   string `json:"id"`
+			Card struct {
+				Last4 string `json:"last4"`
+				Brand string `json:"brand"`
+			} `json:"card"`
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return StripeTokenErrMsg{Err: err}
+		}
+
+		if result.Error != nil {
+			return StripeTokenErrMsg{Err: fmt.Errorf("%s", result.Error.Message)}
 		}
 
 		return StripeTokenMsg{
-			TokenID: tok.ID,
-			Last4:   last4,
+			TokenID: result.ID,
+			Last4:   result.Card.Last4,
+		}
+	}
+}
+
+func (m Model) submitCheckout(tok StripeTokenMsg) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil {
+			return CheckoutResultMsg{Err: fmt.Errorf("API client not available")}
 		}
 
+		items := m.GetCartItemsSlice()
+		cartItems := make([]api.CheckoutCartItem, 0, len(items))
+		for _, item := range items {
+			cartItems = append(cartItems, api.CheckoutCartItem{
+				CoffeeID: item.Coffee.ID,
+				Quantity: item.Quantity,
+			})
+		}
+
+		req := api.CheckoutRequest{
+			StripeToken:    tok.TokenID,
+			Last4:          tok.Last4,
+			Items:          cartItems,
+			ShippingName:   m.ShippingInfo.Name,
+			ShippingStreet: m.ShippingInfo.Street1,
+			ShippingCity:   m.ShippingInfo.City,
+			ShippingState:  m.ShippingInfo.State,
+			ShippingZip:    m.ShippingInfo.Zip,
+		}
+
+		if m.User != nil {
+			req.Fingerprint = m.User.SSHKeyFingerprint
+		}
+
+		order, err := m.APIClient.Checkout(req)
+		if err != nil {
+			return CheckoutResultMsg{Err: err}
+		}
+
+		return CheckoutResultMsg{
+			OrderID: order.ID,
+			Total:   order.Total,
+		}
 	}
 }
 

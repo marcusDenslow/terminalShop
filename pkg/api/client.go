@@ -142,3 +142,92 @@ func (c *Client) RegisterUser(username, sshPublicKey, sshKeyFingerprint string) 
 
 	return &registerResp.Data.User, nil
 }
+
+// CheckoutRequest represents the checkout payload sent to the API
+type CheckoutRequest struct {
+	Fingerprint    string             `json:"fingerprint"`
+	StripeToken    string             `json:"stripe_token"`
+	Last4          string             `json:"last4"`
+	Brand          string             `json:"brand"`
+	ExpMonth       int                `json:"exp_month"`
+	ExpYear        int                `json:"exp_year"`
+	Items          []CheckoutCartItem `json:"items"`
+	ShippingName   string             `json:"shipping_name"`
+	ShippingStreet string             `json:"shipping_street"`
+	ShippingCity   string             `json:"shipping_city"`
+	ShippingState  string             `json:"shipping_state"`
+	ShippingZip    string             `json:"shipping_zip"`
+}
+
+type CheckoutCartItem struct {
+	CoffeeID uint `json:"coffee_id"`
+	Quantity int  `json:"quantity"`
+}
+
+type CheckoutResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Order models.Order `json:"order"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+type OrderResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Orders []models.Order `json:"orders"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+func (c *Client) Checkout(req CheckoutRequest) (*models.Order, error) {
+	url := fmt.Sprintf("%s/api/v1/checkout", c.BaseURL)
+
+	jsonData, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal checkout request: %w", err)
+	}
+
+	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("checkout request failed: %w", err)
+	}
+
+	defer resp.Body.Close()
+
+	var checkoutResp CheckoutResponse
+	if err := json.NewDecoder(resp.Body).Decode(&checkoutResp); err != nil {
+		return nil, fmt.Errorf("failed to decode checkout response: %w", err)
+	}
+
+	if !checkoutResp.Success {
+		if checkoutResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", checkoutResp.Error.Code, checkoutResp.Error.Message)
+		}
+		return nil, fmt.Errorf("checkout failed")
+	}
+	return &checkoutResp.Data.Order, nil
+}
+
+func (c *Client) GetOrders(fingerprint string) ([]models.Order, error) {
+	url := fmt.Sprintf("%s/api/v1/orders?fingerprint=%s", c.BaseURL, fingerprint)
+
+	resp, err := c.HTTPClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch orders: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var ordersResp OrderResponse
+	if err := json.NewDecoder(resp.Body).Decode(&ordersResp); err != nil {
+		return nil, fmt.Errorf("failed to decode orders response: %w", err)
+	}
+
+	if !ordersResp.Success {
+		if ordersResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", ordersResp.Error.Code, ordersResp.Error.Message)
+		}
+		return nil, fmt.Errorf("failed to fetch orders")
+	}
+	return ordersResp.Data.Orders, nil
+}

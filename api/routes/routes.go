@@ -8,7 +8,7 @@ import (
 )
 
 // SetupRoutes configures all API routes
-func SetupRoutes(version string) *chi.Mux {
+func SetupRoutes(version string, stripeSecretKey string) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Apply global middleware
@@ -20,6 +20,8 @@ func SetupRoutes(version string) *chi.Mux {
 	healthHandler := handlers.NewHealthHandler(version)
 	productHandler := handlers.NewProductHandler()
 	authHandler := handlers.NewAuthHandler()
+	checkoutHandler := handlers.NewCheckoutHandler(stripeSecretKey)
+	orderHandler := handlers.NewOrderHandler()
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -33,12 +35,17 @@ func SetupRoutes(version string) *chi.Mux {
 
 		// Product endpoints (full CRUD)
 		r.Route("/products", func(r chi.Router) {
-			r.Get("/", productHandler.GetProducts)       // GET /api/v1/products
-			r.Post("/", productHandler.CreateProduct)    // POST /api/v1/products
-			r.Get("/{id}", productHandler.GetProduct)    // GET /api/v1/products/:id
-			r.Put("/{id}", productHandler.UpdateProduct) // PUT /api/v1/products/:id
+			r.Get("/", productHandler.GetProducts)          // GET /api/v1/products
+			r.Post("/", productHandler.CreateProduct)       // POST /api/v1/products
+			r.Get("/{id}", productHandler.GetProduct)       // GET /api/v1/products/:id
+			r.Put("/{id}", productHandler.UpdateProduct)    // PUT /api/v1/products/:id
 			r.Delete("/{id}", productHandler.DeleteProduct) // DELETE /api/v1/products/:id
 		})
+		// Checkout endpoint
+		r.Post("/checkout", checkoutHandler.Checkout)
+		
+		// Order endpoints
+		r.Get("/orders", orderHandler.GetOrders)
 	})
 
 	return r
