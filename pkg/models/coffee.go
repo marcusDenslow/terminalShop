@@ -21,31 +21,15 @@ type Coffee struct {
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-type Socks struct {
-	ID          uint
-	Name        string
-	Color       string
-	Size        uint
-	Price       float64
-	Description string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	DeletedAt   time.Time
-}
-
 // TableName specifies the table name for the Coffee model
 func (Coffee) TableName() string {
 	return "coffees"
 }
 
-func (Socks) TableNameSocks() string {
-	return "socks"
-}
 
 // CartItem represents an item in the cart
 type CartItem struct {
 	Coffee   Coffee
-	Socks    Socks
 	Quantity int
 }
 

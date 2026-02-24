@@ -43,7 +43,7 @@ func (m Model) RenderConfirmation() string {
 				labelStyle.Render("         ") +
 				valueStyle.Render(m.ShippingInfo.Street1) + "\n" +
 				labelStyle.Render("         ") +
-				valueStyle.Render(fmt.Sprintf("%s, %s %s", m.ShippingInfo.City, m.ShippingInfo.Country, m.ShippingInfo.Zip)),
+				valueStyle.Render(fmt.Sprintf("%s, %s %s, %s", m.ShippingInfo.City, m.ShippingInfo.State, m.ShippingInfo.Zip, m.ShippingInfo.Country)),
 		)
 	}
 

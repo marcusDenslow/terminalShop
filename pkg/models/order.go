@@ -30,9 +30,12 @@ type Order struct {
 	Total           int            `gorm:"not null" json:"total"`          // Amount in cents
 	ShippingName    string         `gorm:"size:255" json:"shipping_name"`
 	ShippingStreet  string         `gorm:"size:255" json:"shipping_street"`
+	ShippingStreet2 string         `gorm:"size:255" json:"shipping_street2"`
 	ShippingCity    string         `gorm:"size:255" json:"shipping_city"`
 	ShippingState   string         `gorm:"size:50" json:"shipping_state"`
 	ShippingZip     string         `gorm:"size:20" json:"shipping_zip"`
+	ShippingCountry string         `gorm:"size:2" json:"shipping_country"`
+	ShippingPhone   string         `gorm:"size:20" json:"shipping_phone"`
 	CreatedAt       time.Time      `json:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`

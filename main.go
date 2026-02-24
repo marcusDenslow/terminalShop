@@ -52,13 +52,7 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	}
 
 	// Create TUI model with user context (no registration screen needed!)
-	username := "guest"
-	if user != nil && user.Name != "" {
-		username = user.Name
-	} else if user != nil {
-		username = user.SSHKeyFingerprint[:16]
-	}
-	m := tui.NewModel(username)
+	m := tui.NewModelWithAuth(user, false, s.PublicKey())
 	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
 

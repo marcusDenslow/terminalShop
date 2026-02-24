@@ -20,6 +20,7 @@ func Migrate(db *gorm.DB) error {
 		&models.Card{},      // Saved payment methods
 		&models.Order{},     // Completed purchases
 		&models.OrderItem{}, // Line items within orders
+		&models.Address{}, // Saved addresses
 	); err != nil {
 		return fmt.Errorf("migration failed: %w", err)
 	}

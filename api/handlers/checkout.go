@@ -30,18 +30,21 @@ type CheckoutCartItem struct {
 }
 
 type CheckoutRequest struct {
-	Fingerprint    string             `json:"fingerprint"`
-	StripeToken    string             `json:"stripe_token"`
-	Last4          string             `json:"last4"`
-	Brand          string             `json:"brand"`
-	ExpMonth       int                `json:"exp_month"`
-	ExpYear        int                `json:"exp_year"`
-	Items          []CheckoutCartItem `json:"items"`
-	ShippingName   string             `json:"shipping_name"`
-	ShippingStreet string             `json:"shipping_street"`
-	ShippingCity   string             `json:"shipping_city"`
-	ShippingState  string             `json:"shipping_state"`
-	ShippingZip    string             `json:"shipping_zip"`
+	Fingerprint     string             `json:"fingerprint"`
+	StripeToken     string             `json:"stripe_token"`
+	Last4           string             `json:"last4"`
+	Brand           string             `json:"brand"`
+	ExpMonth        int                `json:"exp_month"`
+	ExpYear         int                `json:"exp_year"`
+	Items           []CheckoutCartItem `json:"items"`
+	ShippingName    string             `json:"shipping_name"`
+	ShippingStreet  string             `json:"shipping_street"`
+	ShippingStreet2 string             `json:"shipping_street2"`
+	ShippingCity    string             `json:"shipping_city"`
+	ShippingState   string             `json:"shipping_state"`
+	ShippingZip     string             `json:"shipping_zip"`
+	ShippingCountry string             `json:"shipping_country"`
+	ShippingPhone   string             `json:"shipping_phone"`
 }
 
 func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
@@ -160,9 +163,12 @@ func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		Total:           total,
 		ShippingName:    req.ShippingName,
 		ShippingStreet:  req.ShippingStreet,
+		ShippingStreet2: req.ShippingStreet2,
 		ShippingCity:    req.ShippingCity,
 		ShippingState:   req.ShippingState,
 		ShippingZip:     req.ShippingZip,
+		ShippingCountry: req.ShippingCountry,
+		ShippingPhone:   req.ShippingPhone,
 		Items:           orderItems,
 	}
 

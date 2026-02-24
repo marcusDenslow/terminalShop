@@ -138,7 +138,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.ShippingForm.form.Init()
 				case "d", "x":
 					if m.AddressCursor < len(m.SavedAddresses) {
-						m.SavedAddresses = append(m.SavedAddresses[:m.AddressCursor], m.SavedAddresses[m.AccountCursor+1:]...)
+						m.SavedAddresses = append(m.SavedAddresses[:m.AddressCursor], m.SavedAddresses[m.AddressCursor+1:]...)
 						if m.AddressCursor >= len(m.SavedAddresses) && m.AddressCursor > 0 {
 							m.AddressCursor--
 						}
@@ -626,14 +626,17 @@ func (m Model) submitCheckout(tok StripeTokenMsg) tea.Cmd {
 		}
 
 		req := api.CheckoutRequest{
-			StripeToken:    tok.TokenID,
-			Last4:          tok.Last4,
-			Items:          cartItems,
-			ShippingName:   m.ShippingInfo.Name,
-			ShippingStreet: m.ShippingInfo.Street1,
-			ShippingCity:   m.ShippingInfo.City,
-			ShippingState:  m.ShippingInfo.State,
-			ShippingZip:    m.ShippingInfo.Zip,
+			StripeToken:     tok.TokenID,
+			Last4:           tok.Last4,
+			Items:           cartItems,
+			ShippingName:    m.ShippingInfo.Name,
+			ShippingStreet:  m.ShippingInfo.Street1,
+			ShippingStreet2: m.ShippingInfo.Street2,
+			ShippingCity:    m.ShippingInfo.City,
+			ShippingState:   m.ShippingInfo.State,
+			ShippingZip:     m.ShippingInfo.Zip,
+			ShippingCountry: m.ShippingInfo.Country,
+			ShippingPhone:   m.ShippingInfo.Phone,
 		}
 
 		if m.User != nil {
@@ -719,13 +722,13 @@ func NewModel(username string) Model {
 				Description: "Espresso with hot water. Simple, strong, and no-nonsense. This is coffee for people who actually like the taste of coffee.",
 			},
 			{
-				Name:        "Cold Brew",
+				Name:        "Mocha",
 				RoastType:   "Medium Roast",
 				Ounces:      16,
 				BeanType:    "Colombian",
 				Price:       5.50,
 				Color:       "#4682B4",
-				Description: "Steeped for 12 hours to create a smooth, less acidic coffee experience. Served cold because sometimes hot coffee is just too much effort.",
+				Description: "Some really good Mocha",
 			},
 			{
 				Name:        "Macchiato",

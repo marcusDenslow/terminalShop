@@ -1,6 +1,12 @@
 package tui
 
 import (
+
+	"fmt"
+
+	"strings"
+
+
 	"github.com/charmbracelet/lipgloss"
 
 	"terminalShop/pkg/models"
@@ -53,8 +59,24 @@ func (m Model) BuildAccountView() string {
 		selectedItem := models.AccountMenuItems[m.AccountCursor]
 		switch selectedItem {
 		case "order history":
-			detailView = titleStyle.Render("Order History") + "\n\n" +
-				contentStyle.Render("No orders yet. Your order history will appear here once you make a purchase.")
+		       if !m.OrdersLoaded {
+				detailView = titleStyle.Render("Order History") + "\n\n" + contentStyle.Render("Loading orders...")
+			} else if len(m.Orders) == 0 {
+				detailView = titleStyle.Render("Order History") + "\n\n" + contentStyle.Render("No orders yet.")
+			} else {
+				lines := titleStyle.Render("Order History") + "\n\n"
+				for _, order := range m.Orders {
+					status := strings.ToUpper(string(order.Status))
+					date := order.CreatedAt.Format("Jan 02 2006")
+					total := fmt.Sprintf("$%.2f", float64(order.Total) / 100.0)
+					lines += contentStyle.Render(fmt.Sprintf("Order #%d %s %s %s", order.ID, date, total, status)) + "\n"
+					for _, item := range order.Items {
+						lines += contentStyle.Render(fmt.Sprintf(" %dx %s - $%.2f", item.Quantity, item.Name, float64(item.Price) / 100.0)) + "\n"
+					}
+					lines += "\n"
+				}
+				detailView = lines
+			}
 		case "faq":
 			detailView = titleStyle.Render("FAQ") + "\n\n" +
 				contentStyle.Render("Q: How do I place an order?\nA: Browse products with j/k, adjust quantity with +/-, and checkout via the cart.\n\nQ: What payment methods do you accept?\nA: We accept all major credit cards via Stripe.")
