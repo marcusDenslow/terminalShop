@@ -41,7 +41,7 @@ func (m Model) RenderConfirmation() string {
 			labelStyle.Render("Ship to: ") +
 				valueStyle.Render(m.ShippingInfo.Name) + "\n" +
 				labelStyle.Render("         ") +
-				valueStyle.Render(m.ShippingInfo.Street1) + "\n" +
+				valueStyle.Render(m.ShippingInfo.Street) + "\n" +
 				labelStyle.Render("         ") +
 				valueStyle.Render(fmt.Sprintf("%s, %s %s, %s", m.ShippingInfo.City, m.ShippingInfo.State, m.ShippingInfo.Zip, m.ShippingInfo.Country)),
 		)

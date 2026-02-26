@@ -81,10 +81,10 @@ func (m Model) buildPaymentForm(state *PaymentFormState) *huh.Form {
 		WithShowErrors(false).
 		WithShowHelp(false)
 
-	if m.WindowWidth < 80 {
-		f = f.WithLayout(huh.LayoutStack).WithWidth(m.WindowWidth - 10)
+	if m.size < medium {
+		f = f.WithLayout(huh.LayoutStack).WithWidth(m.widthContent)
 	} else {
-		f = f.WithLayout(huh.LayoutColumns(2)).WithWidth(m.WindowWidth - 20)
+		f = f.WithLayout(huh.LayoutColumns(2)).WithWidth(m.widthContent)
 	}
 
 	return f
@@ -174,12 +174,11 @@ func validatePaymentForm(state *PaymentFormState) string {
 // UpdatePaymentForm handles updates to the payment form.
 // Mutates state in place, returns only the tea.Cmd.
 func (m Model) UpdatePaymentForm(msg tea.Msg, state *PaymentFormState) tea.Cmd {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		if msg.Width < 80 {
-			state.form = state.form.WithLayout(huh.LayoutStack).WithWidth(msg.Width - 10)
+	if _, ok := msg.(tea.WindowSizeMsg); ok {
+		if m.size < medium {
+			state.form = state.form.WithLayout(huh.LayoutStack).WithWidth(m.widthContent)
 		} else {
-			state.form = state.form.WithLayout(huh.LayoutColumns(2)).WithWidth(msg.Width - 20)
+			state.form = state.form.WithLayout(huh.LayoutColumns(2)).WithWidth(m.widthContent)
 		}
 	}
 

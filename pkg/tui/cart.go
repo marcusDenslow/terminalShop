@@ -11,18 +11,18 @@ func (m Model) BuildCartView() string {
 		emptyStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#666666")).
 			Align(lipgloss.Center).
-			Width(m.WindowWidth).
+			Width(m.widthContent).
 			Padding(2, 0)
 		return emptyStyle.Render("Your cart is empty\n\nPress s to go back to shop")
 	}
 
 	cartItems := ""
-	boxWidth := m.WindowWidth - 20 // Leave some margin
+	boxWidth := m.widthContent - 4 // Leave some margin within the container
 	itemSlice := m.GetCartItemsSlice()
 
-	// Adjust padding based on window height
+	// Adjust padding based on container height
 	boxPadding := 0
-	if m.WindowHeight >= 25 {
+	if m.heightContainer >= 25 {
 		boxPadding = 1
 	}
 
@@ -96,9 +96,9 @@ func (m Model) BuildCartView() string {
 				Foreground(lipgloss.Color("#FFFFFF"))
 		}
 
-		// Center the box
+		// Center the box within the container
 		centered := lipgloss.NewStyle().
-			Width(m.WindowWidth).
+			Width(m.widthContent).
 			Align(lipgloss.Center)
 
 		cartItems += centered.Render(itemBox.Render(boxContent))

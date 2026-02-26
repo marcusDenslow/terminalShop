@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"terminalShop/api/middleware"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/utils"
@@ -22,21 +23,11 @@ func NewAddressHandler() *AddressHandler {
 // Retrieve all saved addresses for a user
 func (h *AddressHandler) GetAddresses(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
-	fingerprint := r.URL.Query().Get("fingerprint")
 
-	if fingerprint == "" {
-		utils.RespondError(w, http.StatusBadRequest, "VALIDATION ERROR", "fingerprint is required", nil)
-		return
-	}
-
-	var user models.User
-	if err := db.Where("ssh_key_fingerprint = ?", fingerprint).First(&user).Error; err != nil {
-		utils.RespondError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found", nil)
-		return
-	}
+	userID := middleware.UserIDFromContext(r.Context())
 
 	var addresses []models.Address
-	db.Where("user_id = ?", user.ID).Order("is_default DESC, created_at DESC").Find(&addresses)
+	db.Where("user_id = ?", userID).Order("is_default DESC, created_at DESC").Find(&addresses)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"addresses": addresses,
@@ -46,16 +37,17 @@ func (h *AddressHandler) GetAddresses(w http.ResponseWriter, r *http.Request) {
 func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
 
+	userID := middleware.UserIDFromContext(r.Context())
+
 	var req struct {
-		Fingerprint string `json:"fingerprint"`
-		Name        string `json:"name"`
-		Street      string `json:"street"`
-		Street2     string `json:"street_2"`
-		City        string `json:"city"`
-		State       string `json:"state"`
-		Zip         string `json:"zip"`
-		Country     string `json:"country"`
-		Phone       string `json:"phone"`
+		Name    string `json:"name"`
+		Street  string `json:"street"`
+		Street2 string `json:"street_2"`
+		City    string `json:"city"`
+		State   string `json:"state"`
+		Zip     string `json:"zip"`
+		Country string `json:"country"`
+		Phone   string `json:"phone"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -63,7 +55,85 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Fingerprint == "" || req.Name == "" || req.Street == "" || req.City == "" req.Zip == "" || req.Country == "" {
-		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "fingerprint, name, street, city, zip, and country are required", nil)
+	if req.Name == "" || req.Street == "" || req.City == "" || req.Zip == "" || req.Country == "" {
+		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "name, street, city, zip, and country are required", nil)
+		return
 	}
+
+	address := models.Address{
+		UserID:  userID,
+		Name:    req.Name,
+		Street:  req.Street,
+		Street2: req.Street2,
+		City:    req.City,
+		State:   req.State,
+		Zip:     req.Zip,
+		Country: req.Country,
+		Phone:   req.Phone,
+	}
+
+	if err := db.Create(&address).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to create address", nil)
+		return
+	}
+
+	utils.RespondSuccess(w, http.StatusCreated, map[string]interface{}{
+		"address": address,
+	})
+}
+
+// Delete a saved address
+func (h *AddressHandler) DeleteAddress(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB()
+	userID := middleware.UserIDFromContext(r.Context())
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_ID", "invalid address id", nil)
+		return
+	}
+
+	var address models.Address
+
+	if err := db.Where("id = ? AND user_id = ?", id, userID).First(&address).Error; err != nil {
+		utils.RespondError(w, http.StatusNotFound, "ADDRESS NOT FOUND", "address not found", nil)
+		return
+	}
+
+	// ownership is guaranteed by the WHERE clause above
+	db.Delete(&address)
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+		"message": "address successfully deleted",
+	})
+}
+
+// Mark an address as the users default address
+
+func (h *AddressHandler) SetDefaultAddress(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB()
+	userID := middleware.UserIDFromContext(r.Context())
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_ID", "invalid address id", nil)
+		return
+	}
+
+	var address models.Address
+	if err := db.Where("id = ? AND user_id = ?", id, userID).First(&address).Error; err != nil {
+		utils.RespondError(w, http.StatusNotFound, "ADDRESS_NOT_FOUND", "address not found", nil)
+		return
+	}
+
+	db.Model(&models.Address{}).Where("user_id = ?", userID).Update("is_default", false)
+
+	address.IsDefault = true
+	db.Save(&address)
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+		"address": address,
+	})
 }

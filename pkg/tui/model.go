@@ -3,9 +3,11 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	gossh "golang.org/x/crypto/ssh"
@@ -15,12 +17,33 @@ import (
 	"terminalShop/pkg/shippo"
 )
 
+// termSize represents the terminal size category for responsive layout.
+type termSize int
+
+const (
+	undersized termSize = iota // viewportWidth < 20 || viewportHeight < 10
+	small                      // viewportWidth < 50
+	medium                     // viewportWidth < 80
+	large                      // viewportWidth >= 80
+)
+
+// This msg is sent after a debounce delay to apply a pending resize.
+// the seq field makes sure that only the tick from the most recent resize is applied.
+type resizeTickMsg struct {
+	seq int
+}
+
+// Delay before applying a terminal resize.
+// this prevents flickering when resizing the terminal
+const resizeDebounce = 50 * time.Millisecond
+
 type Model struct {
 	// User authentication
 	User          *models.User    // Authenticated user (nil if not logged in)
 	IsNewUser     bool            // True if user needs to register
 	SSHPublicKey  gossh.PublicKey // SSH public key for registration
-	UsernameInput string          // Input for username during registration
+	AccessToken   string
+	UsernameInput string // Input for username during registration
 
 	// Shop state
 	Username       string
@@ -29,21 +52,38 @@ type Model struct {
 	Cart           map[int]*models.CartItem // maps coffee index to cart item
 	CartCursor     int                      // cursor position in cart view
 	AccountCursor  int
-	CheckoutStep   int // 0=cart, 1=shipping, 2=payment, 3=confirmation
-	ScrollOffset   int // scroll position for content
-	WindowWidth    int
-	WindowHeight   int
+	CheckoutStep   int  // 0=cart, 1=shipping, 2=payment, 3=confirmation
+	ScrollOffset   int  // scroll position for content
 	ViewingCart    bool // true when viewing cart details
 	ViewingAccount bool
-	Loading        bool   // true when fetching data from API
-	ErrorMsg       string // error message if API fetch fails
-	APIClient      *api.Client
+
+	// Menu modal state
+	ShowingMenu  bool // true when full-screen menu is showing
+	menuLastCart bool // was viewing cart when menu was opened
+	menuLastAcct bool // was viewing account when menu was opened
+
+	// Layout fields — responsive container system
+	viewportWidth   int      // raw terminal width
+	viewportHeight  int      // raw terminal height
+	widthContainer  int      // constrained outer container width (max 80)
+	heightContainer int      // constrained outer container height (max 30)
+	widthContent    int      // widthContainer - 2 (usable inner width)
+	size            termSize // current terminal size category
+
+	// Resize debouncing
+	resizeSeq     int // incremented on each WindowSizeMsg
+	pendingWidth  int // buffered width from latest resize
+	pendingHeight int // buffered height from latest resize
+
+	Loading   bool   // true when fetching data from API
+	ErrorMsg  string // error message if API fetch fails
+	APIClient *api.Client
 
 	// Checkout state
-	ShippingForm   *ShippingFormState        // Shipping form state (nil when not in shipping step)
-	PaymentForm    *PaymentFormState         // Payment form state (nil when not in payment step)
-	ShippingInfo   *ShippingFormCompleteMsg  // Saved shipping info from completed form
-	SavedAddresses []ShippingFormCompleteMsg // Previously used shipping addresses
+	ShippingForm   *ShippingFormState // Shipping form state (nil when not in shipping step)
+	PaymentForm    *PaymentFormState  // Payment form state (nil when not in payment step)
+	ShippingInfo   *models.Address    // Selected shipping address for current order
+	SavedAddresses []models.Address   // Saved addresses from database
 	ShippingView   int
 	AddressCursor  int
 	StripeKey      string // Stripe publishable key for client-side tokenization
@@ -52,6 +92,34 @@ type Model struct {
 	// Order history
 	Orders       []models.Order
 	OrdersLoaded bool
+}
+
+// updateLayout recalculates all layout variables from the raw viewport dimensions.
+// This should be called whenever the terminal is resized.
+func (m *Model) updateLayout(width, height int) {
+	m.viewportWidth = width
+	m.viewportHeight = height
+
+	switch {
+	case width < 20 || height < 10:
+		m.size = undersized
+		m.widthContainer = width
+		m.heightContainer = height
+	case width < 50:
+		m.size = small
+		m.widthContainer = width
+		m.heightContainer = height
+	case width < 80:
+		m.size = medium
+		m.widthContainer = 50
+		m.heightContainer = int(math.Min(float64(height), 30))
+	default:
+		m.size = large
+		m.widthContainer = 80
+		m.heightContainer = int(math.Min(float64(height), 30))
+	}
+
+	m.widthContent = m.widthContainer - 2
 }
 
 // ProductsMsg is sent when products are fetched from API
@@ -80,17 +148,87 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// huh generates internal messages (focus, cursor blink, etc.) from
 	// form.Init() and form.Update() that must reach the form to work.
 
+	if tick, ok := msg.(resizeTickMsg); ok {
+		if tick.seq == m.resizeSeq {
+			m.updateLayout(m.pendingWidth, m.pendingHeight)
+			// Update active form widths to match the new layout
+			if m.ShippingForm != nil {
+				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
+			}
+			if m.PaymentForm != nil {
+				m.PaymentForm.form = m.buildPaymentForm(m.PaymentForm)
+			}
+		}
+		return m, nil
+	}
+
+	if m.ShowingMenu {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "s":
+				m.ShowingMenu = false
+				m.ViewingCart = false
+				m.ViewingAccount = false
+				m.CheckoutStep = 0
+				m.ShippingForm = nil
+				m.PaymentForm = nil
+				m.ScrollOffset = 0
+			case "a":
+				m.ShowingMenu = false
+				m.ViewingCart = false
+				m.ViewingAccount = true
+				m.CheckoutStep = 0
+				m.ShippingForm = nil
+				m.PaymentForm = nil
+				m.ScrollOffset = 0
+				if !m.OrdersLoaded {
+					return m, m.fetchOrdersCmd()
+				}
+			case "c":
+				m.ShowingMenu = false
+				m.ViewingCart = true
+				m.ViewingAccount = false
+				m.CheckoutStep = 0
+				m.ShippingForm = nil
+				m.PaymentForm = nil
+				m.ScrollOffset = 0
+			case "esc":
+				m.ShowingMenu = false
+			case "q", "ctrl+c":
+				return m, tea.Quit
+			}
+		}
+		return m, nil
+	}
+
 	if m.ViewingCart && m.CheckoutStep == 1 {
 		switch msg := msg.(type) {
 		case ShippingFormCompleteMsg:
 			return m, m.validateAddress(msg)
+
 		case ShippoValidatedMsg:
-			m.SavedAddresses = append(m.SavedAddresses, msg.Address)
 			m.ShippingInfo = &msg.Address
 			m.ShippingForm = nil
 			m.CheckoutStep = 2
 			m.PaymentForm = m.InitPaymentForm()
+			if msg.SaveAddress {
+				return m, tea.Batch(m.PaymentForm.form.Init(), m.saveAddressCmd(msg.Address))
+			}
 			return m, m.PaymentForm.form.Init()
+
+		case AddressesMsg:
+			if msg.Err != nil || len(msg.Addresses) == 0 {
+				m.SavedAddresses = nil
+				m.ShippingView = 1
+				m.ShippingForm = m.InitShippingForm()
+				return m, m.ShippingForm.form.Init()
+			}
+			m.SavedAddresses = msg.Addresses
+			m.ShippingView = 0
+			m.AddressCursor = 0
+			m.ShippingForm = nil
+			return m, nil
+
 		case ShippoValidationErrMsg:
 			if m.ShippingForm != nil {
 				m.ShippingForm.submitting = false
@@ -104,8 +242,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ErrorMsg = msg.Message
 			return m, nil
 		case tea.WindowSizeMsg:
-			m.WindowWidth = msg.Width
-			m.WindowHeight = msg.Height
+			m.pendingWidth = msg.Width
+			m.pendingHeight = msg.Height
+			m.resizeSeq++
+			seq := m.resizeSeq
+			return m, tea.Tick(resizeDebounce, func(t time.Time) tea.Msg {
+				return resizeTickMsg{seq: seq}
+			})
 		}
 
 		// Address list view
@@ -128,7 +271,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "enter":
 					if m.AddressCursor < len(m.SavedAddresses) {
 						addr := m.SavedAddresses[m.AddressCursor]
-						m.ShippingInfo = &addr
+						selected := addr // copy so we have a stable pointer
+						m.ShippingInfo = &selected
 						m.CheckoutStep = 2
 						m.PaymentForm = m.InitPaymentForm()
 						return m, m.PaymentForm.form.Init()
@@ -138,10 +282,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.ShippingForm.form.Init()
 				case "d", "x":
 					if m.AddressCursor < len(m.SavedAddresses) {
+						addr := m.SavedAddresses[m.AddressCursor]
 						m.SavedAddresses = append(m.SavedAddresses[:m.AddressCursor], m.SavedAddresses[m.AddressCursor+1:]...)
 						if m.AddressCursor >= len(m.SavedAddresses) && m.AddressCursor > 0 {
 							m.AddressCursor--
 						}
+						if len(m.SavedAddresses) == 0 {
+							m.ShippingView = 1
+							m.ShippingForm = m.InitShippingForm()
+							return m, tea.Batch(m.ShippingForm.form.Init(), m.deleteAddressCmd(addr.ID))
+						}
+						return m, m.deleteAddressCmd(addr.ID)
 					}
 				}
 			}
@@ -199,8 +350,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ErrorMsg = msg.Message
 			return m, nil
 		case tea.WindowSizeMsg:
-			m.WindowWidth = msg.Width
-			m.WindowHeight = msg.Height
+			m.pendingWidth = msg.Width
+			m.pendingHeight = msg.Height
+			m.resizeSeq++
+			seq := m.resizeSeq
+			return m, tea.Tick(resizeDebounce, func(t time.Time) tea.Msg {
+				return resizeTickMsg{seq: seq}
+			})
 		case tea.KeyMsg:
 			if msg.String() == "esc" {
 				// Go back to shipping
@@ -211,7 +367,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Restore shipping values if we have them
 				if m.ShippingInfo != nil {
 					m.ShippingForm.Name = m.ShippingInfo.Name
-					m.ShippingForm.Street1 = m.ShippingInfo.Street1
+					m.ShippingForm.Street1 = m.ShippingInfo.Street
 					m.ShippingForm.Street2 = m.ShippingInfo.Street2
 					m.ShippingForm.City = m.ShippingInfo.City
 					m.ShippingForm.State = m.ShippingInfo.State
@@ -235,11 +391,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.validateAddress(msg)
 
 	case ShippoValidatedMsg:
-		m.SavedAddresses = append(m.SavedAddresses, msg.Address)
 		m.ShippingInfo = &msg.Address
 		m.ShippingForm = nil
 		m.CheckoutStep = 2
 		m.PaymentForm = m.InitPaymentForm()
+		if msg.SaveAddress {
+			return m, tea.Batch(m.PaymentForm.form.Init(), m.saveAddressCmd(msg.Address))
+		}
 		return m, m.PaymentForm.form.Init()
 
 	case ShippoValidationErrMsg:
@@ -286,10 +444,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.WindowSizeMsg:
-		m.WindowWidth = msg.Width
-		m.WindowHeight = msg.Height
+	case AddressesMsg:
+		if msg.Err != nil || len(msg.Addresses) == 0 {
+			// No saved addresses (or some type of error), go straight
+			// to form and skip selecting address since we don't have one saved
+			m.SavedAddresses = nil
+			m.ShippingView = 1
+			m.ShippingForm = m.InitShippingForm()
+			return m, m.ShippingForm.form.Init()
+		}
+		m.SavedAddresses = msg.Addresses
+		m.ShippingView = 0
+		m.AddressCursor = 0
+		m.ShippingForm = nil
 		return m, nil
+
+	case AddressDeletedMsg:
+		// Address already removed from the in-memory slice in the key handler.
+		// Nothing to do here unless there is an error :(
+		if msg.Err != nil {
+			m.ErrorMsg = fmt.Sprintf("failed to delete address: %v", msg.Err)
+		}
+		return m, nil
+
+	case tea.WindowSizeMsg:
+		m.pendingWidth = msg.Width
+		m.pendingHeight = msg.Height
+		m.resizeSeq++
+		seq := m.resizeSeq
+		return m, tea.Tick(resizeDebounce, func(t time.Time) tea.Msg {
+			return resizeTickMsg{seq: seq}
+		})
 
 	case tea.KeyMsg:
 		// Normal shop mode
@@ -324,20 +509,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.fetchOrdersCmd()
 			}
 
+		case "m":
+			m.ShowingMenu = true
+			m.menuLastCart = m.ViewingCart
+			m.menuLastAcct = m.ViewingAccount
+			return m, nil
+
 		case "p", "enter":
 			// Proceed to checkout from cart
 			if m.ViewingCart && m.CheckoutStep == 0 && len(m.Cart) > 0 {
 				m.CheckoutStep = 1
-				if len(m.SavedAddresses) > 0 {
-					m.ShippingView = 0
-					m.AddressCursor = 0
-					m.ShippingForm = nil
-					return m, nil
-				}
-				m.ShippingView = 1
-				m.ShippingForm = m.InitShippingForm()
-				return m, m.ShippingForm.form.Init()
-
+				return m, m.fetchAddressesCmd()
 			}
 
 		case "esc":
@@ -395,7 +577,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 				// Calculate viewport height
 				// In cart: header=3, breadcrumbs=2, footer=1, margins=2, buffer=1 = 9
-				viewportHeight := m.WindowHeight - 9
+				viewportHeight := m.heightContainer - 9
 				if viewportHeight < 6 {
 					viewportHeight = 6
 				}
@@ -481,7 +663,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // ShippoValidatedMsg is sent when Shippo address validation succeeds
 type ShippoValidatedMsg struct {
-	Address ShippingFormCompleteMsg
+	Address     models.Address
+	SaveAddress bool
 }
 
 // ShippoValidationErrMsg is sent when Shippo address validation fails
@@ -494,7 +677,19 @@ func (m Model) validateAddress(info ShippingFormCompleteMsg) tea.Cmd {
 	return func() tea.Msg {
 		if m.ShippoKey == "" {
 			// No Shippo key configured, skip validation
-			return ShippoValidatedMsg{Address: info}
+			return ShippoValidatedMsg{
+				Address: models.Address{
+					Name:    info.Name,
+					Street:  info.Street1,
+					Street2: info.Street2,
+					City:    info.City,
+					State:   info.State,
+					Country: info.Country,
+					Zip:     info.Zip,
+					Phone:   info.Phone,
+				},
+				SaveAddress: info.SaveAddress,
+			}
 		}
 
 		client := shippo.NewClient(m.ShippoKey)
@@ -513,9 +708,9 @@ func (m Model) validateAddress(info ShippingFormCompleteMsg) tea.Cmd {
 		}
 
 		return ShippoValidatedMsg{
-			Address: ShippingFormCompleteMsg{
+			Address: models.Address{
 				Name:    validated.Name,
-				Street1: validated.Street1,
+				Street:  validated.Street1,
 				Street2: validated.Street2,
 				City:    validated.City,
 				State:   validated.State,
@@ -523,6 +718,7 @@ func (m Model) validateAddress(info ShippingFormCompleteMsg) tea.Cmd {
 				Zip:     validated.Zip,
 				Phone:   validated.Phone,
 			},
+			SaveAddress: info.SaveAddress,
 		}
 	}
 }
@@ -553,8 +749,66 @@ func (m Model) fetchOrdersCmd() tea.Cmd {
 		if m.APIClient == nil || m.User == nil {
 			return OrdersMsg{Err: fmt.Errorf("not authenticated")}
 		}
-		orders, err := m.APIClient.GetOrders(m.User.SSHKeyFingerprint)
+		orders, err := m.APIClient.GetOrders()
 		return OrdersMsg{Orders: orders, Err: err}
+	}
+}
+
+// AddressesMsg is sent when sdaved addresses are fetched from the API
+type AddressesMsg struct {
+	Addresses []models.Address
+	Err       error
+}
+
+// AddressSavedMsg is sent when an address is saved to the api
+type AddressSavedMsg struct {
+	Address models.Address
+	Err     error
+}
+
+type AddressDeletedMsg struct {
+	Err error
+}
+
+func (m Model) fetchAddressesCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return AddressesMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		addresses, err := m.APIClient.GetAddresses()
+		return AddressesMsg{Addresses: addresses, Err: err}
+	}
+}
+
+func (m Model) saveAddressCmd(addr models.Address) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return AddressSavedMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		saved, err := m.APIClient.CreateAddress(api.CreateAddressRequest{
+			Name:    addr.Name,
+			Street:  addr.Street,
+			Street2: addr.Street2,
+			City:    addr.City,
+			State:   addr.State,
+			Zip:     addr.Zip,
+			Country: addr.Country,
+			Phone:   addr.Phone,
+		})
+		if err != nil {
+			return AddressSavedMsg{Err: err}
+		}
+		return AddressSavedMsg{Address: *saved}
+	}
+}
+
+func (m Model) deleteAddressCmd(id uint) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return AddressDeletedMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		err := m.APIClient.DeleteAddress(id)
+		return AddressDeletedMsg{Err: err}
 	}
 }
 
@@ -630,17 +884,13 @@ func (m Model) submitCheckout(tok StripeTokenMsg) tea.Cmd {
 			Last4:           tok.Last4,
 			Items:           cartItems,
 			ShippingName:    m.ShippingInfo.Name,
-			ShippingStreet:  m.ShippingInfo.Street1,
+			ShippingStreet:  m.ShippingInfo.Street,
 			ShippingStreet2: m.ShippingInfo.Street2,
 			ShippingCity:    m.ShippingInfo.City,
 			ShippingState:   m.ShippingInfo.State,
 			ShippingZip:     m.ShippingInfo.Zip,
 			ShippingCountry: m.ShippingInfo.Country,
 			ShippingPhone:   m.ShippingInfo.Phone,
-		}
-
-		if m.User != nil {
-			req.Fingerprint = m.User.SSHKeyFingerprint
 		}
 
 		order, err := m.APIClient.Checkout(req)
@@ -682,7 +932,7 @@ func (m Model) GetCartItemsSlice() []*models.CartItem {
 
 // NewModel creates a new model with default coffee options
 func NewModel(username string) Model {
-	return Model{
+	m := Model{
 		Username: username,
 		Coffees: []models.Coffee{
 			{
@@ -744,19 +994,19 @@ func NewModel(username string) Model {
 		Cart:           make(map[int]*models.CartItem),
 		CartCursor:     0,
 		AccountCursor:  0,
-		WindowWidth:    120,
-		WindowHeight:   30,
 		ViewingCart:    false,
 		ViewingAccount: false,
 		Loading:        true,
-		APIClient:      api.NewClient("http://localhost:8080"),
+		APIClient:      api.NewClient("http://localhost:8080", ""),
 		StripeKey:      os.Getenv("STRIPE_PUBLIC_KEY"),
 		ShippoKey:      os.Getenv("SHIPPO_API_KEY"),
 	}
+	m.updateLayout(120, 30)
+	return m
 }
 
 // NewModelWithAuth creates a new model with user authentication context
-func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey) Model {
+func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey, token string) Model {
 	username := "guest"
 	if user != nil {
 		username = user.Name
@@ -766,6 +1016,8 @@ func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey)
 	m.User = user
 	m.IsNewUser = isNewUser
 	m.SSHPublicKey = pubKey
+	m.AccessToken = token
+	m.APIClient = api.NewClient("http://localhost:8080", token)
 
 	return m
 }

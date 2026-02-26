@@ -9,6 +9,7 @@ import (
 	"github.com/stripe/stripe-go/v78/charge"
 	"github.com/stripe/stripe-go/v78/customer"
 
+	"terminalShop/api/middleware"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/utils"
@@ -30,7 +31,6 @@ type CheckoutCartItem struct {
 }
 
 type CheckoutRequest struct {
-	Fingerprint     string             `json:"fingerprint"`
 	StripeToken     string             `json:"stripe_token"`
 	Last4           string             `json:"last4"`
 	Brand           string             `json:"brand"`
@@ -49,15 +49,11 @@ type CheckoutRequest struct {
 
 func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
+	userID := middleware.UserIDFromContext(r.Context())
 
 	var req CheckoutRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		utils.RespondError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body", nil)
-		return
-	}
-
-	if req.Fingerprint == "" {
-		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "fingerprint is required", nil)
 		return
 	}
 
@@ -72,7 +68,7 @@ func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var user models.User
-	if err := db.Where("ssh_key_fingerprint = ?", req.Fingerprint).First(&user).Error; err != nil {
+	if err := db.First(&user, userID).Error; err != nil {
 		utils.RespondError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found", nil)
 		return
 	}

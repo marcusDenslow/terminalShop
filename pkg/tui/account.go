@@ -1,11 +1,9 @@
 package tui
 
 import (
-
 	"fmt"
 
 	"strings"
-
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -14,13 +12,11 @@ import (
 
 func (m Model) BuildAccountView() string {
 	leftWidth := 18
-	leftMargin := 4
-	rightWidth := m.WindowWidth - leftWidth - leftMargin - 4
+	rightWidth := m.widthContent - leftWidth - 2 // 2 for gap
 
 	// Build the left panel (menu items)
 	leftPanel := ""
 	for i, item := range models.AccountMenuItems {
-		// Apply background color when selected, white text
 		if m.AccountCursor == i {
 			style := lipgloss.NewStyle().
 				Background(lipgloss.Color("#4682B4")).
@@ -39,10 +35,8 @@ func (m Model) BuildAccountView() string {
 		}
 	}
 
-	// Add left margin to the list
 	leftContainer := lipgloss.NewStyle().
-		Width(leftWidth).
-		MarginLeft(leftMargin)
+		Width(leftWidth)
 
 	// Build the detail view (right panel) based on cursor position
 	detailView := ""
@@ -52,14 +46,20 @@ func (m Model) BuildAccountView() string {
 			Foreground(lipgloss.Color("#FFFFFF")).
 			MarginBottom(2)
 
+		// On small terminals, use full content width
+		detailContentWidth := rightWidth - 2
+		if m.size < large {
+			detailContentWidth = m.widthContent - 2
+		}
+
 		contentStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#AAAAAA")).
-			Width(rightWidth - 4)
+			Width(detailContentWidth)
 
 		selectedItem := models.AccountMenuItems[m.AccountCursor]
 		switch selectedItem {
 		case "order history":
-		       if !m.OrdersLoaded {
+			if !m.OrdersLoaded {
 				detailView = titleStyle.Render("Order History") + "\n\n" + contentStyle.Render("Loading orders...")
 			} else if len(m.Orders) == 0 {
 				detailView = titleStyle.Render("Order History") + "\n\n" + contentStyle.Render("No orders yet.")
@@ -68,10 +68,10 @@ func (m Model) BuildAccountView() string {
 				for _, order := range m.Orders {
 					status := strings.ToUpper(string(order.Status))
 					date := order.CreatedAt.Format("Jan 02 2006")
-					total := fmt.Sprintf("$%.2f", float64(order.Total) / 100.0)
+					total := fmt.Sprintf("$%.2f", float64(order.Total)/100.0)
 					lines += contentStyle.Render(fmt.Sprintf("Order #%d %s %s %s", order.ID, date, total, status)) + "\n"
 					for _, item := range order.Items {
-						lines += contentStyle.Render(fmt.Sprintf(" %dx %s - $%.2f", item.Quantity, item.Name, float64(item.Price) / 100.0)) + "\n"
+						lines += contentStyle.Render(fmt.Sprintf(" %dx %s - $%.2f", item.Quantity, item.Name, float64(item.Price)/100.0)) + "\n"
 					}
 					lines += "\n"
 				}
@@ -89,12 +89,19 @@ func (m Model) BuildAccountView() string {
 	detailContainer := lipgloss.NewStyle().
 		Width(rightWidth)
 
-	// Layout the panels side by side
-	mainContent := lipgloss.JoinHorizontal(
+	// Responsive layout: side-by-side on large, stacked on small/medium
+	if m.size < large {
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			leftContainer.Render(leftPanel),
+			detailContainer.Width(m.widthContent).Render(detailView),
+		)
+	}
+
+	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		leftContainer.Render(leftPanel),
+		"  ",
 		detailContainer.Render(detailView),
 	)
-
-	return mainContent
 }

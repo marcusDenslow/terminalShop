@@ -16,26 +16,14 @@ func (m Model) BuildHeader() string {
 	}
 
 	// Define colors
-	whiteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))
 	grayStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA"))
 	boldWhiteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+	boldGrayStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")).Bold(true)
 
-	// Build shop tab
-	var shopKeybind, shopName string
-	if !m.ViewingCart && !m.ViewingAccount {
-		// Active: bold white keybind and name
-		shopKeybind = boldWhiteStyle.Render("s")
-		shopName = boldWhiteStyle.Render("shop")
-	} else {
-		// Inactive: bold gray keybind, gray name
-		shopKeybind = lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")).Bold(true).Render("s")
-		shopName = grayStyle.Render("shop")
-	}
-
-	// Build cart tab
-	var cartKeybind, cartName, cartInfo string
+	// Build cart tab (used in all sizes)
 	itemCountText := grayStyle.Render(fmt.Sprintf("[%d]", itemCount))
 
+	var cartKeybind, cartName, cartInfo string
 	if m.ViewingCart {
 		// Active: bold white keybind and name
 		cartKeybind = boldWhiteStyle.Render("c")
@@ -45,38 +33,49 @@ func (m Model) BuildHeader() string {
 			itemCountText)
 	} else {
 		// Inactive: bold gray keybind, gray name
-		boldGrayStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")).Bold(true)
-		boldWhitePriceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
 		cartKeybind = boldGrayStyle.Render("c")
 		cartName = grayStyle.Render("cart")
 		cartInfo = fmt.Sprintf(" %s %s",
-			boldWhitePriceStyle.Render(fmt.Sprintf("$%.2f", total)),
+			boldWhiteStyle.Render(fmt.Sprintf("$%.2f", total)),
 			itemCountText)
 	}
+	cartTab := cartKeybind + " " + cartName + cartInfo
 
-	// Build Account Tabs
-	var accountKeybind, accountName string
-	if m.ViewingAccount {
-		accountKeybind = boldWhiteStyle.Render("a")
-		accountName = boldWhiteStyle.Render("account")
-	} else {
-		accountKeybind = lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")).Bold(true).Render("a")
-		accountName = grayStyle.Render("account")
+	var tabsContent string
+
+	switch m.size {
+	case small:
+		// Small: just a mark + Cart
+		mark := boldWhiteStyle.Render("t")
+		tabsContent = mark + "    " + cartTab
+	case medium:
+		menuTab := boldGrayStyle.Render("m") + " " + grayStyle.Render("menu")
+		logo := boldWhiteStyle.Render("terminal coffee")
+		separator := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Render("|")
+		tabsContent = menuTab + " " + separator + " " + logo + " " + separator + " " + cartTab
+	default:
+		separator := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Render("|")
+
+		var shopKeybind, shopName string
+		if !m.ViewingCart && !m.ViewingAccount {
+			shopKeybind = boldWhiteStyle.Render("s")
+			shopName = boldWhiteStyle.Render("shop")
+		} else {
+			shopKeybind = boldGrayStyle.Render("s")
+			shopName = grayStyle.Render("shop")
+		}
+
+		var accountKeybind, accountName string
+		if m.ViewingAccount {
+			accountKeybind = boldWhiteStyle.Render("a")
+			accountName = boldWhiteStyle.Render("account")
+		} else {
+			accountKeybind = boldGrayStyle.Render("a")
+			accountName = grayStyle.Render("account")
+		}
+
+		tabsContent = fmt.Sprintf("%s %s %s %s %s %s %s", shopKeybind, shopName, separator, accountKeybind, accountName, separator, cartTab)
 	}
-
-	// Build the tabs with separator
-	separator := whiteStyle.Render("|")
-	tabsContent := fmt.Sprintf("%s %s %s %s %s %s %s %s%s",
-		shopKeybind,
-		shopName,
-		separator,
-		accountKeybind,
-		accountName,
-		separator,
-		cartKeybind,
-		cartName,
-		cartInfo,
-	)
 
 	// Add box with padding (no vertical padding, just horizontal)
 	tabBox := lipgloss.NewStyle().
@@ -84,9 +83,9 @@ func (m Model) BuildHeader() string {
 		Padding(0, 2).
 		MarginBottom(1)
 
-	// Center the whole thing
+	// Center the whole thing within the container
 	centered := lipgloss.NewStyle().
-		Width(m.WindowWidth).
+		Width(m.widthContainer).
 		Align(lipgloss.Center)
 
 	return centered.Render(tabBox.Render(tabsContent))

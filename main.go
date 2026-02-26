@@ -34,15 +34,17 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	pubKey := s.PublicKey()
 
 	var user *models.User
+	var token string
 
 	if pubKey != nil {
 		// Authenticate with SSH key (auto-creates user on first connect!)
-		authenticatedUser, _, err := authService.AuthenticateSSHKey(pubKey)
+		authenticatedUser, jwtToken, err := authService.AuthenticateSSHKey(pubKey)
 		if err != nil {
 			log.Printf("Auth error: %v", err)
 			// Continue as guest
 		} else {
 			user = authenticatedUser
+			token = jwtToken
 			displayName := user.SSHKeyFingerprint[:16]
 			if user.Name != "" {
 				displayName = user.Name
@@ -52,7 +54,7 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	}
 
 	// Create TUI model with user context (no registration screen needed!)
-	m := tui.NewModelWithAuth(user, false, s.PublicKey())
+	m := tui.NewModelWithAuth(user, false, s.PublicKey(), token)
 	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
 
@@ -77,7 +79,7 @@ func main() {
 	}
 
 	// Initialize JWT manager (uses same secret as API)
-	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 24*time.Hour)
+	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 30*time.Minute)
 
 	// Initialize SSH auth service
 	authService = auth.NewSSHAuthService(db, jwtManager)

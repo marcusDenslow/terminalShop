@@ -14,16 +14,26 @@ import (
 type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
+	Token      string
 }
 
 // NewClient creates a new API client
-func NewClient(baseURL string) *Client {
+func NewClient(baseURL string, token string) *Client {
 	return &Client{
 		BaseURL: baseURL,
+		Token:   token,
 		HTTPClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 	}
+}
+
+// doRequest helper executes an HTTP request with the authorization header set
+func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	return c.HTTPClient.Do(req)
 }
 
 // APIResponse represents the standard API response format
@@ -52,7 +62,11 @@ type ProductsResponse struct {
 func (c *Client) GetProducts() ([]models.Coffee, error) {
 	url := fmt.Sprintf("%s/api/v1/products", c.BaseURL)
 
-	resp, err := c.HTTPClient.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch products: %w", err)
 	}
@@ -78,7 +92,11 @@ func (c *Client) GetProducts() ([]models.Coffee, error) {
 func (c *Client) Health() error {
 	url := fmt.Sprintf("%s/api/v1/health", c.BaseURL)
 
-	resp, err := c.HTTPClient.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
@@ -122,7 +140,13 @@ func (c *Client) RegisterUser(username, sshPublicKey, sshKeyFingerprint string) 
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to register user: %w", err)
 	}
@@ -145,7 +169,6 @@ func (c *Client) RegisterUser(username, sshPublicKey, sshKeyFingerprint string) 
 
 // CheckoutRequest represents the checkout payload sent to the API
 type CheckoutRequest struct {
-	Fingerprint     string             `json:"fingerprint"`
 	StripeToken     string             `json:"stripe_token"`
 	Last4           string             `json:"last4"`
 	Brand           string             `json:"brand"`
@@ -183,15 +206,21 @@ type OrderResponse struct {
 	Error *APIError `json:"error,omitempty"`
 }
 
-func (c *Client) Checkout(req CheckoutRequest) (*models.Order, error) {
+func (c *Client) Checkout(checkoutReq CheckoutRequest) (*models.Order, error) {
 	url := fmt.Sprintf("%s/api/v1/checkout", c.BaseURL)
 
-	jsonData, err := json.Marshal(req)
+	jsonData, err := json.Marshal(checkoutReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal checkout request: %w", err)
 	}
 
-	resp, err := c.HTTPClient.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("checkout request failed: %w", err)
 	}
@@ -212,10 +241,15 @@ func (c *Client) Checkout(req CheckoutRequest) (*models.Order, error) {
 	return &checkoutResp.Data.Order, nil
 }
 
-func (c *Client) GetOrders(fingerprint string) ([]models.Order, error) {
-	url := fmt.Sprintf("%s/api/v1/orders?fingerprint=%s", c.BaseURL, fingerprint)
+func (c *Client) GetOrders() ([]models.Order, error) {
+	url := fmt.Sprintf("%s/api/v1/orders", c.BaseURL)
 
-	resp, err := c.HTTPClient.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch orders: %w", err)
 	}
@@ -233,4 +267,118 @@ func (c *Client) GetOrders(fingerprint string) ([]models.Order, error) {
 		return nil, fmt.Errorf("failed to fetch orders")
 	}
 	return ordersResp.Data.Orders, nil
+}
+
+// The Addresses API response
+type AddressResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Addresses []models.Address `json:"addresses"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+func (c *Client) GetAddresses() ([]models.Address, error) {
+	url := fmt.Sprintf("%s/api/v1/addresses", c.BaseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch addresses: %w", err)
+	}
+
+	defer resp.Body.Close()
+
+	var addrResp AddressResponse
+	if err := json.NewDecoder(resp.Body).Decode(&addrResp); err != nil {
+		return nil, fmt.Errorf("failed to decode addresses response: %w", err)
+	}
+
+	if !addrResp.Success {
+		if addrResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", addrResp.Error.Code, addrResp.Error.Message)
+		}
+		return nil, fmt.Errorf("failed to fetch addresses")
+	}
+
+	return addrResp.Data.Addresses, nil
+}
+
+type CreateAddressRequest struct {
+	Name    string `json:"name"`
+	Street  string `json:"street"`
+	Street2 string `json:"street_2"`
+	City    string `json:"city"`
+	State   string `json:"state"`
+	Zip     string `json:"zip"`
+	Country string `json:"country"`
+	Phone   string `json:"phone"`
+}
+
+func (c *Client) CreateAddress(addrReq CreateAddressRequest) (*models.Address, error) {
+	url := fmt.Sprintf("%s/api/v1/addresses", c.BaseURL)
+
+	jsonData, err := json.Marshal(addrReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal address request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create address: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Address models.Address `json:"address"`
+		} `json:"data"`
+		Error *APIError `json:"error"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode address response: %w", err)
+	}
+
+	if !result.Success {
+		if result.Error != nil {
+			return nil, fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message)
+		}
+		return nil, fmt.Errorf("failed to create address")
+	}
+
+	return &result.Data.Address, nil
+}
+
+// Delete a saved address by ID
+func (c *Client) DeleteAddress(id uint) error {
+	url := fmt.Sprintf("%s/api/v1/addresses/%d", c.BaseURL, id)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete address: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("delete address failed with status %d", resp.StatusCode)
+	}
+
+	return nil
 }

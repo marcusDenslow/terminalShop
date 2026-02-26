@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"terminalShop/pkg/auth"
 	"terminalShop/api/routes"
 	"terminalShop/pkg/config"
 	"terminalShop/pkg/database"
@@ -41,8 +42,11 @@ func main() {
 		log.Fatalf("Failed to seed database: %v", err)
 	}
 
+	// Init JWT manager (same secret + duration as SSH server)
+	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 30*time.Minute)
+
 	// Setup routes
-	router := routes.SetupRoutes(version, cfg.StripeSecretKey)
+	router := routes.SetupRoutes(version, cfg.StripeSecretKey, jwtManager, cfg.AuthFingerprintKey)
 
 	// Create HTTP server
 	server := &http.Server{

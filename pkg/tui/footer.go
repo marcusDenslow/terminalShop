@@ -16,6 +16,12 @@ func (m Model) BuildFooter() string {
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#666666"))
 
+	// On small terminals, only show the menu hint 
+	if m.size == small {
+		footerText := keybindStyle.Render("m") + " " + descStyle.Render("menu")
+		return lipgloss.NewStyle().Align(lipgloss.Center).Width(m.widthContainer).Render(footerText)
+	}
+
 	var footerText string
 	if m.ViewingAccount {
 		footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s",
@@ -104,6 +110,6 @@ func (m Model) BuildFooter() string {
 
 	return lipgloss.NewStyle().
 		Align(lipgloss.Center).
-		Width(m.WindowWidth).
+		Width(m.widthContainer).
 		Render(footerText)
 }

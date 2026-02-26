@@ -9,14 +9,15 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	APIPort         string
-	SSHPort         string
-	Environment     string
-	DatabaseURL     string
-	JWTSecret       string
-	StripeSecretKey string
-	StripePublicKey string
-	ShippoAPIKey    string
+	APIPort            string
+	SSHPort            string
+	Environment        string
+	DatabaseURL        string
+	JWTSecret          string
+	StripeSecretKey    string
+	StripePublicKey    string
+	ShippoAPIKey       string
+	AuthFingerprintKey string
 }
 
 // Load reads configuration from environment variables
@@ -30,14 +31,15 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		APIPort:         getEnvOrDefault("API_PORT", "8080"),
-		SSHPort:         getEnvOrDefault("SSH_PORT", "23457"),
-		Environment:     getEnvOrDefault("ENVIRONMENT", "development"),
-		DatabaseURL:     getEnvOrDefault("DATABASE_URL", "terminalshop.db"),
-		JWTSecret:       os.Getenv("JWT_SECRET"),
-		StripeSecretKey: os.Getenv("STRIPE_SECRET_KEY"),
-		StripePublicKey: os.Getenv("STRIPE_PUBLIC_KEY"),
-		ShippoAPIKey:    os.Getenv("SHIPPO_API_KEY"),
+		APIPort:            getEnvOrDefault("API_PORT", "8080"),
+		SSHPort:            getEnvOrDefault("SSH_PORT", "23457"),
+		Environment:        getEnvOrDefault("ENVIRONMENT", "development"),
+		DatabaseURL:        getEnvOrDefault("DATABASE_URL", "terminalshop.db"),
+		JWTSecret:          os.Getenv("JWT_SECRET"),
+		StripeSecretKey:    os.Getenv("STRIPE_SECRET_KEY"),
+		StripePublicKey:    os.Getenv("STRIPE_PUBLIC_KEY"),
+		ShippoAPIKey:       os.Getenv("SHIPPO_API_KEY"),
+		AuthFingerprintKey: os.Getenv("AUTH_FINGERPRINT_KEY"),
 	}
 
 	return cfg, nil

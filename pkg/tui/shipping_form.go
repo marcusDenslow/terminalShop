@@ -49,14 +49,15 @@ type ShippingFormState struct {
 
 // ShippingFormCompleteMsg is sent when the shipping form is completed
 type ShippingFormCompleteMsg struct {
-	Name    string
-	Street1 string
-	Street2 string
-	City    string
-	State   string
-	Country string
-	Zip     string
-	Phone   string
+	Name        string
+	Street1     string
+	Street2     string
+	City        string
+	State       string
+	Country     string
+	Zip         string
+	Phone       string
+	SaveAddress bool
 }
 
 // ShippingFormErrorMsg is sent when form validation fails at submission time
@@ -118,10 +119,10 @@ func (m Model) buildShippingForm(state *ShippingFormState) *huh.Form {
 		WithShowErrors(false).
 		WithShowHelp(false)
 
-	if m.WindowWidth < 80 {
-		f = f.WithLayout(huh.LayoutStack).WithWidth(m.WindowWidth - 10)
+	if m.size < medium {
+		f = f.WithLayout(huh.LayoutStack).WithWidth(m.widthContent)
 	} else {
-		f = f.WithLayout(huh.LayoutColumns(2)).WithWidth(m.WindowWidth - 20)
+		f = f.WithLayout(huh.LayoutColumns(2)).WithWidth(m.widthContent)
 	}
 
 	return f
@@ -191,12 +192,11 @@ func formatPhoneWithDialCode(phone, countryCode string) string {
 // It mutates state in place (no struct copying) so huh's Value()
 // pointers remain valid.
 func (m Model) UpdateShippingForm(msg tea.Msg, state *ShippingFormState) tea.Cmd {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		if msg.Width < 80 {
-			state.form = state.form.WithLayout(huh.LayoutStack).WithWidth(msg.Width - 10)
+	if _, ok := msg.(tea.WindowSizeMsg); ok {
+		if m.size < medium {
+			state.form = state.form.WithLayout(huh.LayoutStack).WithWidth(m.widthContent)
 		} else {
-			state.form = state.form.WithLayout(huh.LayoutColumns(2)).WithWidth(msg.Width - 20)
+			state.form = state.form.WithLayout(huh.LayoutColumns(2)).WithWidth(m.widthContent)
 		}
 	}
 
@@ -206,33 +206,28 @@ func (m Model) UpdateShippingForm(msg tea.Msg, state *ShippingFormState) tea.Cmd
 		state.form = f
 	}
 
-	// Check if form is completed (user pressed Enter on last field)
+	// When the form is done, validate and submit (always save address)
 	if state.form.State == huh.StateCompleted && !state.submitting {
 		if errMsg := validateShippingForm(state); errMsg != "" {
-			// Validation failed -- rebuild the form to reset huh's
-			// unexported quitting flag so it renders again.
-			// Values are preserved because state is heap-allocated
-			// and buildShippingForm binds to the same pointer.
 			state.form = m.buildShippingForm(state)
 			return tea.Batch(
 				state.form.Init(),
 				func() tea.Msg { return ShippingFormErrorMsg{Message: errMsg} },
 			)
 		}
-
 		state.submitting = true
 		phone := formatPhoneWithDialCode(state.Phone, state.Country)
-
 		return func() tea.Msg {
 			return ShippingFormCompleteMsg{
-				Name:    state.Name,
-				Street1: state.Street1,
-				Street2: state.Street2,
-				City:    state.City,
-				State:   state.State,
-				Country: state.Country,
-				Zip:     state.Zip,
-				Phone:   phone,
+				Name:        state.Name,
+				Street1:     state.Street1,
+				Street2:     state.Street2,
+				City:        state.City,
+				State:       state.State,
+				Country:     state.Country,
+				Zip:         state.Zip,
+				Phone:       phone,
+				SaveAddress: true,
 			}
 		}
 	}
@@ -261,6 +256,7 @@ func (m Model) RenderShippingForm(state *ShippingFormState) string {
 
 	title := titleStyle.Render("Shipping Address")
 	form := state.form.View()
+
 	help := helpStyle.Render("enter/tab next • shift+tab prev • esc back")
 
 	return lipgloss.JoinVertical(
@@ -290,7 +286,7 @@ func (m Model) RenderAddressList() string {
 		}
 
 		name := style.Render(addr.Name)
-		street := labelStyle.Render(addr.Street1)
+		street := labelStyle.Render(addr.Street)
 		if addr.Street2 != "" {
 			street += ", " + labelStyle.Render(addr.Street2)
 		}

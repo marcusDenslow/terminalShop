@@ -7,36 +7,45 @@ import (
 )
 
 func (m Model) BuildShopView() string {
-	leftWidth := 18 // Narrower list
-	leftMargin := 4 // Minimal left margin
-	rightWidth := m.WindowWidth - leftWidth - leftMargin - 4
+	leftWidth := 18
+	rightWidth := m.widthContent - leftWidth - 2 // 2 for gap
+
+	// On small/medium, items are centered and span the full container width.
+	// On large, items are left-aligned in the narrow left column.
+	itemWidth := leftWidth - 2
+	itemAlign := lipgloss.Left
+	if m.size < large {
+		itemWidth = m.widthContainer
+		itemAlign = lipgloss.Center
+	}
 
 	// Build the left panel (coffee list)
 	leftPanel := ""
 	for i, coffee := range m.Coffees {
-        	// Apply background color when selected, white text
 		if m.Cursor == i {
 			style := lipgloss.NewStyle().
 				Background(lipgloss.Color(coffee.Color)).
 				Foreground(lipgloss.Color("#FFFFFF")).
 				Padding(0, 1).
-				Width(leftWidth - 2).
-				Align(lipgloss.Left)
+				Width(itemWidth).
+				Align(itemAlign)
 			leftPanel += style.Render(coffee.Name) + "\n"
 		} else {
 			style := lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#AAAAAA")).
 				Padding(0, 1).
-				Width(leftWidth - 2).
-				Align(lipgloss.Left)
+				Width(itemWidth).
+				Align(itemAlign)
 			leftPanel += style.Render(coffee.Name) + "\n"
 		}
 	}
 
-	// Add left margin to the list
-	leftContainer := lipgloss.NewStyle().
-		Width(leftWidth).
-		MarginLeft(leftMargin)
+	var leftContainer lipgloss.Style
+	if m.size < large {
+		leftContainer = lipgloss.NewStyle().Width(m.widthContainer)
+	} else {
+		leftContainer = lipgloss.NewStyle().Width(leftWidth)
+	}
 
 	// Build the detail view (right panel)
 	detailView := ""
@@ -54,9 +63,15 @@ func (m Model) BuildShopView() string {
 			Foreground(lipgloss.Color(selectedCoffee.Color)).
 			Bold(true)
 
+		// On small terminals, use full content width for description
+		descWidth := rightWidth - 2
+		if m.size < large {
+			descWidth = m.widthContent - 2
+		}
+
 		descStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFFFFF")).
-			Width(rightWidth - 4)
+			Width(descWidth)
 
 		quantityStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFFFFF")).
@@ -81,12 +96,19 @@ func (m Model) BuildShopView() string {
 	detailContainer := lipgloss.NewStyle().
 		Width(rightWidth)
 
-	// Layout the panels side by side
-	mainContent := lipgloss.JoinHorizontal(
+	// Responsive layout: side-by-side on large, stacked on small/medium
+	if m.size < large {
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			leftContainer.Render(leftPanel),
+			detailContainer.Width(m.widthContainer).Render(detailView),
+		)
+	}
+
+	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		leftContainer.Render(leftPanel),
+		"  ",
 		detailContainer.Render(detailView),
 	)
-
-	return mainContent
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"terminalShop/pkg/auth"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/utils"
@@ -11,11 +12,71 @@ import (
 )
 
 // AuthHandler handles authentication-related requests
-type AuthHandler struct{}
+type AuthHandler struct {
+	jwtManager         *auth.JWTManager
+	authFingerprintKey string
+}
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler() *AuthHandler {
-	return &AuthHandler{}
+func NewAuthHandler(jwtManager *auth.JWTManager, authFingerprintKey string) *AuthHandler {
+	return &AuthHandler{
+		jwtManager:         jwtManager,
+		authFingerprintKey: authFingerprintKey,
+	}
+}
+
+// Type to represent a request to exchange SSH fingerprint for JWT
+type TokenRequest struct {
+	Fingerprint  string `json:"fingerprint"`
+	ClientSecret string `json:"client_secret"`
+}
+
+// Type to represent the JWT token response
+type TokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int    `json:"expires_in"`
+}
+
+func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB()
+
+	var req TokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body", nil)
+		return
+	}
+
+	// validate shared secret
+	if req.ClientSecret != h.authFingerprintKey {
+		utils.RespondError(w, http.StatusUnauthorized, "INVALID_SECRET", "invalid client secret", nil)
+		return
+	}
+
+	// Return if no fingerprint is found
+	if req.Fingerprint == "" {
+		utils.RespondError(w, http.StatusBadRequest, "MISSING_FINGERPRINT", "fingerprint is required", nil)
+		return
+	}
+
+	// look up user by his fingies
+	var user models.User
+	if err := db.Where("ssh_key_fingerprint = ?", req.Fingerprint).First(&user).Error; err != nil {
+		utils.RespondError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "no user found for this fingerprint", nil)
+		return
+	}
+
+	token, err := h.jwtManager.GenerateToken(user.ID, user.Email, user.Name)
+	if err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "failed to generate token", nil)
+		return
+	}
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+		"access_token": token,
+		"token_type":   "Bearer",
+		"expires_in":   1800, // 30 minutes in seconds
+	})
 }
 
 // RegisterRequest represents a user registration request

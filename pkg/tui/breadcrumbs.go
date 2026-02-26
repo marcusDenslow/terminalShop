@@ -23,7 +23,12 @@ func (m Model) BuildBreadcrumbs() string {
 	sep := sepStyle.Render(" / ")
 
 	// Checkout flow steps
-	labels := []string{"cart", "shipping", "payment", "confirmation"}
+	var labels []string
+	if m.size < large {
+		labels = []string{"cart", "ship", "pay", "confirm"}
+	} else {
+		labels = []string{"cart", "shipping", "payment", "confirmation"}
+	}
 
 	// Get current checkout step from model
 	currentStep := m.CheckoutStep
