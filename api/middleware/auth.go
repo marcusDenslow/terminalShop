@@ -14,15 +14,15 @@ type contextKey string
 const userIDKey contextKey = "userID"
 
 func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
-	// Auth validates JWT tokens on all requests.
-	// if a valid token is present, store an userID in context
-	// if no token, continue as public (no userID).
-	// If invalid token, returns 401
+	// Auth extracts and validates JWT tokens on all requests.
+	// If a valid token is present, store the userID in context.
+	// If no token or an invalid token, continue as public (no userID).
+	// Protected routes use RequireAuth to enforce valid authentication.
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				// No token - public req
+				// No token - public request
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -30,13 +30,16 @@ func Auth(jwtManager *auth.JWTManager) func(http.Handler) http.Handler {
 			// Expect "Bearer <token>"
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				utils.RespondError(w, http.StatusUnauthorized, "INVALID_AUTH_BEARER", "authorization header must be Bearer <token>", nil)
+				// Malformed header - continue as public request
+				next.ServeHTTP(w, r)
 				return
 			}
 
 			claims, err := jwtManager.ValidateToken(parts[1])
 			if err != nil {
-				utils.RespondError(w, http.StatusUnauthorized, "INVALID_TOKEN", "invalid or expired token", nil)
+				// Invalid or expired token - continue as public request.
+				// RequireAuth will reject on protected routes.
+				next.ServeHTTP(w, r)
 				return
 			}
 

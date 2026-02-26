@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"math"
 	"net/http"
 
 	"github.com/stripe/stripe-go/v78"
@@ -31,20 +33,13 @@ type CheckoutCartItem struct {
 }
 
 type CheckoutRequest struct {
-	StripeToken     string             `json:"stripe_token"`
-	Last4           string             `json:"last4"`
-	Brand           string             `json:"brand"`
-	ExpMonth        int                `json:"exp_month"`
-	ExpYear         int                `json:"exp_year"`
-	Items           []CheckoutCartItem `json:"items"`
-	ShippingName    string             `json:"shipping_name"`
-	ShippingStreet  string             `json:"shipping_street"`
-	ShippingStreet2 string             `json:"shipping_street2"`
-	ShippingCity    string             `json:"shipping_city"`
-	ShippingState   string             `json:"shipping_state"`
-	ShippingZip     string             `json:"shipping_zip"`
-	ShippingCountry string             `json:"shipping_country"`
-	ShippingPhone   string             `json:"shipping_phone"`
+	StripeToken string             `json:"stripe_token"`
+	Last4       string             `json:"last4"`
+	Brand       string             `json:"brand"`
+	ExpMonth    int                `json:"exp_month"`
+	ExpYear     int                `json:"exp_year"`
+	Items       []CheckoutCartItem `json:"items"`
+	AddressID   uint               `json:"address_id"`
 }
 
 func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +59,17 @@ func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 
 	if len(req.Items) <= 0 {
 		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "cart is empty", nil)
+		return
+	}
+
+	if req.AddressID == 0 {
+		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "address_id is required", nil)
+		return
+	}
+
+	var address models.Address
+	if err := db.Where("id = ? AND user_id = ?", req.AddressID, userID).First(&address).Error; err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_ADDRESS", "address not found", nil)
 		return
 	}
 
@@ -92,20 +98,27 @@ func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		user.StripeCustomerID = cust.ID
-		db.Save(&user)
+		if err := db.Save(&user).Error; err != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to save stripe customer", nil)
+			return
+		}
 	}
 
 	var subtotal int
 	var orderItems []models.OrderItem
 
 	for _, item := range req.Items {
+		if item.Quantity <= 0 {
+			utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "item quantity must be at least 1", nil)
+			return
+		}
 		var coffee models.Coffee
 		if err := db.First(&coffee, item.CoffeeID).Error; err != nil {
 			utils.RespondError(w, http.StatusBadRequest, "INVALID_PRODUCT", fmt.Sprintf("product %d not found", item.CoffeeID), nil)
 			return
 		}
 
-		priceInCents := int(coffee.Price * 100)
+		priceInCents := int(math.Round(coffee.Price * 100))
 		lineTotal := priceInCents * item.Quantity
 		subtotal += lineTotal
 
@@ -135,7 +148,8 @@ func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 
 	ch, err := charge.New(chargeParams)
 	if err != nil {
-		utils.RespondError(w, http.StatusPaymentRequired, "PAYMENT_FAILED", fmt.Sprintf("payment failed: %v", err), nil)
+		log.Printf("stripe charge failed for user %d: %v", user.ID, err)
+		utils.RespondError(w, http.StatusPaymentRequired, "PAYMENT_FAILED", "payment could not be processed", nil)
 		return
 	}
 
@@ -148,7 +162,10 @@ func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		ExpYear:         req.ExpYear,
 	}
 
-	db.Create(&card)
+	if err := db.Create(&card).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to save card", nil)
+		return
+	}
 
 	order := models.Order{
 		UserID:          user.ID,
@@ -157,14 +174,14 @@ func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		Status:          models.OrderStatusPaid,
 		Subtotal:        subtotal,
 		Total:           total,
-		ShippingName:    req.ShippingName,
-		ShippingStreet:  req.ShippingStreet,
-		ShippingStreet2: req.ShippingStreet2,
-		ShippingCity:    req.ShippingCity,
-		ShippingState:   req.ShippingState,
-		ShippingZip:     req.ShippingZip,
-		ShippingCountry: req.ShippingCountry,
-		ShippingPhone:   req.ShippingPhone,
+		ShippingName:    address.Name,
+		ShippingStreet:  address.Street,
+		ShippingStreet2: address.Street2,
+		ShippingCity:    address.City,
+		ShippingState:   address.State,
+		ShippingZip:     address.Zip,
+		ShippingCountry: address.Country,
+		ShippingPhone:   address.Phone,
 		Items:           orderItems,
 	}
 
@@ -173,7 +190,10 @@ func (h *CheckoutHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Preload("Items").First(&order, order.ID)
+	if err := db.Preload("Items").First(&order, order.ID).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to reload order", nil)
+		return
+	}
 
 	utils.RespondSuccess(w, http.StatusCreated, map[string]interface{}{
 		"order": order,

@@ -53,8 +53,11 @@ type addressRequest struct {
 }
 
 // validationResult is Shippo's validation response nested under validation_results.
+// IsValid is a pointer to distinguish between absent (nil) and explicitly false.
+// Shippo returns empty validation_results for international addresses, which
+// means "no data to validate" rather than "invalid".
 type validationResult struct {
-	IsValid bool `json:"is_valid"`
+	IsValid *bool `json:"is_valid"`
 }
 
 // addressResponse is the response from Shippo's address endpoint.
@@ -118,8 +121,12 @@ func (c *Client) ValidateAddress(addr Address) (*Address, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Accept if test mode or validation says valid
-	if !result.Test && (result.ValidationResults == nil || !result.ValidationResults.IsValid) {
+	// TODO: Re-add !result.Test bypass before production if needed.
+	// Removed test mode bypass so we can verify Shippo validation in development.
+	//
+	// Shippo returns empty validation_results (no is_valid field) for international
+	// addresses. We only reject when is_valid is explicitly false.
+	if result.ValidationResults != nil && result.ValidationResults.IsValid != nil && !*result.ValidationResults.IsValid {
 		return nil, fmt.Errorf("address is invalid")
 	}
 

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -10,14 +11,17 @@ import (
 	"terminalShop/api/middleware"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
+	"terminalShop/pkg/shippo"
 	"terminalShop/pkg/utils"
 )
 
-type AddressHandler struct{}
+type AddressHandler struct {
+	shippoKey string
+}
 
-// Create a new AddressHandler
-func NewAddressHandler() *AddressHandler {
-	return &AddressHandler{}
+// NewAddressHandler creates a new AddressHandler with the Shippo API key
+func NewAddressHandler(shippoAPIKey string) *AddressHandler {
+	return &AddressHandler{shippoKey: shippoAPIKey}
 }
 
 // Retrieve all saved addresses for a user
@@ -60,16 +64,48 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	address := models.Address{
-		UserID:  userID,
-		Name:    req.Name,
-		Street:  req.Street,
-		Street2: req.Street2,
-		City:    req.City,
-		State:   req.State,
-		Zip:     req.Zip,
-		Country: req.Country,
-		Phone:   req.Phone,
+	// Validate and normalize address via Shippo
+	var address models.Address
+	if h.shippoKey != "" {
+		client := shippo.NewClient(h.shippoKey)
+		validated, err := client.ValidateAddress(shippo.Address{
+			Name:    req.Name,
+			Street1: req.Street,
+			Street2: req.Street2,
+			City:    req.City,
+			State:   req.State,
+			Country: req.Country,
+			Zip:     req.Zip,
+			Phone:   req.Phone,
+		})
+		if err != nil {
+			log.Printf("shippo address validation failed: %v", err)
+			utils.RespondError(w, http.StatusBadRequest, "INVALID_ADDRESS", "address is invalid", nil)
+			return
+		}
+		address = models.Address{
+			UserID:  userID,
+			Name:    validated.Name,
+			Street:  validated.Street1,
+			Street2: validated.Street2,
+			City:    validated.City,
+			State:   validated.State,
+			Zip:     validated.Zip,
+			Country: validated.Country,
+			Phone:   validated.Phone,
+		}
+	} else {
+		address = models.Address{
+			UserID:  userID,
+			Name:    req.Name,
+			Street:  req.Street,
+			Street2: req.Street2,
+			City:    req.City,
+			State:   req.State,
+			Zip:     req.Zip,
+			Country: req.Country,
+			Phone:   req.Phone,
+		}
 	}
 
 	if err := db.Create(&address).Error; err != nil {
@@ -82,7 +118,7 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Delete a saved address
+// DeleteAddress deltes a saved address
 func (h *AddressHandler) DeleteAddress(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
 	userID := middleware.UserIDFromContext(r.Context())

@@ -169,20 +169,13 @@ func (c *Client) RegisterUser(username, sshPublicKey, sshKeyFingerprint string) 
 
 // CheckoutRequest represents the checkout payload sent to the API
 type CheckoutRequest struct {
-	StripeToken     string             `json:"stripe_token"`
-	Last4           string             `json:"last4"`
-	Brand           string             `json:"brand"`
-	ExpMonth        int                `json:"exp_month"`
-	ExpYear         int                `json:"exp_year"`
-	Items           []CheckoutCartItem `json:"items"`
-	ShippingName    string             `json:"shipping_name"`
-	ShippingStreet  string             `json:"shipping_street"`
-	ShippingStreet2 string             `json:"shipping_street2,omitempty"`
-	ShippingCountry string             `json:"shipping_country"`
-	ShippingCity    string             `json:"shipping_city"`
-	ShippingState   string             `json:"shipping_state"`
-	ShippingZip     string             `json:"shipping_zip"`
-	ShippingPhone   string             `json:"shipping_phone,omitempty"`
+	StripeToken string             `json:"stripe_token"`
+	Last4       string             `json:"last4"`
+	Brand       string             `json:"brand"`
+	ExpMonth    int                `json:"exp_month"`
+	ExpYear     int                `json:"exp_year"`
+	Items       []CheckoutCartItem `json:"items"`
+	AddressID   uint               `json:"address_id"`
 }
 
 type CheckoutCartItem struct {

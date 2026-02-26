@@ -10,6 +10,7 @@ import (
 // Config holds all application configuration
 type Config struct {
 	APIPort            string
+	APIURL             string
 	SSHPort            string
 	Environment        string
 	DatabaseURL        string
@@ -22,16 +23,21 @@ type Config struct {
 
 // Load reads configuration from environment variables
 func Load() (*Config, error) {
-	// Load .env file in non-production environments
+	// Load .env file in non-production environments.
+	// Try current directory first, then parent directory (for when
+	// running from subdirectories like api/).
 	if os.Getenv("ENVIRONMENT") != "production" {
 		if err := godotenv.Load(); err != nil {
-			// .env is optional in production
-			fmt.Println("No .env file found, using environment variables")
+			if err := godotenv.Load("../.env"); err != nil {
+				fmt.Println("No .env file found, using environment variables")
+			}
 		}
 	}
 
+	apiPort := getEnvOrDefault("API_PORT", "8080")
 	cfg := &Config{
-		APIPort:            getEnvOrDefault("API_PORT", "8080"),
+		APIPort:            apiPort,
+		APIURL:             getEnvOrDefault("API_URL", fmt.Sprintf("http://localhost:%s", apiPort)),
 		SSHPort:            getEnvOrDefault("SSH_PORT", "23457"),
 		Environment:        getEnvOrDefault("ENVIRONMENT", "development"),
 		DatabaseURL:        getEnvOrDefault("DATABASE_URL", "terminalshop.db"),

@@ -57,7 +57,6 @@ type ShippingFormCompleteMsg struct {
 	Country     string
 	Zip         string
 	Phone       string
-	SaveAddress bool
 }
 
 // ShippingFormErrorMsg is sent when form validation fails at submission time
@@ -227,7 +226,6 @@ func (m Model) UpdateShippingForm(msg tea.Msg, state *ShippingFormState) tea.Cmd
 				Country:     state.Country,
 				Zip:         state.Zip,
 				Phone:       phone,
-				SaveAddress: true,
 			}
 		}
 	}

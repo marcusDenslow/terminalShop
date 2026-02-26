@@ -27,7 +27,10 @@ const (
 	port = "23456"
 )
 
-var authService *auth.SSHAuthService
+var (
+	authService *auth.SSHAuthService
+	apiURL      string
+)
 
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	// Extract SSH public key from session
@@ -54,7 +57,7 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	}
 
 	// Create TUI model with user context (no registration screen needed!)
-	m := tui.NewModelWithAuth(user, false, s.PublicKey(), token)
+	m := tui.NewModelWithAuth(user, false, s.PublicKey(), token, apiURL)
 	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
 
@@ -83,6 +86,10 @@ func main() {
 
 	// Initialize SSH auth service
 	authService = auth.NewSSHAuthService(db, jwtManager)
+
+	// Set API URL from config for TUI connections
+	apiURL = cfg.APIURL
+	log.Printf("TUI will connect to API at: %s", apiURL)
 
 	// Create SSH server
 	s, err := wish.NewServer(

@@ -46,7 +46,7 @@ func main() {
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 30*time.Minute)
 
 	// Setup routes
-	router := routes.SetupRoutes(version, cfg.StripeSecretKey, jwtManager, cfg.AuthFingerprintKey)
+	router := routes.SetupRoutes(version, cfg.StripeSecretKey, jwtManager, cfg.AuthFingerprintKey, cfg.ShippoAPIKey)
 
 	// Create HTTP server
 	server := &http.Server{

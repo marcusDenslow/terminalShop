@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"os"
@@ -14,7 +15,6 @@ import (
 
 	"terminalShop/pkg/api"
 	"terminalShop/pkg/models"
-	"terminalShop/pkg/shippo"
 )
 
 // termSize represents the terminal size category for responsive layout.
@@ -87,7 +87,6 @@ type Model struct {
 	ShippingView   int
 	AddressCursor  int
 	StripeKey      string // Stripe publishable key for client-side tokenization
-	ShippoKey      string // Shippo API key for address validation
 
 	// Order history
 	Orders       []models.Order
@@ -131,10 +130,17 @@ type ProductsMsg struct {
 // fetchProductsCmd fetches products from the API
 func (m Model) fetchProductsCmd() tea.Msg {
 	if m.APIClient == nil {
+		log.Println("[TUI] APIClient is nil, using fallback products")
 		return ProductsMsg{Err: nil} // No API client, use fallback
 	}
 
+	log.Printf("[TUI] Fetching products from API at %s", m.APIClient.BaseURL)
 	products, err := m.APIClient.GetProducts()
+	if err != nil {
+		log.Printf("[TUI] Failed to fetch products: %v", err)
+	} else {
+		log.Printf("[TUI] Loaded %d products from API", len(products))
+	}
 	return ProductsMsg{Products: products, Err: err}
 }
 
@@ -204,17 +210,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.ViewingCart && m.CheckoutStep == 1 {
 		switch msg := msg.(type) {
 		case ShippingFormCompleteMsg:
-			return m, m.validateAddress(msg)
-
-		case ShippoValidatedMsg:
-			m.ShippingInfo = &msg.Address
-			m.ShippingForm = nil
-			m.CheckoutStep = 2
-			m.PaymentForm = m.InitPaymentForm()
-			if msg.SaveAddress {
-				return m, tea.Batch(m.PaymentForm.form.Init(), m.saveAddressCmd(msg.Address))
+			addr := models.Address{
+				Name:    msg.Name,
+				Street:  msg.Street1,
+				Street2: msg.Street2,
+				City:    msg.City,
+				State:   msg.State,
+				Country: msg.Country,
+				Zip:     msg.Zip,
+				Phone:   msg.Phone,
 			}
-			return m, m.PaymentForm.form.Init()
+			return m, m.saveAddressCmd(addr)
 
 		case AddressesMsg:
 			if msg.Err != nil || len(msg.Addresses) == 0 {
@@ -229,15 +235,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ShippingForm = nil
 			return m, nil
 
-		case ShippoValidationErrMsg:
-			if m.ShippingForm != nil {
-				m.ShippingForm.submitting = false
-				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
+		case AddressSavedMsg:
+			if msg.Err != nil {
+				if m.ShippingForm != nil {
+					m.ShippingForm.submitting = false
+					m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
+				}
 				m.ErrorMsg = fmt.Sprintf("Invalid address: %v", msg.Err)
 				return m, m.ShippingForm.form.Init()
 			}
-			m.ErrorMsg = fmt.Sprintf("Invalid address: %v", msg.Err)
-			return m, nil
+			m.ShippingInfo = &msg.Address
+			m.ShippingForm = nil
+			m.CheckoutStep = 2
+			m.PaymentForm = m.InitPaymentForm()
+			return m, m.PaymentForm.form.Init()
+
 		case ShippingFormErrorMsg:
 			m.ErrorMsg = msg.Message
 			return m, nil
@@ -388,21 +400,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case ShippingFormCompleteMsg:
-		return m, m.validateAddress(msg)
+		addr := models.Address{
+			Name:    msg.Name,
+			Street:  msg.Street1,
+			Street2: msg.Street2,
+			City:    msg.City,
+			State:   msg.State,
+			Country: msg.Country,
+			Zip:     msg.Zip,
+			Phone:   msg.Phone,
+		}
+		return m, m.saveAddressCmd(addr)
 
-	case ShippoValidatedMsg:
+	case AddressSavedMsg:
+		if msg.Err != nil {
+			if m.ShippingForm != nil {
+				m.ShippingForm.submitting = false
+				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
+			}
+			m.ErrorMsg = fmt.Sprintf("Invalid address: %v", msg.Err)
+			if m.ShippingForm != nil {
+				return m, m.ShippingForm.form.Init()
+			}
+			return m, nil
+		}
 		m.ShippingInfo = &msg.Address
 		m.ShippingForm = nil
 		m.CheckoutStep = 2
 		m.PaymentForm = m.InitPaymentForm()
-		if msg.SaveAddress {
-			return m, tea.Batch(m.PaymentForm.form.Init(), m.saveAddressCmd(msg.Address))
-		}
 		return m, m.PaymentForm.form.Init()
-
-	case ShippoValidationErrMsg:
-		m.ErrorMsg = fmt.Sprintf("invalid address: %v", msg.Err)
-		return m, nil
 
 	case ShippingFormErrorMsg:
 		m.ErrorMsg = msg.Message
@@ -661,68 +687,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// ShippoValidatedMsg is sent when Shippo address validation succeeds
-type ShippoValidatedMsg struct {
-	Address     models.Address
-	SaveAddress bool
-}
-
-// ShippoValidationErrMsg is sent when Shippo address validation fails
-type ShippoValidationErrMsg struct {
-	Err error
-}
-
-// validateAddress sends the shipping address to Shippo for validation
-func (m Model) validateAddress(info ShippingFormCompleteMsg) tea.Cmd {
-	return func() tea.Msg {
-		if m.ShippoKey == "" {
-			// No Shippo key configured, skip validation
-			return ShippoValidatedMsg{
-				Address: models.Address{
-					Name:    info.Name,
-					Street:  info.Street1,
-					Street2: info.Street2,
-					City:    info.City,
-					State:   info.State,
-					Country: info.Country,
-					Zip:     info.Zip,
-					Phone:   info.Phone,
-				},
-				SaveAddress: info.SaveAddress,
-			}
-		}
-
-		client := shippo.NewClient(m.ShippoKey)
-		validated, err := client.ValidateAddress(shippo.Address{
-			Name:    info.Name,
-			Street1: info.Street1,
-			Street2: info.Street2,
-			City:    info.City,
-			State:   info.State,
-			Country: info.Country,
-			Zip:     info.Zip,
-			Phone:   info.Phone,
-		})
-		if err != nil {
-			return ShippoValidationErrMsg{Err: err}
-		}
-
-		return ShippoValidatedMsg{
-			Address: models.Address{
-				Name:    validated.Name,
-				Street:  validated.Street1,
-				Street2: validated.Street2,
-				City:    validated.City,
-				State:   validated.State,
-				Country: validated.Country,
-				Zip:     validated.Zip,
-				Phone:   validated.Phone,
-			},
-			SaveAddress: info.SaveAddress,
-		}
-	}
-}
-
 type StripeTokenMsg struct {
 	TokenID string
 	Last4   string
@@ -880,17 +844,10 @@ func (m Model) submitCheckout(tok StripeTokenMsg) tea.Cmd {
 		}
 
 		req := api.CheckoutRequest{
-			StripeToken:     tok.TokenID,
-			Last4:           tok.Last4,
-			Items:           cartItems,
-			ShippingName:    m.ShippingInfo.Name,
-			ShippingStreet:  m.ShippingInfo.Street,
-			ShippingStreet2: m.ShippingInfo.Street2,
-			ShippingCity:    m.ShippingInfo.City,
-			ShippingState:   m.ShippingInfo.State,
-			ShippingZip:     m.ShippingInfo.Zip,
-			ShippingCountry: m.ShippingInfo.Country,
-			ShippingPhone:   m.ShippingInfo.Phone,
+			StripeToken: tok.TokenID,
+			Last4:       tok.Last4,
+			Items:       cartItems,
+			AddressID:   m.ShippingInfo.ID,
 		}
 
 		order, err := m.APIClient.Checkout(req)
@@ -999,14 +956,13 @@ func NewModel(username string) Model {
 		Loading:        true,
 		APIClient:      api.NewClient("http://localhost:8080", ""),
 		StripeKey:      os.Getenv("STRIPE_PUBLIC_KEY"),
-		ShippoKey:      os.Getenv("SHIPPO_API_KEY"),
 	}
 	m.updateLayout(120, 30)
 	return m
 }
 
 // NewModelWithAuth creates a new model with user authentication context
-func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey, token string) Model {
+func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey, token string, apiURL string) Model {
 	username := "guest"
 	if user != nil {
 		username = user.Name
@@ -1017,7 +973,11 @@ func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey,
 	m.IsNewUser = isNewUser
 	m.SSHPublicKey = pubKey
 	m.AccessToken = token
-	m.APIClient = api.NewClient("http://localhost:8080", token)
+	if apiURL != "" {
+		m.APIClient = api.NewClient(apiURL, token)
+	} else {
+		m.APIClient = api.NewClient("http://localhost:8080", token)
+	}
 
 	return m
 }

@@ -44,7 +44,6 @@ func TestModel_BuildMenuView(t *testing.T) {
 		ShippingView    int
 		AddressCursor   int
 		StripeKey       string
-		ShippoKey       string
 		Orders          []models.Order
 		OrdersLoaded    bool
 	}
@@ -92,7 +91,6 @@ func TestModel_BuildMenuView(t *testing.T) {
 				ShippingView:    tt.fields.ShippingView,
 				AddressCursor:   tt.fields.AddressCursor,
 				StripeKey:       tt.fields.StripeKey,
-				ShippoKey:       tt.fields.ShippoKey,
 				Orders:          tt.fields.Orders,
 				OrdersLoaded:    tt.fields.OrdersLoaded,
 			}

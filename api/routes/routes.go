@@ -9,7 +9,7 @@ import (
 )
 
 // SetupRoutes configures all API routes
-func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTManager, authFingerprintKey string) *chi.Mux {
+func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTManager, authFingerprintKey string, shippoAPIKey string) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Apply global middleware
@@ -24,7 +24,7 @@ func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTMan
 	authHandler := handlers.NewAuthHandler(jwtManager, authFingerprintKey)
 	checkoutHandler := handlers.NewCheckoutHandler(stripeSecretKey)
 	orderHandler := handlers.NewOrderHandler()
-	addressHandler := handlers.NewAddressHandler()
+	addressHandler := handlers.NewAddressHandler(shippoAPIKey)
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
