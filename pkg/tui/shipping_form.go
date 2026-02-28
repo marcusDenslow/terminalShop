@@ -9,8 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// scandinavianCountries defines the available countries with their dial codes.
-var scandinavianCountries = []struct {
+// countries defines the available countries with their dial codes.
+var countries = []struct {
 	Name     string
 	Code     string
 	DialCode string
@@ -20,6 +20,7 @@ var scandinavianCountries = []struct {
 	{Name: "Iceland", Code: "IS", DialCode: "+354"},
 	{Name: "Norway", Code: "NO", DialCode: "+47"},
 	{Name: "Sweden", Code: "SE", DialCode: "+46"},
+	{Name: "USA", Code: "US", DialCode: "+1"},
 }
 
 // countryDialCodes maps country ISO codes to their dialing prefixes.
@@ -29,6 +30,7 @@ var countryDialCodes = map[string]string{
 	"IS": "+354",
 	"NO": "+47",
 	"SE": "+46",
+	"US": "+1",
 }
 
 // ShippingFormState holds the shipping form state.
@@ -49,14 +51,14 @@ type ShippingFormState struct {
 
 // ShippingFormCompleteMsg is sent when the shipping form is completed
 type ShippingFormCompleteMsg struct {
-	Name        string
-	Street1     string
-	Street2     string
-	City        string
-	State       string
-	Country     string
-	Zip         string
-	Phone       string
+	Name    string
+	Street1 string
+	Street2 string
+	City    string
+	State   string
+	Country string
+	Zip     string
+	Phone   string
 }
 
 // ShippingFormErrorMsg is sent when form validation fails at submission time
@@ -68,8 +70,8 @@ type ShippingFormErrorMsg struct {
 // No field-level validators so Tab/Enter move freely between fields.
 // Validation happens at submission time instead.
 func (m Model) buildShippingForm(state *ShippingFormState) *huh.Form {
-	countryOptions := make([]huh.Option[string], 0, len(scandinavianCountries))
-	for _, c := range scandinavianCountries {
+	countryOptions := make([]huh.Option[string], 0, len(countries))
+	for _, c := range countries {
 		label := fmt.Sprintf("%s (%s)", c.Name, c.DialCode)
 		countryOptions = append(countryOptions, huh.NewOption(label, c.Code))
 	}
@@ -218,14 +220,14 @@ func (m Model) UpdateShippingForm(msg tea.Msg, state *ShippingFormState) tea.Cmd
 		phone := formatPhoneWithDialCode(state.Phone, state.Country)
 		return func() tea.Msg {
 			return ShippingFormCompleteMsg{
-				Name:        state.Name,
-				Street1:     state.Street1,
-				Street2:     state.Street2,
-				City:        state.City,
-				State:       state.State,
-				Country:     state.Country,
-				Zip:         state.Zip,
-				Phone:       phone,
+				Name:    state.Name,
+				Street1: state.Street1,
+				Street2: state.Street2,
+				City:    state.City,
+				State:   state.State,
+				Country: state.Country,
+				Zip:     state.Zip,
+				Phone:   phone,
 			}
 		}
 	}

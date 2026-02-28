@@ -238,11 +238,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case AddressSavedMsg:
 			if msg.Err != nil {
+				log.Printf("address validation failed: %v", msg.Err)
 				if m.ShippingForm != nil {
 					m.ShippingForm.submitting = false
 					m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
 				}
-				m.ErrorMsg = fmt.Sprintf("Invalid address: %v", msg.Err)
+				m.ErrorMsg = "Invalid address. Currently only US addresses are supported."
 				return m, m.ShippingForm.form.Init()
 			}
 			m.ShippingInfo = &msg.Address
@@ -432,11 +433,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AddressSavedMsg:
 		if msg.Err != nil {
+			log.Printf("address validation failed: %v", msg.Err)
 			if m.ShippingForm != nil {
 				m.ShippingForm.submitting = false
 				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
 			}
-			m.ErrorMsg = fmt.Sprintf("Invalid address: %v", msg.Err)
+			m.ErrorMsg = "Invalid address. Currently only US addresses are supported."
 			if m.ShippingForm != nil {
 				return m, m.ShippingForm.form.Init()
 			}

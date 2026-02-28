@@ -81,7 +81,7 @@ func MustBeLen(length int, name string) ErrorHandler {
 			return nil
 		}
 		if len(str) != length {
-			return fmt.Errorf("Expected %s to be length %d but got %d", name, length, len(str))
+			return fmt.Errorf("expected %s to be length %d but got %d", name, length, len(str))
 		}
 		return nil
 	}

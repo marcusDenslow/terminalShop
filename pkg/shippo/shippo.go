@@ -121,13 +121,12 @@ func (c *Client) ValidateAddress(addr Address) (*Address, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// TODO: Re-add !result.Test bypass before production if needed.
-	// Removed test mode bypass so we can verify Shippo validation in development.
-	//
-	// Shippo returns empty validation_results (no is_valid field) for international
-	// addresses. We only reject when is_valid is explicitly false.
-	if result.ValidationResults != nil && result.ValidationResults.IsValid != nil && !*result.ValidationResults.IsValid {
-		return nil, fmt.Errorf("address is invalid")
+	// Only accept addresses that Shippo explicitly validates as valid. 
+	// International addressees where Shippo cannot validate are rejected.
+	// Address validation for addresses in other countries need to be added on a per-country API basis.
+	// Going to add Bring validation for Norway next
+	if result.ValidationResults == nil || result.ValidationResults.IsValid == nil || !*result.ValidationResults.IsValid {
+		return nil, fmt.Errorf("invalid address")
 	}
 
 	// Return the normalized address from Shippo
