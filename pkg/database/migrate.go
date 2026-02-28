@@ -15,12 +15,14 @@ func Migrate(db *gorm.DB) error {
 	// AutoMigrate will create tables, missing columns, and indexes
 	// It will NOT delete unused columns or change column types
 	if err := db.AutoMigrate(
+		&models.Cart{},     // Server-side shipping cart
+		&models.CartItem{}, // Cart line items
 		&models.Coffee{},
 		&models.User{},      // SSH key-based authentication
 		&models.Card{},      // Saved payment methods
 		&models.Order{},     // Completed purchases
 		&models.OrderItem{}, // Line items within orders
-		&models.Address{}, // Saved addresses
+		&models.Address{},   // Saved addresses
 	); err != nil {
 		return fmt.Errorf("migration failed: %w", err)
 	}

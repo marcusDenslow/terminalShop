@@ -8,7 +8,6 @@ import (
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/utils"
-	"terminalShop/pkg/validation"
 )
 
 // AuthHandler handles authentication-related requests
@@ -99,7 +98,7 @@ func (h *AuthHandler) RegisterWithSSHKey(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Validate required fields
-	errors := make(validation.ProductErrors)
+	errors := map[string]string{}
 	if req.SSHPublicKey == "" {
 		errors["ssh_public_key"] = "SSH public key is required"
 	}
@@ -108,7 +107,7 @@ func (h *AuthHandler) RegisterWithSSHKey(w http.ResponseWriter, r *http.Request)
 		errors["ssh_key_fingerprint"] = "SSH key fingerprint is required"
 	}
 
-	if errors.HasErrors() {
+	if len(errors) > 0 {
 		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "validation failed", map[string]interface{}{
 			"errors": errors,
 		})

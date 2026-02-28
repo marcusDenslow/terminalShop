@@ -68,6 +68,8 @@ MODELS.md
 REFACTORING.md 
 TODO.md
 
+codebase_graph.html
+
 # Don't commit the cloned reference repo (optional - you might want to keep it)
 # terminal-shop-source/
 
@@ -76,3 +78,7 @@ api/docs/
 
 # Migration state (if using a migration tool that creates state files)
 migrations/*.state
+
+
+
+

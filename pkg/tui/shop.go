@@ -77,9 +77,9 @@ func (m Model) BuildShopView() string {
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Bold(true)
 
-		// Get current quantity
+		// Get current quantity (look up by CoffeeID)
 		quantity := 0
-		if item, exists := m.Cart[m.Cursor]; exists {
+		if item, exists := m.Cart[selectedCoffee.ID]; exists {
 			quantity = item.Quantity
 		}
 

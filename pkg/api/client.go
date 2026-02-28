@@ -167,23 +167,54 @@ func (c *Client) RegisterUser(username, sshPublicKey, sshKeyFingerprint string) 
 	return &registerResp.Data.User, nil
 }
 
-// CheckoutRequest represents the checkout payload sent to the API
-type CheckoutRequest struct {
-	StripeToken string             `json:"stripe_token"`
-	Last4       string             `json:"last4"`
-	Brand       string             `json:"brand"`
-	ExpMonth    int                `json:"exp_month"`
-	ExpYear     int                `json:"exp_year"`
-	Items       []CheckoutCartItem `json:"items"`
-	AddressID   uint               `json:"address_id"`
+// CartResponse represents the cart API response.
+type CartResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Cart CartData `json:"cart"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
 }
 
-type CheckoutCartItem struct {
-	CoffeeID uint `json:"coffee_id"`
-	Quantity int  `json:"quantity"`
+// CartData represents the cart payload from the API.
+type CartData struct {
+	Items           []CartItemData `json:"items"`
+	Subtotal        int            `json:"subtotal"`
+	AddressID       *uint          `json:"address_id"`
+	CardID          *uint          `json:"card_id"`
+	ShippingCost    int            `json:"shipping_cost"`
+	ShippingService string         `json:"shipping_service"`
 }
 
-type CheckoutResponse struct {
+// CartItemData represents a single item in the cart response.
+type CartItemData struct {
+	ID       uint          `json:"id"`
+	CoffeeID uint          `json:"coffee_id"`
+	Quantity int           `json:"quantity"`
+	Subtotal int           `json:"subtotal"`
+	Coffee   models.Coffee `json:"coffee"`
+}
+
+// CardsResponse represents the cards list API response.
+type CardsResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Cards []models.Card `json:"cards"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+// CardResponse represents a single card API response.
+type CardResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Card models.Card `json:"card"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+// ConvertCartResponse represents the cart conversion (checkout) API response.
+type ConvertCartResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
 		Order models.Order `json:"order"`
@@ -191,20 +222,252 @@ type CheckoutResponse struct {
 	Error *APIError `json:"error,omitempty"`
 }
 
-type OrderResponse struct {
-	Success bool `json:"success"`
-	Data    struct {
-		Orders []models.Order `json:"orders"`
-	} `json:"data"`
-	Error *APIError `json:"error,omitempty"`
+// GetCart fetches the user's current cart.
+func (c *Client) GetCart() (*CartData, error) {
+	url := fmt.Sprintf("%s/api/v1/cart", c.BaseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch cart: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var cartResp CartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cartResp); err != nil {
+		return nil, fmt.Errorf("failed to decode cart response: %w", err)
+	}
+
+	if !cartResp.Success {
+		if cartResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", cartResp.Error.Code, cartResp.Error.Message)
+		}
+		return nil, fmt.Errorf("failed to fetch cart")
+	}
+
+	return &cartResp.Data.Cart, nil
 }
 
-func (c *Client) Checkout(checkoutReq CheckoutRequest) (*models.Order, error) {
-	url := fmt.Sprintf("%s/api/v1/checkout", c.BaseURL)
+// SetCartItem upserts an item in the cart. Quantity <= 0 removes it.
+func (c *Client) SetCartItem(coffeeID uint, quantity int) (*CartData, error) {
+	url := fmt.Sprintf("%s/api/v1/cart/item", c.BaseURL)
 
-	jsonData, err := json.Marshal(checkoutReq)
+	body := map[string]interface{}{
+		"coffee_id": coffeeID,
+		"quantity":  quantity,
+	}
+	jsonData, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal checkout request: %w", err)
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set cart item: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var cartResp CartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cartResp); err != nil {
+		return nil, fmt.Errorf("failed to decode cart response: %w", err)
+	}
+
+	if !cartResp.Success {
+		if cartResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", cartResp.Error.Code, cartResp.Error.Message)
+		}
+		return nil, fmt.Errorf("failed to set cart item")
+	}
+
+	return &cartResp.Data.Cart, nil
+}
+
+// SetCartAddress assigns a saved address to the cart.
+func (c *Client) SetCartAddress(addressID uint) error {
+	url := fmt.Sprintf("%s/api/v1/cart/address", c.BaseURL)
+
+	body := map[string]interface{}{
+		"address_id": addressID,
+	}
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to set cart address: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !result.Success {
+		if result.Error != nil {
+			return fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message)
+		}
+		return fmt.Errorf("failed to set cart address")
+	}
+
+	return nil
+}
+
+// SetCartCard assigns a saved card to the cart.
+func (c *Client) SetCartCard(cardID uint) error {
+	url := fmt.Sprintf("%s/api/v1/cart/card", c.BaseURL)
+
+	body := map[string]interface{}{
+		"card_id": cardID,
+	}
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to set cart card: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !result.Success {
+		if result.Error != nil {
+			return fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message)
+		}
+		return fmt.Errorf("failed to set cart card")
+	}
+
+	return nil
+}
+
+// ClearCart removes all items from the user's cart.
+func (c *Client) ClearCart() error {
+	url := fmt.Sprintf("%s/api/v1/cart", c.BaseURL)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to clear cart: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !result.Success {
+		if result.Error != nil {
+			return fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message)
+		}
+		return fmt.Errorf("failed to clear cart")
+	}
+
+	return nil
+}
+
+// ConvertCart converts the cart into an order, charging the saved card.
+func (c *Client) ConvertCart() (*models.Order, error) {
+	url := fmt.Sprintf("%s/api/v1/cart/convert", c.BaseURL)
+
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert cart: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var convertResp ConvertCartResponse
+	if err := json.NewDecoder(resp.Body).Decode(&convertResp); err != nil {
+		return nil, fmt.Errorf("failed to decode convert response: %w", err)
+	}
+
+	if !convertResp.Success {
+		if convertResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", convertResp.Error.Code, convertResp.Error.Message)
+		}
+		return nil, fmt.Errorf("failed to convert cart")
+	}
+
+	return &convertResp.Data.Order, nil
+}
+
+// GetCards fetches all saved cards for the user.
+func (c *Client) GetCards() ([]models.Card, error) {
+	url := fmt.Sprintf("%s/api/v1/cards", c.BaseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch cards: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var cardsResp CardsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cardsResp); err != nil {
+		return nil, fmt.Errorf("failed to decode cards response: %w", err)
+	}
+
+	if !cardsResp.Success {
+		if cardsResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", cardsResp.Error.Code, cardsResp.Error.Message)
+		}
+		return nil, fmt.Errorf("failed to fetch cards")
+	}
+
+	return cardsResp.Data.Cards, nil
+}
+
+// SaveCard creates a saved card from a Stripe token.
+func (c *Client) SaveCard(token string) (*models.Card, error) {
+	url := fmt.Sprintf("%s/api/v1/cards", c.BaseURL)
+
+	body := map[string]string{"token": token}
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
@@ -215,23 +478,53 @@ func (c *Client) Checkout(checkoutReq CheckoutRequest) (*models.Order, error) {
 
 	resp, err := c.doRequest(req)
 	if err != nil {
-		return nil, fmt.Errorf("checkout request failed: %w", err)
+		return nil, fmt.Errorf("failed to save card: %w", err)
 	}
-
 	defer resp.Body.Close()
 
-	var checkoutResp CheckoutResponse
-	if err := json.NewDecoder(resp.Body).Decode(&checkoutResp); err != nil {
-		return nil, fmt.Errorf("failed to decode checkout response: %w", err)
+	var cardResp CardResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cardResp); err != nil {
+		return nil, fmt.Errorf("failed to decode card response: %w", err)
 	}
 
-	if !checkoutResp.Success {
-		if checkoutResp.Error != nil {
-			return nil, fmt.Errorf("%s: %s", checkoutResp.Error.Code, checkoutResp.Error.Message)
+	if !cardResp.Success {
+		if cardResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", cardResp.Error.Code, cardResp.Error.Message)
 		}
-		return nil, fmt.Errorf("checkout failed")
+		return nil, fmt.Errorf("failed to save card")
 	}
-	return &checkoutResp.Data.Order, nil
+
+	return &cardResp.Data.Card, nil
+}
+
+// DeleteCard removes a saved card by ID.
+func (c *Client) DeleteCard(id uint) error {
+	url := fmt.Sprintf("%s/api/v1/cards/%d", c.BaseURL, id)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete card: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("delete card failed with status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+type OrderResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Orders []models.Order `json:"orders"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
 }
 
 func (c *Client) GetOrders() ([]models.Order, error) {

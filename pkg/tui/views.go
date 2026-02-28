@@ -66,6 +66,8 @@ func (m Model) View() string {
 			} else if m.ShippingForm != nil {
 				content = errorBanner + "\n" + m.RenderShippingForm(m.ShippingForm)
 			}
+		} else if m.ViewingCart && m.CheckoutStep == 2 && m.CheckingOut {
+			content = errorBanner + "\n  submitting order..."
 		} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentForm != nil {
 			content = errorBanner + "\n" + m.RenderPaymentForm(m.PaymentForm)
 		} else if m.ViewingCart && m.CheckoutStep == 3 {
@@ -83,6 +85,8 @@ func (m Model) View() string {
 		} else if m.ShippingForm != nil {
 			content = m.RenderShippingForm(m.ShippingForm)
 		}
+	} else if m.ViewingCart && m.CheckoutStep == 2 && m.CheckingOut {
+		content = "  submitting order..."
 	} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentForm != nil {
 		content = m.RenderPaymentForm(m.PaymentForm)
 	} else if m.ViewingCart && m.CheckoutStep == 3 {

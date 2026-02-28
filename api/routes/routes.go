@@ -22,7 +22,8 @@ func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTMan
 	healthHandler := handlers.NewHealthHandler(version)
 	productHandler := handlers.NewProductHandler()
 	authHandler := handlers.NewAuthHandler(jwtManager, authFingerprintKey)
-	checkoutHandler := handlers.NewCheckoutHandler(stripeSecretKey)
+	cartHandler := handlers.NewCartHandler(stripeSecretKey)
+	cardHandler := handlers.NewCardHandler(stripeSecretKey)
 	orderHandler := handlers.NewOrderHandler()
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey)
 
@@ -45,13 +46,23 @@ func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTMan
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireAuth)
 
-			// Admin-only product management (TODO: add admin check)
-			r.Post("/products", productHandler.CreateProduct)
-			r.Put("/products/{id}", productHandler.UpdateProduct)
-			r.Delete("/products/{id}", productHandler.DeleteProduct)
+			// Cart
+			r.Route("/cart", func(r chi.Router) {
+				r.Get("/", cartHandler.GetCart)
+				r.Put("/item", cartHandler.SetItem)
+				r.Put("/address", cartHandler.SetAddress)
+				r.Put("/card", cartHandler.SetCard)
+				r.Delete("/", cartHandler.ClearCart)
+				r.Post("/convert", cartHandler.ConvertCart)
+			})
 
-			// Checkout
-			r.Post("/checkout", checkoutHandler.Checkout)
+			// Cards
+			r.Route("/cards", func(r chi.Router) {
+				r.Get("/", cardHandler.GetCards)
+				r.Get("/{id}", cardHandler.GetCard)
+				r.Post("/", cardHandler.SaveCard)
+				r.Delete("/{id}", cardHandler.DeleteCard)
+			})
 
 			// Orders
 			r.Get("/orders", orderHandler.GetOrders)

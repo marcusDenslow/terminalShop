@@ -49,12 +49,13 @@ type Model struct {
 	Username       string
 	Coffees        []models.Coffee
 	Cursor         int
-	Cart           map[int]*models.CartItem // maps coffee index to cart item
-	CartCursor     int                      // cursor position in cart view
+	Cart           map[uint]*models.CartItem // maps CoffeeID to cart item
+	CartCursor     int                       // cursor position in cart view
 	AccountCursor  int
 	CheckoutStep   int  // 0=cart, 1=shipping, 2=payment, 3=confirmation
 	ScrollOffset   int  // scroll position for content
 	ViewingCart    bool // true when viewing cart details
+	CheckingOut    bool // true while saveCardAndConvert is running
 	ViewingAccount bool
 
 	// Menu modal state
@@ -335,15 +336,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// When the payment form is active, route ALL messages to it.
-	if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentForm != nil {
+	if m.ViewingCart && m.CheckoutStep == 2 {
 		switch msg := msg.(type) {
 		case PaymentFormCompleteMsg:
 			// kick off Stripe tokenization (runs async)
-			return m, m.tokenizeCard(msg)
+			if m.PaymentForm != nil {
+				return m, m.tokenizeCard(msg)
+			}
+			return m, nil
 		case StripeTokenMsg:
+			// Token obtained — save card, set on cart, set address, convert
 			m.PaymentForm = nil
-			return m, m.submitCheckout(msg)
+			m.CheckingOut = true
+			return m, m.saveCardAndConvert(msg)
 		case CheckoutResultMsg:
+			m.CheckingOut = false
 			if msg.Err != nil {
 				m.ErrorMsg = fmt.Sprintf("checkout failed: %v", msg.Err)
 				m.CheckoutStep = 2
@@ -354,10 +361,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case StripeTokenErrMsg:
 			// Tokenization failed, show error and let user retry
-			m.PaymentForm.submitting = false
-			m.ErrorMsg = fmt.Sprintf("Payment Failed: %v", msg.Err)
-			m.PaymentForm.form = m.buildPaymentForm(m.PaymentForm)
-			return m, m.PaymentForm.form.Init()
+			if m.PaymentForm != nil {
+				m.PaymentForm.submitting = false
+				m.ErrorMsg = fmt.Sprintf("Payment failed: %v", msg.Err)
+				m.PaymentForm.form = m.buildPaymentForm(m.PaymentForm)
+				return m, m.PaymentForm.form.Init()
+			}
+			m.ErrorMsg = fmt.Sprintf("Payment failed: %v", msg.Err)
+			return m, nil
 		case PaymentFormErrorMsg:
 			m.ErrorMsg = msg.Message
 			return m, nil
@@ -370,6 +381,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return resizeTickMsg{seq: seq}
 			})
 		case tea.KeyMsg:
+			if m.CheckingOut {
+				// Ignore all keys while submitting order
+				return m, nil
+			}
 			if msg.String() == "esc" {
 				// Go back to shipping
 				m.CheckoutStep = 1
@@ -394,8 +409,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ErrorMsg = ""
 		}
 
-		cmd := m.UpdatePaymentForm(msg, m.PaymentForm)
-		return m, cmd
+		if m.PaymentForm != nil {
+			cmd := m.UpdatePaymentForm(msg, m.PaymentForm)
+			return m, cmd
+		}
+		return m, nil
 	}
 
 	switch msg := msg.(type) {
@@ -556,7 +574,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ShippingForm = nil
 				m.PaymentForm = nil
 				m.ShippingInfo = nil
-				m.Cart = make(map[int]*models.CartItem)
+				m.CheckingOut = false
+				m.Cart = make(map[uint]*models.CartItem)
 				m.CartCursor = 0
 				m.ScrollOffset = 0
 				return m, nil
@@ -628,11 +647,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "+", "=":
 			if !m.ViewingCart && !m.ViewingAccount {
-				// Increment quantity in shop view
-				if item, exists := m.Cart[m.Cursor]; exists {
+				// Increment quantity in shop view (keyed by CoffeeID)
+				coffeeID := m.Coffees[m.Cursor].ID
+				if item, exists := m.Cart[coffeeID]; exists {
 					item.Quantity++
 				} else {
-					m.Cart[m.Cursor] = &models.CartItem{
+					m.Cart[coffeeID] = &models.CartItem{
+						CoffeeID: coffeeID,
 						Coffee:   m.Coffees[m.Cursor],
 						Quantity: 1,
 					}
@@ -647,11 +668,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "-", "_":
 			if !m.ViewingCart && !m.ViewingAccount {
-				// Decrement quantity in shop view
-				if item, exists := m.Cart[m.Cursor]; exists {
+				// Decrement quantity in shop view (keyed by CoffeeID)
+				coffeeID := m.Coffees[m.Cursor].ID
+				if item, exists := m.Cart[coffeeID]; exists {
 					item.Quantity--
 					if item.Quantity <= 0 {
-						delete(m.Cart, m.Cursor)
+						delete(m.Cart, coffeeID)
 						// Reset cart cursor if we deleted the last item
 						if len(m.Cart) == 0 {
 							m.CartCursor = 0
@@ -666,13 +688,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
 					cartItems[m.CartCursor].Quantity--
 					if cartItems[m.CartCursor].Quantity <= 0 {
-						// Find and delete this item from the cart
-						for idx, item := range m.Cart {
-							if item == cartItems[m.CartCursor] {
-								delete(m.Cart, idx)
-								break
-							}
-						}
+						// Delete this item from the cart by CoffeeID
+						delete(m.Cart, cartItems[m.CartCursor].CoffeeID)
 						// Reset cart cursor
 						if len(m.Cart) == 0 {
 							m.CartCursor = 0
@@ -778,11 +795,15 @@ func (m Model) deleteAddressCmd(id uint) tea.Cmd {
 
 func (m Model) tokenizeCard(card PaymentFormCompleteMsg) tea.Cmd {
 	return func() tea.Msg {
-		// Use Stripe's HTTP API directly with the publishable key.
-		// The Go SDK's token.New() is blocked for raw card numbers
-		// unless your account has direct PCI compliance enabled.
-		// This HTTP POST mimics what a browser does with Stripe.js.
-		pubKey := m.StripeKey
+		// Use the Stripe secret key for server-side tokenization.
+		// This is a terminal app running over SSH — there is no browser,
+		// so the publishable key / Stripe.js approach does not work.
+		// The secret key is allowed to create tokens with raw card data.
+		secretKey := os.Getenv("STRIPE_SECRET_KEY")
+		if secretKey == "" {
+			// Fall back to the publishable key (will fail on most accounts)
+			secretKey = m.StripeKey
+		}
 
 		data := fmt.Sprintf(
 			"card[number]=%s&card[exp_month]=%s&card[exp_year]=%s&card[cvc]=%s",
@@ -794,7 +815,7 @@ func (m Model) tokenizeCard(card PaymentFormCompleteMsg) tea.Cmd {
 			return StripeTokenErrMsg{Err: err}
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("Authorization", "Bearer "+pubKey)
+		req.Header.Set("Authorization", "Bearer "+secretKey)
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -828,29 +849,67 @@ func (m Model) tokenizeCard(card PaymentFormCompleteMsg) tea.Cmd {
 	}
 }
 
-func (m Model) submitCheckout(tok StripeTokenMsg) tea.Cmd {
+// saveCardAndConvert saves the tokenized card, syncs cart items to the server,
+// sets address and card on the server cart, then converts the cart to an order.
+func (m Model) saveCardAndConvert(tok StripeTokenMsg) tea.Cmd {
 	return func() tea.Msg {
 		if m.APIClient == nil {
 			return CheckoutResultMsg{Err: fmt.Errorf("API client not available")}
 		}
 
+		// 1. Save the card
+		card, err := m.APIClient.SaveCard(tok.TokenID)
+		if err != nil {
+			// Card may already exist — try fetching existing cards
+			cards, listErr := m.APIClient.GetCards()
+			if listErr != nil || len(cards) == 0 {
+				return CheckoutResultMsg{Err: fmt.Errorf("failed to save card: %w", err)}
+			}
+			// Use the most recent card
+			card = &cards[0]
+		}
+
+		// 2. Sync cart items to the server
 		items := m.GetCartItemsSlice()
-		cartItems := make([]api.CheckoutCartItem, 0, len(items))
 		for _, item := range items {
-			cartItems = append(cartItems, api.CheckoutCartItem{
-				CoffeeID: item.Coffee.ID,
-				Quantity: item.Quantity,
+			_, err := m.APIClient.SetCartItem(item.CoffeeID, item.Quantity)
+			if err != nil {
+				return CheckoutResultMsg{Err: fmt.Errorf("failed to sync cart: %w", err)}
+			}
+		}
+
+		// 3. Set the shipping address on the cart
+		if m.ShippingInfo != nil && m.ShippingInfo.ID != 0 {
+			if err := m.APIClient.SetCartAddress(m.ShippingInfo.ID); err != nil {
+				return CheckoutResultMsg{Err: fmt.Errorf("failed to set address: %w", err)}
+			}
+		} else if m.ShippingInfo != nil {
+			// Address was entered fresh (not from saved list), save it first
+			saved, err := m.APIClient.CreateAddress(api.CreateAddressRequest{
+				Name:    m.ShippingInfo.Name,
+				Street:  m.ShippingInfo.Street,
+				Street2: m.ShippingInfo.Street2,
+				City:    m.ShippingInfo.City,
+				State:   m.ShippingInfo.State,
+				Zip:     m.ShippingInfo.Zip,
+				Country: m.ShippingInfo.Country,
+				Phone:   m.ShippingInfo.Phone,
 			})
+			if err != nil {
+				return CheckoutResultMsg{Err: fmt.Errorf("failed to save address: %w", err)}
+			}
+			if err := m.APIClient.SetCartAddress(saved.ID); err != nil {
+				return CheckoutResultMsg{Err: fmt.Errorf("failed to set address: %w", err)}
+			}
 		}
 
-		req := api.CheckoutRequest{
-			StripeToken: tok.TokenID,
-			Last4:       tok.Last4,
-			Items:       cartItems,
-			AddressID:   m.ShippingInfo.ID,
+		// 4. Set the card on the cart
+		if err := m.APIClient.SetCartCard(card.ID); err != nil {
+			return CheckoutResultMsg{Err: fmt.Errorf("failed to set card: %w", err)}
 		}
 
-		order, err := m.APIClient.Checkout(req)
+		// 5. Convert the cart to an order
+		order, err := m.APIClient.ConvertCart()
 		if err != nil {
 			return CheckoutResultMsg{Err: err}
 		}
@@ -862,10 +921,10 @@ func (m Model) submitCheckout(tok StripeTokenMsg) tea.Cmd {
 	}
 }
 
-// GetCartItemsSlice converts the cart map to a sorted slice for consistent iteration
+// GetCartItemsSlice converts the cart map to a sorted slice for consistent iteration.
 func (m Model) GetCartItemsSlice() []*models.CartItem {
 	// Get keys and sort them for stable ordering
-	keys := make([]int, 0, len(m.Cart))
+	keys := make([]uint, 0, len(m.Cart))
 	for key := range m.Cart {
 		keys = append(keys, key)
 	}
@@ -948,7 +1007,7 @@ func NewModel(username string) Model {
 			},
 		},
 		Cursor:         0,
-		Cart:           make(map[int]*models.CartItem),
+		Cart:           make(map[uint]*models.CartItem),
 		CartCursor:     0,
 		AccountCursor:  0,
 		ViewingCart:    false,

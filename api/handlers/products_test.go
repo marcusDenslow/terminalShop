@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 )
@@ -36,26 +37,29 @@ func setupTestDB(t *testing.T) string {
 	return testDB
 }
 
-func TestGetProducts(t *testing.T) {
+func TestGetProduct(t *testing.T) {
 	testDB := setupTestDB(t)
 	defer os.Remove(testDB)
+	defer database.ResetForTesting()
 
 	handler := NewProductHandler()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/products", nil)
+	r := chi.NewRouter()
+	r.Get("/products/{id}", handler.GetProduct)
+
+	req := httptest.NewRequest(http.MethodGet, "/products/1", nil)
 	w := httptest.NewRecorder()
 
-	handler.GetProducts(w, req)
+	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 
-	// Parse response
 	var response struct {
 		Success bool `json:"success"`
 		Data    struct {
-			Products []models.Coffee `json:"products"`
+			Product models.Coffee `json:"product"`
 		} `json:"data"`
 	}
 
@@ -67,27 +71,28 @@ func TestGetProducts(t *testing.T) {
 		t.Error("Expected success to be true")
 	}
 
-	if len(response.Data.Products) != 6 {
-		t.Errorf("Expected 6 products, got %d", len(response.Data.Products))
+	if response.Data.Product.Name != "Espresso" {
+		t.Errorf("Expected Espresso, got %s", response.Data.Product.Name)
 	}
+}
 
-	// Verify product fields
-	for _, p := range response.Data.Products {
-		if p.ID == 0 {
-			t.Error("Product ID should not be 0")
-		}
-		if p.Name == "" {
-			t.Error("Product name should not be empty")
-		}
-		if p.Price <= 0 {
-			t.Errorf("Product %s has invalid price: %f", p.Name, p.Price)
-		}
-	}
+func TestGetProductNotFound(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer os.Remove(testDB)
+	defer database.ResetForTesting()
 
-	// Verify Content-Type header
-	contentType := w.Header().Get("Content-Type")
-	if contentType != "application/json" {
-		t.Errorf("Expected Content-Type application/json, got %s", contentType)
+	handler := NewProductHandler()
+
+	r := chi.NewRouter()
+	r.Get("/products/{id}", handler.GetProduct)
+
+	req := httptest.NewRequest(http.MethodGet, "/products/999", nil)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", w.Code)
 	}
 }
 

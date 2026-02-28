@@ -27,13 +27,7 @@ func (Coffee) TableName() string {
 }
 
 
-// CartItem represents an item in the cart
-type CartItem struct {
-	Coffee   Coffee
-	Quantity int
-}
-
-// Account menu items
+// AccountMenuItems something
 var AccountMenuItems = []string{
 	"order history",
 	"faq",

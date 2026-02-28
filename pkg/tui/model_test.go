@@ -18,7 +18,7 @@ func TestModel_updateLayout(t *testing.T) {
 		Username        string
 		Coffees         []models.Coffee
 		Cursor          int
-		Cart            map[int]*models.CartItem
+		Cart            map[uint]*models.CartItem
 		CartCursor      int
 		AccountCursor   int
 		CheckoutStep    int
