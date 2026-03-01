@@ -243,7 +243,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.ShippingForm.submitting = false
 					m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
 				}
-				m.ErrorMsg = "Invalid address. Currently only US addresses are supported."
+				m.ErrorMsg = "Invalid address. Currently only US and Norwegian addresses are supported."
 				return m, m.ShippingForm.form.Init()
 			}
 			m.ShippingInfo = &msg.Address
@@ -438,7 +438,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ShippingForm.submitting = false
 				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
 			}
-			m.ErrorMsg = "Invalid address. Currently only US addresses are supported."
+			m.ErrorMsg = "Invalid address. Currently only US and Norwegian addresses are supported."
 			if m.ShippingForm != nil {
 				return m, m.ShippingForm.form.Init()
 			}

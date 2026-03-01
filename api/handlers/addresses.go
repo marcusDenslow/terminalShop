@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"terminalShop/api/middleware"
+	"terminalShop/pkg/bring"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/shippo"
@@ -16,12 +17,18 @@ import (
 )
 
 type AddressHandler struct {
-	shippoKey string
+	shippoKey   string
+	bringAPIUID string
+	bringAPIKey string
 }
 
-// NewAddressHandler creates a new AddressHandler with the Shippo API key
-func NewAddressHandler(shippoAPIKey string) *AddressHandler {
-	return &AddressHandler{shippoKey: shippoAPIKey}
+// NewAddressHandler creates a new AddressHandler with address validation API keys.
+func NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey string) *AddressHandler {
+	return &AddressHandler{
+		shippoKey:   shippoAPIKey,
+		bringAPIUID: bringAPIUID,
+		bringAPIKey: bringAPIKey,
+	}
 }
 
 // Retrieve all saved addresses for a user
@@ -64,9 +71,14 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate and normalize address via Shippo
+	// Validate and normalize address via country-specific provider
 	var address models.Address
-	if h.shippoKey != "" {
+	switch req.Country {
+	case "US":
+		if h.shippoKey == "" {
+			utils.RespondError(w, http.StatusBadRequest, "CONFIG_ERROR", "shippo not configured for US address validation", nil)
+			return
+		}
 		client := shippo.NewClient(h.shippoKey)
 		validated, err := client.ValidateAddress(shippo.Address{
 			Name:    req.Name,
@@ -94,18 +106,39 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 			Country: validated.Country,
 			Phone:   validated.Phone,
 		}
-	} else {
-		address = models.Address{
-			UserID:  userID,
+	case "NO":
+		if h.bringAPIUID == "" || h.bringAPIKey == "" {
+			utils.RespondError(w, http.StatusBadRequest, "CONFIG_ERROR", "bring not configured for Norwegian address validation", nil)
+			return
+		}
+		client := bring.NewClient(h.bringAPIUID, h.bringAPIKey)
+		validated, err := client.ValidateAddress(bring.Address{
 			Name:    req.Name,
-			Street:  req.Street,
+			Street1: req.Street,
 			Street2: req.Street2,
 			City:    req.City,
-			State:   req.State,
 			Zip:     req.Zip,
 			Country: req.Country,
 			Phone:   req.Phone,
+		})
+		if err != nil {
+			log.Printf("bring address validation failed: %v", err)
+			utils.RespondError(w, http.StatusBadRequest, "INVALID_ADDRESS", "address is invalid", nil)
+			return
 		}
+		address = models.Address{
+			UserID:  userID,
+			Name:    validated.Name,
+			Street:  validated.Street1,
+			Street2: validated.Street2,
+			City:    validated.City,
+			Zip:     validated.Zip,
+			Country: validated.Country,
+			Phone:   validated.Phone,
+		}
+	default:
+		utils.RespondError(w, http.StatusBadRequest, "UNSUPPORTED_COUNTRY", "address validation is not supported for this country", nil)
+		return
 	}
 
 	if err := db.Create(&address).Error; err != nil {

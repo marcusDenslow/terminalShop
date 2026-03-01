@@ -19,6 +19,8 @@ type Config struct {
 	StripePublicKey    string
 	ShippoAPIKey       string
 	AuthFingerprintKey string
+	BringAPIUID        string
+	BringAPIKey        string
 }
 
 // Load reads configuration from environment variables
@@ -46,6 +48,8 @@ func Load() (*Config, error) {
 		StripePublicKey:    os.Getenv("STRIPE_PUBLIC_KEY"),
 		ShippoAPIKey:       os.Getenv("SHIPPO_API_KEY"),
 		AuthFingerprintKey: os.Getenv("AUTH_FINGERPRINT_KEY"),
+		BringAPIUID:        os.Getenv("BRING_API_UID"),
+		BringAPIKey:        os.Getenv("BRING_API_KEY"),
 	}
 
 	return cfg, nil
