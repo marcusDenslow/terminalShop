@@ -46,17 +46,18 @@ type Model struct {
 	UsernameInput string // Input for username during registration
 
 	// Shop state
-	Username       string
-	Coffees        []models.Coffee
-	Cursor         int
-	Cart           map[uint]*models.CartItem // maps CoffeeID to cart item
-	CartCursor     int                       // cursor position in cart view
-	AccountCursor  int
-	CheckoutStep   int  // 0=cart, 1=shipping, 2=payment, 3=confirmation
-	ScrollOffset   int  // scroll position for content
-	ViewingCart    bool // true when viewing cart details
-	CheckingOut    bool // true while saveCardAndConvert is running
-	ViewingAccount bool
+	Username         string
+	Coffees          []models.Coffee
+	Cursor           int
+	Cart             map[uint]*models.CartItem // maps CoffeeID to cart item
+	CartCursor       int                       // cursor position in cart view
+	AccountCursor    int
+	CheckoutStep     int   // 0=cart, 1=shipping, 2=payment, 3=confirmation
+	ScrollOffset     int   // scroll position for content
+	ViewingCart      bool  // true when viewing cart details
+	CheckingOut      bool  // true while saveCardAndConvert is running
+	lastCartUpdateID int64 // debounce ID for optimistic cart sync
+	ViewingAccount   bool
 
 	// Menu modal state
 	ShowingMenu  bool // true when full-screen menu is showing
@@ -130,6 +131,23 @@ type ProductsMsg struct {
 	Err      error
 }
 
+// fetchCartCmd fetches the user's cart from the API on startup
+func (m Model) fetchCartCmd() tea.Msg {
+	if m.APIClient == nil || m.User == nil {
+		return CartFetchedMsg{Err: fmt.Errorf("not authenticated")}
+	}
+
+	log.Println("[TUI] Fetching cart from API")
+	cart, err := m.APIClient.GetCart()
+	if err != nil {
+		log.Printf("[TUI] Failed to fetch cart: %v", err)
+	} else {
+		log.Printf("[TUI] Loaded %d cart items from API", len(cart.Items))
+	}
+
+	return CartFetchedMsg{Cart: cart, Err: err}
+}
+
 // fetchProductsCmd fetches products from the API
 func (m Model) fetchProductsCmd() tea.Msg {
 	if m.APIClient == nil {
@@ -148,8 +166,8 @@ func (m Model) fetchProductsCmd() tea.Msg {
 }
 
 func (m Model) Init() tea.Cmd {
-	// Fetch products from API on startup
-	return m.fetchProductsCmd
+	// Fetch products and cart from API on startup
+	return tea.Batch(m.fetchProductsCmd, m.fetchCartCmd)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -489,6 +507,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case CartFetchedMsg:
+		if msg.Err == nil && msg.Cart != nil {
+			m.loadCartFromAPI(msg.Cart)
+			log.Printf("[TUI] Cart loaded: %d items", len(m.Cart))
+		}
+		return m, nil
+
+	case CartSyncedMsg:
+		if msg.Err != nil {
+			log.Printf("[TUI] Cart sync error, re-fetching: %v", msg.Err)
+			return m, m.fetchCartCmd
+		}
+		// Only apply if this is the most recent update (debounce)
+		if msg.UpdateID == m.lastCartUpdateID {
+			m.loadCartFromAPI(msg.Cart)
+		}
+		return m, nil
+
 	case OrdersMsg:
 		if msg.Err == nil {
 			m.Orders = msg.Orders
@@ -608,7 +644,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Cart = make(map[uint]*models.CartItem)
 				m.CartCursor = 0
 				m.ScrollOffset = 0
-				return m, nil
+				return m, func() tea.Msg {
+					if m.APIClient != nil {
+						_ = m.APIClient.ClearCart()
+					}
+					return nil
+				}
 			}
 			// Go back in checkout flow
 			if m.ViewingCart && m.CheckoutStep > 0 {
@@ -725,11 +766,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Quantity: 1,
 					}
 				}
+				return m, m.syncCartItemCmd(coffeeID, m.Cart[coffeeID].Quantity)
 			} else if m.ViewingCart {
 				// Increment quantity in cart view
 				cartItems := m.GetCartItemsSlice()
 				if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
 					cartItems[m.CartCursor].Quantity++
+					return m, m.syncCartItemCmd(cartItems[m.CartCursor].CoffeeID, cartItems[m.CartCursor].Quantity)
 				}
 			}
 
@@ -739,6 +782,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				coffeeID := m.Coffees[m.Cursor].ID
 				if item, exists := m.Cart[coffeeID]; exists {
 					item.Quantity--
+					newQty := item.Quantity
 					if item.Quantity <= 0 {
 						delete(m.Cart, coffeeID)
 						// Reset cart cursor if we deleted the last item
@@ -747,23 +791,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						} else if m.CartCursor >= len(m.Cart) {
 							m.CartCursor = len(m.Cart) - 1
 						}
+						newQty = 0
 					}
+					return m, m.syncCartItemCmd(coffeeID, newQty)
 				}
 			} else if m.ViewingCart {
 				// Decrement quantity in cart view
 				cartItems := m.GetCartItemsSlice()
 				if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
+					coffeeID := cartItems[m.CartCursor].CoffeeID
 					cartItems[m.CartCursor].Quantity--
+					newQty := cartItems[m.CartCursor].Quantity
 					if cartItems[m.CartCursor].Quantity <= 0 {
-						// Delete this item from the cart by CoffeeID
-						delete(m.Cart, cartItems[m.CartCursor].CoffeeID)
+						delete(m.Cart, coffeeID)
 						// Reset cart cursor
 						if len(m.Cart) == 0 {
 							m.CartCursor = 0
 						} else if m.CartCursor >= len(m.Cart) {
 							m.CartCursor = len(m.Cart) - 1
 						}
+						newQty = 0
 					}
+					return m, m.syncCartItemCmd(coffeeID, newQty)
 				}
 			}
 		}
@@ -784,6 +833,18 @@ type CheckoutResultMsg struct {
 	OrderID uint
 	Total   int
 	Err     error
+}
+
+// CartSyncedMsg is recieved when the server responds to a cart item update
+type CartSyncedMsg struct {
+	UpdateID int64
+	Cart     *api.CartData
+	Err      error
+}
+
+type CartFetchedMsg struct {
+	Cart *api.CartData
+	Err  error
 }
 
 // OrdersMsg is sent when order history is fetched from the API
@@ -916,8 +977,26 @@ func (m Model) tokenizeCard(card PaymentFormCompleteMsg) tea.Cmd {
 	}
 }
 
-// saveCardAndConvert saves the tokenized card, syncs cart items to the server,
-// sets address and card on the server cart, then converts the cart to an order.
+func (m *Model) syncCartItemCmd(coffeeID uint, quantity int) tea.Cmd {
+	if m.APIClient == nil || m.User == nil {
+		return nil
+	}
+
+	updateID := time.Now().UTC().UnixMilli()
+	m.lastCartUpdateID = updateID
+
+	return func() tea.Msg {
+		cart, err := m.APIClient.SetCartItem(coffeeID, quantity)
+		return CartSyncedMsg{
+			UpdateID: updateID,
+			Cart:     cart,
+			Err:      err,
+		}
+	}
+}
+
+// saveCardAndConvert saves the tokenized card, sets address and card on the
+// server cart, then converts the cart to an order
 func (m Model) saveCardAndConvert(tok StripeTokenMsg) tea.Cmd {
 	return func() tea.Msg {
 		if m.APIClient == nil {
@@ -936,16 +1015,7 @@ func (m Model) saveCardAndConvert(tok StripeTokenMsg) tea.Cmd {
 			card = &cards[0]
 		}
 
-		// 2. Sync cart items to the server
-		items := m.GetCartItemsSlice()
-		for _, item := range items {
-			_, err := m.APIClient.SetCartItem(item.CoffeeID, item.Quantity)
-			if err != nil {
-				return CheckoutResultMsg{Err: fmt.Errorf("failed to sync cart: %w", err)}
-			}
-		}
-
-		// 3. Set the shipping address on the cart
+		// 2. Set the shipping address on the cart
 		if m.ShippingInfo != nil && m.ShippingInfo.ID != 0 {
 			if err := m.APIClient.SetCartAddress(m.ShippingInfo.ID); err != nil {
 				return CheckoutResultMsg{Err: fmt.Errorf("failed to set address: %w", err)}
@@ -970,12 +1040,12 @@ func (m Model) saveCardAndConvert(tok StripeTokenMsg) tea.Cmd {
 			}
 		}
 
-		// 4. Set the card on the cart
+		// 3. Set the card on the cart
 		if err := m.APIClient.SetCartCard(card.ID); err != nil {
 			return CheckoutResultMsg{Err: fmt.Errorf("failed to set card: %w", err)}
 		}
 
-		// 5. Convert the cart to an order
+		// 4. Convert the cart to an order
 		order, err := m.APIClient.ConvertCart()
 		if err != nil {
 			return CheckoutResultMsg{Err: err}
@@ -985,6 +1055,27 @@ func (m Model) saveCardAndConvert(tok StripeTokenMsg) tea.Cmd {
 			OrderID: order.ID,
 			Total:   order.Total,
 		}
+	}
+}
+
+// loadCartFromAPI populates the in-memory cart map from an API CartData response
+// It matches cart items to local Coffees by ID so the Coffee struct is populated
+func (m *Model) loadCartFromAPI(cartData *api.CartData) {
+	m.Cart = make(map[uint]*models.CartItem)
+	if cartData == nil {
+		return
+	}
+
+	for _, item := range cartData.Items {
+		m.Cart[item.CoffeeID] = &models.CartItem{
+			CoffeeID: item.CoffeeID,
+			Coffee:   item.Coffee,
+			Quantity: item.Quantity,
+		}
+	}
+
+	if m.CartCursor >= len(m.Cart) {
+		m.CartCursor = 0
 	}
 }
 
