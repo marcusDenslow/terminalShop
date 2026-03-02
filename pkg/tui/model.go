@@ -364,6 +364,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.PaymentForm.form.Init()
 			}
 			m.CheckoutStep = 3
+			m.OrdersLoaded = false
 			return m, nil
 		case StripeTokenErrMsg:
 			// Tokenization failed, show error and let user retry
