@@ -43,60 +43,6 @@ func (m Model) View() string {
 	// Build breadcrumbs
 	breadcrumbs := m.BuildBreadcrumbs()
 
-	// Build main content based on view
-	var content string
-	if m.Loading {
-		loadingStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
-			Padding(2, 4)
-		content = loadingStyle.Render("Loading products from API...")
-	} else if m.ErrorMsg != "" {
-		errorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Background(lipgloss.Color("52")).
-			Padding(0, 1).
-			MarginBottom(1)
-		errorBanner := errorStyle.Render("⚠ " + m.ErrorMsg)
-
-		if m.ViewingAccount {
-			content = errorBanner + "\n" + m.BuildAccountView()
-		} else if m.ViewingCart && m.CheckoutStep == 1 {
-			if m.ShippingView == 0 && m.ShippingForm == nil {
-				content = errorBanner + "\n" + m.RenderAddressList()
-			} else if m.ShippingForm != nil {
-				content = errorBanner + "\n" + m.RenderShippingForm(m.ShippingForm)
-			}
-		} else if m.ViewingCart && m.CheckoutStep == 2 && m.CheckingOut {
-			content = errorBanner + "\n  submitting order..."
-		} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentForm != nil {
-			content = errorBanner + "\n" + m.RenderPaymentForm(m.PaymentForm)
-		} else if m.ViewingCart && m.CheckoutStep == 3 {
-			content = errorBanner + "\n" + m.RenderConfirmation()
-		} else if m.ViewingCart {
-			content = errorBanner + "\n" + m.BuildCartView()
-		} else {
-			content = errorBanner + "\n" + m.BuildShopView()
-		}
-	} else if m.ViewingAccount {
-		content = m.BuildAccountView()
-	} else if m.ViewingCart && m.CheckoutStep == 1 {
-		if m.ShippingView == 0 && m.ShippingForm == nil {
-			content = m.RenderAddressList()
-		} else if m.ShippingForm != nil {
-			content = m.RenderShippingForm(m.ShippingForm)
-		}
-	} else if m.ViewingCart && m.CheckoutStep == 2 && m.CheckingOut {
-		content = "  submitting order..."
-	} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentForm != nil {
-		content = m.RenderPaymentForm(m.PaymentForm)
-	} else if m.ViewingCart && m.CheckoutStep == 3 {
-		content = m.RenderConfirmation()
-	} else if m.ViewingCart {
-		content = m.BuildCartView()
-	} else {
-		content = m.BuildShopView()
-	}
-
 	// Calculate available content height within the container
 	headerHeight := lipgloss.Height(header)
 	breadcrumbsHeight := 0
@@ -117,30 +63,87 @@ func (m Model) View() string {
 		marginBottom = 0
 	}
 
+	// Build main content based on view
+	var content string
+	if m.Loading {
+		loadingStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("205")).
+			Padding(2, 4)
+		content = loadingStyle.Render("Loading products from API...")
+	} else if m.ErrorMsg != "" {
+		errorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Background(lipgloss.Color("52")).
+			Padding(0, 1).
+			MarginBottom(1)
+		errorBanner := errorStyle.Render("⚠ " + m.ErrorMsg)
+
+		if m.ViewingAccount {
+			content = errorBanner + "\n" + m.BuildAccountView(availableContentHeight)
+		} else if m.ViewingCart && m.CheckoutStep == 1 {
+			if m.ShippingView == 0 && m.ShippingForm == nil {
+				content = errorBanner + "\n" + m.RenderAddressList()
+			} else if m.ShippingForm != nil {
+				content = errorBanner + "\n" + m.RenderShippingForm(m.ShippingForm)
+			}
+		} else if m.ViewingCart && m.CheckoutStep == 2 && m.CheckingOut {
+			content = errorBanner + "\n  submitting order..."
+		} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentForm != nil {
+			content = errorBanner + "\n" + m.RenderPaymentForm(m.PaymentForm)
+		} else if m.ViewingCart && m.CheckoutStep == 3 {
+			content = errorBanner + "\n" + m.RenderConfirmation()
+		} else if m.ViewingCart {
+			content = errorBanner + "\n" + m.BuildCartView()
+		} else {
+			content = errorBanner + "\n" + m.BuildShopView()
+		}
+	} else if m.ViewingAccount {
+		content = m.BuildAccountView(availableContentHeight)
+	} else if m.ViewingCart && m.CheckoutStep == 1 {
+		if m.ShippingView == 0 && m.ShippingForm == nil {
+			content = m.RenderAddressList()
+		} else if m.ShippingForm != nil {
+			content = m.RenderShippingForm(m.ShippingForm)
+		}
+	} else if m.ViewingCart && m.CheckoutStep == 2 && m.CheckingOut {
+		content = "  submitting order..."
+	} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentForm != nil {
+		content = m.RenderPaymentForm(m.PaymentForm)
+	} else if m.ViewingCart && m.CheckoutStep == 3 {
+		content = m.RenderConfirmation()
+	} else if m.ViewingCart {
+		content = m.BuildCartView()
+	} else {
+		content = m.BuildShopView()
+	}
+
 	// Split content into lines and handle scrolling
 	contentLines := strings.Split(content, "\n")
 	totalLines := len(contentLines)
 
-	// Ensure scroll offset is within bounds
-	if m.ScrollOffset < 0 {
-		m.ScrollOffset = 0
-	}
-	maxScroll := totalLines - availableContentHeight
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
-	if m.ScrollOffset > maxScroll {
-		m.ScrollOffset = maxScroll
-	}
-
-	// Apply scroll offset and truncate to fit available height
-	if totalLines > availableContentHeight {
-		start := m.ScrollOffset
-		end := start + availableContentHeight
-		if end > totalLines {
-			end = totalLines
+	// Skip global scroll when account view handles its own scrolling
+	if !(m.ViewingAccount && m.OrderViewState >= 1) {
+		// Ensure scroll offset is without bounds
+		if m.ScrollOffset < 0 {
+			m.ScrollOffset = 0
 		}
-		contentLines = contentLines[start:end]
+
+		maxScroll := totalLines - availableContentHeight
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		if m.ScrollOffset > maxScroll {
+			m.ScrollOffset = maxScroll
+		}
+
+		if totalLines > availableContentHeight {
+			start := m.ScrollOffset
+			end := start + availableContentHeight
+			if end > totalLines {
+				end = totalLines
+			}
+			contentLines = contentLines[start:end]
+		}
 	}
 	content = strings.Join(contentLines, "\n")
 

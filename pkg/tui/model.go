@@ -90,8 +90,10 @@ type Model struct {
 	StripeKey      string // Stripe publishable key for client-side tokenization
 
 	// Order history
-	Orders       []models.Order
-	OrdersLoaded bool
+	Orders         []models.Order
+	OrdersLoaded   bool
+	OrderCursor    int // which order is selected in the list
+	OrderViewState int // 0=preview, 1=browsing list, 2=viewing detail
 }
 
 // updateLayout recalculates all layout variables from the raw viewport dimensions.
@@ -180,6 +182,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ShippingForm = nil
 				m.PaymentForm = nil
 				m.ScrollOffset = 0
+				m.OrderViewState = 0
 			case "a":
 				m.ShowingMenu = false
 				m.ViewingCart = false
@@ -188,6 +191,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ShippingForm = nil
 				m.PaymentForm = nil
 				m.ScrollOffset = 0
+				m.OrderViewState = 0
 				if !m.OrdersLoaded {
 					return m, m.fetchOrdersCmd()
 				}
@@ -199,6 +203,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ShippingForm = nil
 				m.PaymentForm = nil
 				m.ScrollOffset = 0
+				m.OrderViewState = 0
 			case "esc":
 				m.ShowingMenu = false
 			case "q", "ctrl+c":
@@ -535,6 +540,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ShippingForm = nil
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
+			m.OrderViewState = 0
 
 		case "c":
 			m.ViewingCart = true
@@ -543,6 +549,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ShippingForm = nil
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
+			m.OrderViewState = 0
 
 		case "a":
 			m.ViewingCart = false
@@ -551,6 +558,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ShippingForm = nil
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
+			m.OrderViewState = 0
 			if !m.OrdersLoaded {
 				return m, m.fetchOrdersCmd()
 			}
@@ -562,6 +570,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "p", "enter":
+			// Account view: enter order list or order detail
+			if m.ViewingAccount && m.AccountCursor == 0 && len(m.Orders) > 0 {
+				if m.OrderViewState == 0 {
+					m.OrderViewState = 1
+					m.OrderCursor = 0
+					m.ScrollOffset = 0
+					return m, nil
+				} else if m.OrderViewState == 1 {
+					m.OrderViewState = 2
+					m.ScrollOffset = 0
+					return m, nil
+				}
+			}
 			// Proceed to checkout from cart
 			if m.ViewingCart && m.CheckoutStep == 0 && len(m.Cart) > 0 {
 				m.CheckoutStep = 1
@@ -569,6 +590,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "esc":
+			// Navigate back through order view states
+			if m.ViewingAccount && m.OrderViewState > 0 {
+				m.OrderViewState--
+				m.ScrollOffset = 0
+				return m, nil
+			}
 			// From confirmation, go back to shop
 			if m.ViewingCart && m.CheckoutStep == 3 {
 				m.ViewingCart = false
@@ -592,7 +619,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "up", "k":
 			if m.ViewingAccount {
-				if m.AccountCursor > 0 {
+				if m.OrderViewState == 1 && m.OrderCursor > 0 {
+					// Navigate up within order list
+					m.OrderCursor--
+					// Auto-scroll to keep cursor visible
+					cardHeight := 5 // 2 border + 3 content (no padding)
+					if m.heightContainer >= 25 {
+						cardHeight = 7 // 2 border + 2 padding + 3 content
+					}
+					titleOffset := 3 // "Order History" + blank lines
+					targetTop := titleOffset + m.OrderCursor*cardHeight
+					if targetTop < m.ScrollOffset {
+						m.ScrollOffset = targetTop
+					}
+				} else if m.OrderViewState == 0 && m.AccountCursor > 0 {
+					// Navigate up within account tabs
 					m.AccountCursor--
 				}
 			} else if !m.ViewingCart && !m.ViewingAccount && m.Cursor > 0 {
@@ -609,7 +650,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "down", "j":
 			if m.ViewingAccount {
-				if m.AccountCursor < len(models.AccountMenuItems)-1 {
+				if m.OrderViewState == 1 && m.OrderCursor < len(m.Orders)-1 {
+					// Navigate down within order list
+					m.OrderCursor++
+					// Auto-scroll to keep cursor visible
+					cardHeight := 5 // 2 border + 3 content (no padding)
+					if m.heightContainer >= 25 {
+						cardHeight = 7 // 2 border + 2 padding + 3 content
+					}
+					titleOffset := 3
+					// Account view: header + footer + margins + buffer = 7, no breadcrumbs
+					viewportHeight := m.heightContainer - 7
+					if m.size < large {
+						// Stacked mode: subtract left panel height
+						viewportHeight -= len(models.AccountMenuItems) + 1
+					}
+					if viewportHeight < 5 {
+						viewportHeight = 5
+					}
+					targetBottom := titleOffset + (m.OrderCursor+1)*cardHeight
+					if targetBottom > m.ScrollOffset+viewportHeight {
+						m.ScrollOffset = targetBottom - viewportHeight
+					}
+				} else if m.OrderViewState == 0 && m.AccountCursor < len(models.AccountMenuItems)-1 {
+					// Navigate down within account tabs
 					m.AccountCursor++
 				}
 			} else if !m.ViewingCart && !m.ViewingAccount && m.Cursor < len(m.Coffees)-1 {
@@ -1012,6 +1076,8 @@ func NewModel(username string) Model {
 		Cart:           make(map[uint]*models.CartItem),
 		CartCursor:     0,
 		AccountCursor:  0,
+		OrderCursor:    0,
+		OrderViewState: 0,
 		ViewingCart:    false,
 		ViewingAccount: false,
 		Loading:        true,

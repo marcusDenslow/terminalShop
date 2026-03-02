@@ -16,7 +16,7 @@ func (m Model) BuildFooter() string {
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#666666"))
 
-	// On small terminals, only show the menu hint 
+	// On small terminals, only show the menu hint
 	if m.size == small {
 		footerText := keybindStyle.Render("m") + " " + descStyle.Render("menu")
 		return lipgloss.NewStyle().Align(lipgloss.Center).Width(m.widthContainer).Render(footerText)
@@ -24,16 +24,44 @@ func (m Model) BuildFooter() string {
 
 	var footerText string
 	if m.ViewingAccount {
-		footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s",
-			keybindStyle.Render("j/k"),
-			descStyle.Render("menu"),
-			keybindStyle.Render("s"),
-			descStyle.Render("shop"),
-			keybindStyle.Render("c"),
-			descStyle.Render("cart"),
-			keybindStyle.Render("q"),
-			descStyle.Render("quit"),
-		)
+		switch m.OrderViewState {
+		case 2:
+			// Viewing single order detail
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s",
+				keybindStyle.Render("esc"),
+				descStyle.Render("back"),
+				keybindStyle.Render("s"),
+				descStyle.Render("shop"),
+				keybindStyle.Render("q"),
+				descStyle.Render("quit"),
+			)
+		case 1:
+			// Browsing order list
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s",
+				keybindStyle.Render("j/k"),
+				descStyle.Render("orders"),
+				keybindStyle.Render("enter"),
+				descStyle.Render("details"),
+				keybindStyle.Render("esc"),
+				descStyle.Render("back"),
+				keybindStyle.Render("q"),
+				descStyle.Render("quit"),
+			)
+		default:
+			// Account tabs
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s",
+				keybindStyle.Render("j/k"),
+				descStyle.Render("navigate"),
+				keybindStyle.Render("enter"),
+				descStyle.Render("select"),
+				keybindStyle.Render("s"),
+				descStyle.Render("shop"),
+				keybindStyle.Render("c"),
+				descStyle.Render("cart"),
+				keybindStyle.Render("q"),
+				descStyle.Render("quit"),
+			)
+		}
 	} else if m.ViewingCart && m.CheckoutStep == 3 {
 		// Confirmation screen
 		footerText = fmt.Sprintf("%s %s    %s %s",
