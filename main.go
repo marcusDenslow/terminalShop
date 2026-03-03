@@ -28,8 +28,9 @@ const (
 )
 
 var (
-	authService *auth.SSHAuthService
-	apiURL      string
+	authService        *auth.SSHAuthService
+	apiURL             string
+	authFingerprintKey string
 )
 
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
@@ -57,7 +58,7 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	}
 
 	// Create TUI model with user context (no registration screen needed!)
-	m := tui.NewModelWithAuth(user, false, s.PublicKey(), token, apiURL)
+	m := tui.NewModelWithAuth(user, false, s.PublicKey(), token, apiURL, authFingerprintKey)
 	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
 
@@ -87,8 +88,9 @@ func main() {
 	// Initialize SSH auth service
 	authService = auth.NewSSHAuthService(db, jwtManager)
 
-	// Set API URL from config for TUI connections
+	// Set API URL and auth key from config for TUI connections
 	apiURL = cfg.APIURL
+	authFingerprintKey = cfg.AuthFingerprintKey
 	log.Printf("TUI will connect to API at: %s", apiURL)
 
 	// Create SSH server

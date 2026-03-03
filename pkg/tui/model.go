@@ -14,6 +14,7 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 
 	"terminalShop/pkg/api"
+	"terminalShop/pkg/auth"
 	"terminalShop/pkg/models"
 )
 
@@ -39,11 +40,12 @@ const resizeDebounce = 50 * time.Millisecond
 
 type Model struct {
 	// User authentication
-	User          *models.User    // Authenticated user (nil if not logged in)
-	IsNewUser     bool            // True if user needs to register
-	SSHPublicKey  gossh.PublicKey // SSH public key for registration
-	AccessToken   string
-	UsernameInput string // Input for username during registration
+	User               *models.User    // Authenticated user (nil if not logged in)
+	IsNewUser          bool            // True if user needs to register
+	SSHPublicKey       gossh.PublicKey // SSH public key for registration
+	AccessToken        string
+	AuthFingerprintKey string // shared secret for /auth/token refresh
+	UsernameInput      string // Input for username during registration
 
 	// Shop state
 	Username         string
@@ -166,8 +168,12 @@ func (m Model) fetchProductsCmd() tea.Msg {
 }
 
 func (m Model) Init() tea.Cmd {
-	// Fetch products and cart from API on startup
-	return tea.Batch(m.fetchProductsCmd, m.fetchCartCmd)
+	// Fetch products and cart from API on startup, and schedule token refresh
+	cmds := []tea.Cmd{m.fetchProductsCmd, m.fetchCartCmd}
+	if m.User != nil && m.AuthFingerprintKey != "" {
+		cmds = append(cmds, m.scheduleTokenRefreshCmd())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -525,6 +531,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case tokenRefreshTickMsg:
+		return m, m.refreshTokenCmd()
+
+	case TokenRefreshedMsg:
+		if msg.Err != nil {
+			log.Printf("[TUI] Token refresh failed, retrying in %v: %v", tokenRetryDuration, msg.Err)
+			return m, tea.Tick(tokenRetryDuration, func(t time.Time) tea.Msg {
+				return tokenRefreshTickMsg{}
+			})
+		}
+		m.AccessToken = msg.Token
+		m.APIClient.Token = msg.Token
+		log.Println("[TUI] Token updated, next refresh in", tokenRefreshDuration)
+		return m, m.scheduleTokenRefreshCmd()
+
 	case OrdersMsg:
 		if msg.Err == nil {
 			m.Orders = msg.Orders
@@ -845,6 +866,48 @@ type CartSyncedMsg struct {
 type CartFetchedMsg struct {
 	Cart *api.CartData
 	Err  error
+}
+
+// tokenRefreshDuration is the interval between token refreshes.
+// Tokens expire after 30 minutes; refresh 5 minutes early.
+const tokenRefreshDuration = 25 * time.Minute
+
+// tokenRetryDuration is the delay before retrying a failed token refresh.
+const tokenRetryDuration = 1 * time.Minute
+
+// tokenRefreshTickMsg is sent by the background timer to trigger a token refresh.
+type tokenRefreshTickMsg struct{}
+
+// TokenRefreshedMsg is sent when a token refresh attempt completes.
+type TokenRefreshedMsg struct {
+	Token string
+	Err   error
+}
+
+// scheduleTokenRefreshCmd returns a tea.Cmd that ticks after tokenRefreshDuration.
+func (m Model) scheduleTokenRefreshCmd() tea.Cmd {
+	return tea.Tick(tokenRefreshDuration, func(t time.Time) tea.Msg {
+		return tokenRefreshTickMsg{}
+	})
+}
+
+// refreshTokenCmd calls the /auth/token endpoint to get a fresh JWT.
+func (m Model) refreshTokenCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil || m.SSHPublicKey == nil {
+			return TokenRefreshedMsg{Err: fmt.Errorf("not authenticated, cannot refresh token")}
+		}
+
+		fingerprint := auth.GetSSHKeyFingerprint(m.SSHPublicKey)
+		token, err := m.APIClient.RefreshToken(fingerprint, m.AuthFingerprintKey)
+		if err != nil {
+			log.Printf("[TUI] Token refresh failed: %v", err)
+			return TokenRefreshedMsg{Err: err}
+		}
+
+		log.Println("[TUI] Token refreshed successfully")
+		return TokenRefreshedMsg{Token: token}
+	}
 }
 
 // OrdersMsg is sent when order history is fetched from the API
@@ -1181,7 +1244,7 @@ func NewModel(username string) Model {
 }
 
 // NewModelWithAuth creates a new model with user authentication context
-func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey, token string, apiURL string) Model {
+func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey, token string, apiURL string, authFingerprintKey string) Model {
 	username := "guest"
 	if user != nil {
 		username = user.Name
@@ -1192,6 +1255,7 @@ func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey,
 	m.IsNewUser = isNewUser
 	m.SSHPublicKey = pubKey
 	m.AccessToken = token
+	m.AuthFingerprintKey = authFingerprintKey
 	if apiURL != "" {
 		m.APIClient = api.NewClient(apiURL, token)
 	} else {

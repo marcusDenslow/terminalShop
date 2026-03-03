@@ -36,6 +36,66 @@ func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
 	return c.HTTPClient.Do(req)
 }
 
+// TokenRequest represents a request to exchange SSH fingerprint for JWT.
+type TokenRequest struct {
+	Fingerprint  string `json:"fingerprint"`
+	ClientSecret string `json:"client_secret"`
+}
+
+// TokenResponse represents the JWT token response.
+type TokenResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+		ExpiresIn   int    `json:"expires_in"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+// RefreshToken exchanges an SSH fingerprint and client secret for a new JWT.
+// It does not update c.Token — the caller is responsible for that.
+func (c *Client) RefreshToken(fingerprint, clientSecret string) (string, error) {
+	url := fmt.Sprintf("%s/api/v1/auth/token", c.BaseURL)
+
+	reqBody := TokenRequest{
+		Fingerprint:  fingerprint,
+		ClientSecret: clientSecret,
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal token request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("token refresh request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("token refresh returned status %d", resp.StatusCode)
+	}
+
+	var tokenResp TokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", fmt.Errorf("failed to decode token response: %w", err)
+	}
+
+	if !tokenResp.Success || tokenResp.Data.AccessToken == "" {
+		return "", fmt.Errorf("token refresh failed: no access token in response")
+	}
+
+	return tokenResp.Data.AccessToken, nil
+}
+
 // APIResponse represents the standard API response format
 type APIResponse struct {
 	Success bool                   `json:"success"`
