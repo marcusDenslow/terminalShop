@@ -228,10 +228,6 @@ func (m Model) RenderPaymentForm(state *PaymentFormState) string {
 		Bold(true).
 		Padding(0, 0, 1, 0)
 
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666")).
-		Padding(1, 0, 0, 0)
-
 	cardLast4 := ""
 	if len(state.CardNumber) >= 4 {
 		cardLast4 = fmt.Sprintf(" (ending %s)", state.CardNumber[len(state.CardNumber)-4:])
@@ -239,12 +235,51 @@ func (m Model) RenderPaymentForm(state *PaymentFormState) string {
 
 	title := titleStyle.Render("Payment Details" + cardLast4)
 	form := state.form.View()
-	help := helpStyle.Render("enter/tab next • shift+tab prev • esc back")
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
 		form,
-		help,
 	)
+}
+
+func (m Model) RenderCardList() string {
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 0, 1, 0)
+	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#999999"))
+
+	title := titleStyle.Render("Select Payment Method")
+
+	var lines []string
+	for i, card := range m.SavedCards {
+		cursor := "  "
+		style := inactiveStyle
+		if i == m.CardCursor {
+			cursor = "> "
+			style = activeStyle
+		}
+
+		brand := style.Render(strings.ToUpper(card.Brand[:1]) + card.Brand[1:])
+		last4 := labelStyle.Render(fmt.Sprintf("**** **** **** %s", card.Last4))
+		exp := labelStyle.Render(fmt.Sprintf("Expires %02d/%02d", card.ExpMonth, card.ExpYear%100))
+
+		lines = append(lines, cursor+brand+" "+last4)
+		lines = append(lines, "  "+exp)
+		lines = append(lines, "")
+	}
+
+	addCursor := "  "
+	addStyle := inactiveStyle
+	if m.CardCursor == len(m.SavedCards) {
+		addCursor = "> "
+		addStyle = activeStyle
+	}
+
+	lines = append(lines, addCursor+addStyle.Render("+ Add new card"))
+
+	parts := []string{title}
+	parts = append(parts, strings.Join(lines, "\n"))
+
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }

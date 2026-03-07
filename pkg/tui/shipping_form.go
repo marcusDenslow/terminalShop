@@ -250,20 +250,13 @@ func (m Model) RenderShippingForm(state *ShippingFormState) string {
 		Bold(true).
 		Padding(0, 0, 1, 0)
 
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666")).
-		Padding(1, 0, 0, 0)
-
 	title := titleStyle.Render("Shipping Address")
 	form := state.form.View()
-
-	help := helpStyle.Render("enter/tab next • shift+tab prev • esc back")
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
 		form,
-		help,
 	)
 }
 
@@ -272,7 +265,6 @@ func (m Model) RenderAddressList() string {
 	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
 	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#999999"))
-	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666")).Padding(1, 0, 0, 0)
 
 	title := titleStyle.Render("Selected Shipping Address")
 
@@ -307,11 +299,8 @@ func (m Model) RenderAddressList() string {
 
 	lines = append(lines, addCursor+addStyle.Render("+ Add new address"))
 
-	help := helpStyle.Render("j/k, enter select, d delete, esc back")
-
 	parts := []string{title}
 	parts = append(parts, strings.Join(lines, "\n"))
-	parts = append(parts, help)
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }

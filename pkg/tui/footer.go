@@ -70,14 +70,57 @@ func (m Model) BuildFooter() string {
 			keybindStyle.Render("q"),
 			descStyle.Render("quit"),
 		)
-	} else if m.ViewingCart && (m.CheckoutStep == 1 || m.CheckoutStep == 2) {
-		// In shipping/payment form
-		footerText = fmt.Sprintf("%s %s    %s %s",
-			keybindStyle.Render("esc"),
-			descStyle.Render("back"),
-			keybindStyle.Render("q"),
-			descStyle.Render("quit"),
-		)
+	} else if m.ViewingCart && m.CheckoutStep == 1 {
+		if m.ShippingView == 0 && m.ShippingForm == nil {
+			// Address list
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s",
+				keybindStyle.Render("j/k"),
+				descStyle.Render("addresses"),
+				keybindStyle.Render("enter"),
+				descStyle.Render("select"),
+				keybindStyle.Render("d/x"),
+				descStyle.Render("delete"),
+				keybindStyle.Render("esc"),
+				descStyle.Render("back"),
+			)
+		} else {
+			// Shipping form
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s",
+				keybindStyle.Render("tab"),
+				descStyle.Render("next"),
+				keybindStyle.Render("enter"),
+				descStyle.Render("submit"),
+				keybindStyle.Render("esc"),
+				descStyle.Render("back"),
+			)
+		}
+	} else if m.ViewingCart && m.CheckoutStep == 2 {
+		if m.PaymentView == 0 && m.PaymentForm == nil {
+			// Card list
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s",
+				keybindStyle.Render("j/k"),
+				descStyle.Render("cards"),
+				keybindStyle.Render("enter"),
+				descStyle.Render("select"),
+				keybindStyle.Render("d/x"),
+				descStyle.Render("delete"),
+				keybindStyle.Render("esc"),
+				descStyle.Render("back"),
+			)
+		} else if m.CheckingOut {
+			// Submitting order
+			footerText = descStyle.Render("submitting order...")
+		} else {
+			// Payment form
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s",
+				keybindStyle.Render("tab"),
+				descStyle.Render("next"),
+				keybindStyle.Render("enter"),
+				descStyle.Render("submit"),
+				keybindStyle.Render("esc"),
+				descStyle.Render("back"),
+			)
+		}
 	} else if m.ViewingCart && m.CheckoutStep == 0 {
 		// In cart view, show proceed option
 		if len(m.Cart) > 0 {

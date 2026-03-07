@@ -28,10 +28,6 @@ func (m Model) RenderConfirmation() string {
 		Bold(true).
 		Padding(1, 0)
 
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666")).
-		Padding(1, 0, 0, 0)
-
 	title := titleStyle.Render("Order Confirmation")
 
 	// Shipping summary
@@ -61,7 +57,6 @@ func (m Model) RenderConfirmation() string {
 	)
 
 	success := successStyle.Render("Order placed successfully!")
-	help := helpStyle.Render("press esc to return to shop")
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -72,6 +67,5 @@ func (m Model) RenderConfirmation() string {
 		cartSection,
 		"",
 		success,
-		help,
 	)
 }

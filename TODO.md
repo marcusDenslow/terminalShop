@@ -5,7 +5,7 @@
 
 ## Up Next
 - [ ] User profile editing — set name/email from account view
-- [ ] Cart persistence across sessions — sync cart to server, fetch on startup
+- [x ] Cart persistence across sessions — sync cart to server, fetch on startup
 - [ ] Token refresh — auto-refresh JWT before expiry
 - [ ] Address update — PUT /api/v1/addresses/:id endpoint
 - [ ] Loading spinner — replace plain text with animated bubbles/spinner
@@ -18,3 +18,6 @@
 - [ ] Price model consistency — Coffee.Price float64 vs Order.Total int cents
 - [ ] Test coverage — auth, cards, orders, addresses, bring/shippo, validators
 - [ ] Update stale documentation — README, CLAUDE.md phase references
+
+## Testing
+- [ ] Add tests to every file BOA

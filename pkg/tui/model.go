@@ -90,7 +90,11 @@ type Model struct {
 	SavedAddresses []models.Address   // Saved addresses from database
 	ShippingView   int
 	AddressCursor  int
-	StripeKey      string // Stripe publishable key for client-side tokenization
+	StripeKey      string        // Stripe publishable key for client-side tokenization
+	SavedCards     []models.Card // Saved cards from database
+	SelectedCard   *models.Card  // Card selected from saved list (nil = new card)
+	CardCursor     int           // cursor position in the card list
+	PaymentView    int           // 0=card list, 1=new card form
 
 	// Order history
 	Orders         []models.Order
@@ -278,8 +282,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ShippingInfo = &msg.Address
 			m.ShippingForm = nil
 			m.CheckoutStep = 2
-			m.PaymentForm = m.InitPaymentForm()
-			return m, m.PaymentForm.form.Init()
+			m.SelectedCard = nil
+			return m, m.fetchCardsCmd()
 
 		case ShippingFormErrorMsg:
 			m.ErrorMsg = msg.Message
@@ -317,8 +321,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						selected := addr // copy so we have a stable pointer
 						m.ShippingInfo = &selected
 						m.CheckoutStep = 2
-						m.PaymentForm = m.InitPaymentForm()
-						return m, m.PaymentForm.form.Init()
+						m.SelectedCard = nil
+						return m, m.fetchCardsCmd()
 					}
 					m.ShippingView = 1
 					m.ShippingForm = m.InitShippingForm()
@@ -368,6 +372,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// When the payment form is active, route ALL messages to it.
 	if m.ViewingCart && m.CheckoutStep == 2 {
 		switch msg := msg.(type) {
+
+		case CardsMsg:
+			if msg.Err != nil || len(msg.Cards) == 0 {
+				m.SavedCards = nil
+				m.PaymentView = 1 // skip to form
+				m.PaymentForm = m.InitPaymentForm()
+				return m, m.PaymentForm.form.Init()
+			}
+			m.SavedCards = msg.Cards
+			m.PaymentView = 0 // show card list
+			m.CardCursor = 0
+			m.PaymentForm = nil
+			return m, nil
+
 		case PaymentFormCompleteMsg:
 			// kick off Stripe tokenization (runs async)
 			if m.PaymentForm != nil {
@@ -384,8 +402,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Err != nil {
 				m.ErrorMsg = fmt.Sprintf("checkout failed: %v", msg.Err)
 				m.CheckoutStep = 2
-				m.PaymentForm = m.InitPaymentForm()
-				return m, m.PaymentForm.form.Init()
+				// Return to card list if we have saved cards, otherwise show form
+				if len(m.SavedCards) > 0 {
+					m.PaymentView = 0
+					m.PaymentForm = nil
+				} else {
+					m.PaymentView = 1
+					m.PaymentForm = m.InitPaymentForm()
+					return m, m.PaymentForm.form.Init()
+				}
+				return m, nil
 			}
 			m.CheckoutStep = 3
 			m.OrdersLoaded = false
@@ -403,6 +429,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case PaymentFormErrorMsg:
 			m.ErrorMsg = msg.Message
 			return m, nil
+
+		case CardDeletedMsg:
+			if msg.Err != nil {
+				m.ErrorMsg = fmt.Sprintf("failed to delete card: %v", msg.Err)
+			}
+
+			return m, nil
 		case tea.WindowSizeMsg:
 			m.pendingWidth = msg.Width
 			m.pendingHeight = msg.Height
@@ -411,38 +444,79 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Tick(resizeDebounce, func(t time.Time) tea.Msg {
 				return resizeTickMsg{seq: seq}
 			})
-		case tea.KeyMsg:
-			if m.CheckingOut {
-				// Ignore all keys while submitting order
-				return m, nil
-			}
-			if msg.String() == "esc" {
-				// Go back to shipping
-				m.CheckoutStep = 1
-				m.PaymentForm = nil
-				m.ErrorMsg = ""
-				m.ShippingForm = m.InitShippingForm()
-				// Restore shipping values if we have them
-				if m.ShippingInfo != nil {
-					m.ShippingForm.Name = m.ShippingInfo.Name
-					m.ShippingForm.Street1 = m.ShippingInfo.Street
-					m.ShippingForm.Street2 = m.ShippingInfo.Street2
-					m.ShippingForm.City = m.ShippingInfo.City
-					m.ShippingForm.State = m.ShippingInfo.State
-					m.ShippingForm.Country = m.ShippingInfo.Country
-					m.ShippingForm.Zip = m.ShippingInfo.Zip
-					m.ShippingForm.Phone = m.ShippingInfo.Phone
-					// Rebuild form with restored values
-					m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
-				}
-				return m, m.ShippingForm.form.Init()
-			}
-			m.ErrorMsg = ""
 		}
 
+		if m.PaymentView == 0 && m.PaymentForm == nil {
+			if keyMsg, ok := msg.(tea.KeyMsg); ok {
+				if m.CheckingOut {
+					return m, nil
+				}
+				m.ErrorMsg = ""
+				switch keyMsg.String() {
+				case "esc":
+					m.CheckoutStep = 1
+					m.ErrorMsg = ""
+					return m, m.fetchAddressesCmd()
+				case "up", "k":
+					if m.CardCursor > 0 {
+						m.CardCursor--
+					}
+				case "down", "j":
+					if m.CardCursor < len(m.SavedCards) {
+						m.CardCursor++
+					}
+				case "enter":
+					if m.CardCursor < len(m.SavedCards) {
+						card := m.SavedCards[m.CardCursor]
+						selected := card
+						m.SelectedCard = &selected
+						m.CheckingOut = true
+						return m, m.checkoutWithSavedCard()
+					}
+					// Cursor is at "add new card"
+					m.PaymentView = 1
+					m.PaymentForm = m.InitPaymentForm()
+					return m, m.PaymentForm.form.Init()
+				case "d", "x":
+					if m.CardCursor < len(m.SavedCards) {
+						card := m.SavedCards[m.CardCursor]
+						m.SavedCards = append(m.SavedCards[:m.CardCursor], m.SavedCards[m.CardCursor+1:]...)
+						if m.CardCursor >= len(m.SavedCards) && m.CardCursor > 0 {
+							m.CardCursor--
+						}
+						if len(m.SavedCards) == 0 {
+							m.PaymentView = 1
+							m.PaymentForm = m.InitPaymentForm()
+							return m, tea.Batch(m.PaymentForm.form.Init(), m.deleteCardCmd(card.ID))
+						}
+						return m, m.deleteCardCmd(card.ID)
+					}
+
+				}
+			}
+			return m, nil
+		}
+
+		// Payment form view
 		if m.PaymentForm != nil {
+			if keyMsg, ok := msg.(tea.KeyMsg); ok {
+				if keyMsg.String() == "esc" {
+					m.ErrorMsg = ""
+					if len(m.SavedCards) > 0 {
+						m.PaymentView = 0
+						m.PaymentForm = nil
+						return m, nil
+					}
+					// No saved cards - go back to shipping
+					m.CheckoutStep = 1
+					m.PaymentForm = nil
+					return m, m.fetchAddressesCmd()
+				}
+				m.ErrorMsg = ""
+			}
 			cmd := m.UpdatePaymentForm(msg, m.PaymentForm)
 			return m, cmd
+
 		}
 		return m, nil
 	}
@@ -477,8 +551,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ShippingInfo = &msg.Address
 		m.ShippingForm = nil
 		m.CheckoutStep = 2
-		m.PaymentForm = m.InitPaymentForm()
-		return m, m.PaymentForm.form.Init()
+		m.SelectedCard = nil
+		return m, m.fetchCardsCmd()
 
 	case ShippingFormErrorMsg:
 		m.ErrorMsg = msg.Message
@@ -573,6 +647,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Nothing to do here unless there is an error :(
 		if msg.Err != nil {
 			m.ErrorMsg = fmt.Sprintf("failed to delete address: %v", msg.Err)
+		}
+		return m, nil
+
+	case CardsMsg:
+		if msg.Err != nil || len(msg.Cards) == 0 {
+			m.SavedCards = nil
+			m.PaymentView = 1
+			m.PaymentForm = m.InitPaymentForm()
+			return m, m.PaymentForm.form.Init()
+		}
+		m.SavedCards = msg.Cards
+		m.PaymentView = 0
+		m.CardCursor = 0
+		m.PaymentForm = nil
+		return m, nil
+
+	case CardDeletedMsg:
+		if msg.Err != nil {
+			m.ErrorMsg = fmt.Sprintf("failed to delete card: %v", msg.Err)
 		}
 		return m, nil
 
@@ -942,6 +1035,17 @@ type AddressDeletedMsg struct {
 	Err error
 }
 
+// CardsMsg is sent when saved cards are fetched form the API
+type CardsMsg struct {
+	Cards []models.Card
+	Err   error
+}
+
+// CardDeletedMsg is sent when card is deleted
+type CardDeletedMsg struct {
+	Err error
+}
+
 func (m Model) fetchAddressesCmd() tea.Cmd {
 	return func() tea.Msg {
 		if m.APIClient == nil || m.User == nil {
@@ -981,6 +1085,73 @@ func (m Model) deleteAddressCmd(id uint) tea.Cmd {
 		}
 		err := m.APIClient.DeleteAddress(id)
 		return AddressDeletedMsg{Err: err}
+	}
+}
+
+func (m Model) fetchCardsCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return CardsMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		cards, err := m.APIClient.GetCards()
+		return CardsMsg{Cards: cards, Err: err}
+	}
+}
+
+func (m Model) deleteCardCmd(id uint) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return CardDeletedMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		err := m.APIClient.DeleteCard(id)
+		return CardDeletedMsg{Err: err}
+	}
+}
+
+// checkoutWithSavedCard sets address and saved card on the cart, then converts.
+// Used when the user selects an existing card from the list (no tokenization needed).
+func (m Model) checkoutWithSavedCard() tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.SelectedCard == nil {
+			return CheckoutResultMsg{Err: fmt.Errorf("API client or card not available")}
+		}
+
+		// 1. Set the shipping address on the cart
+		if m.ShippingInfo != nil && m.ShippingInfo.ID != 0 {
+			if err := m.APIClient.SetCartAddress(m.ShippingInfo.ID); err != nil {
+				return CheckoutResultMsg{Err: fmt.Errorf("failed to set address: %w", err)}
+			}
+		} else if m.ShippingInfo != nil {
+			saved, err := m.APIClient.CreateAddress(api.CreateAddressRequest{
+				Name:    m.ShippingInfo.Name,
+				Street:  m.ShippingInfo.Street,
+				Street2: m.ShippingInfo.Street2,
+				City:    m.ShippingInfo.City,
+				State:   m.ShippingInfo.State,
+				Zip:     m.ShippingInfo.Zip,
+				Country: m.ShippingInfo.Country,
+				Phone:   m.ShippingInfo.Phone,
+			})
+			if err != nil {
+				return CheckoutResultMsg{Err: fmt.Errorf("failed to save address: %w", err)}
+			}
+			if err := m.APIClient.SetCartAddress(saved.ID); err != nil {
+				return CheckoutResultMsg{Err: fmt.Errorf("failed to set address: %w", err)}
+			}
+		}
+
+		// 2. Set the saved card on the cart
+		if err := m.APIClient.SetCartCard(m.SelectedCard.ID); err != nil {
+			return CheckoutResultMsg{Err: fmt.Errorf("failed to set card: %w", err)}
+		}
+
+		// 3. Convert the cart to an order
+		order, err := m.APIClient.ConvertCart()
+		if err != nil {
+			return CheckoutResultMsg{Err: err}
+		}
+
+		return CheckoutResultMsg{OrderID: order.ID, Total: order.Total}
 	}
 }
 
