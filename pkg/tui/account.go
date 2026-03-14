@@ -89,51 +89,52 @@ func (m Model) BuildAccountView(availableHeight int) string {
 				detailView = lines
 			}
 		case "faq":
-			detailView = titleStyle.Render("FAQ") + "\n\n" +
-				contentStyle.Render("Q: How do I place an order?\nA: Browse products with j/k, adjust quantity with +/-, and checkout via the cart.\n\nQ: What payment methods do you accept?\nA: We accept all major credit cards via Stripe.")
+			questionStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#4682B4")).
+				Bold(true)
+
+			faqContent := ""
+			for i, faq := range m.FAQs {
+				faqContent += questionStyle.Render(wordWrap(faq.Question, detailContentWidth)) + "\n"
+				faqContent += contentStyle.Render(wordWrap(faq.Answer, detailContentWidth))
+				if i < len(m.FAQs)-1 {
+					faqContent += "\n\n"
+				}
+			}
+			detailView = titleStyle.Render("FAQ") + "\n\n" + faqContent
+			if !m.FaqFocused {
+				hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+				detailView += "\n\n" + hintStyle.Render("enter: scroll faq")
+			}
 		case "about":
-			detailView = titleStyle.Render("About Terminal Coffee Shop") + "\n\n" +
-				contentStyle.Render("A terminal-based coffee ordering experience.\nBuilt with Go and Bubbletea.")
+			accentStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#4682B4")).
+				Bold(true)
+			userStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("C6DDF0")).
+				Bold(true)
+
+			aboutContent := contentStyle.Render(wordWrap(
+				"This project is heavily inspired by the wonderful team who made TerminalDotShop. I want to thank them for open-sourcing the code for that project. Cudos to those smart, funny, amazing looking devs:",
+				detailContentWidth,
+			)) + "\n\n"
+			aboutContent += userStyle.Render("@thdxr") + "\n"
+			aboutContent += userStyle.Render("@adamdotdev") + "\n"
+			aboutContent += userStyle.Render("@theprimeagen") + "\n"
+			aboutContent += userStyle.Render("@teej_dv") + "\n"
+			aboutContent += userStyle.Render("@iamdavidhill") + "\n\n"
+			aboutContent += contentStyle.Render("And me:") + "\n\n"
+			aboutContent += userStyle.Render("@marcusDenslow") + "\n\n"
+			aboutContent += accentStyle.Render("Terminal Products, Inc.")
+
+			detailView = titleStyle.Render("About") + "\n\n" + aboutContent
+
 		}
 	}
 
-	// Apply internal scrolling to just the detail view
-	if m.OrderViewState >= 1 {
-		detailLines := strings.Split(detailView, "\n")
-		totalLines := len(detailLines)
-
-		// In stacked mode, reduce available height by left panel
-		scrollHeight := availableHeight
-		if m.size < large {
-			leftPanelHeight := len(models.AccountMenuItems) + 1
-			scrollHeight = availableHeight - leftPanelHeight
-		}
-		if scrollHeight < 3 {
-			scrollHeight = 3
-		}
-
-		// Clamp scroll offset locally (don't mutate m since value receiver)
-		offset := m.ScrollOffset
-		maxScroll := totalLines - scrollHeight
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
-		if offset > maxScroll {
-			offset = maxScroll
-		}
-		if offset < 0 {
-			offset = 0
-		}
-
-		// Slice to visible window
-		if totalLines > scrollHeight {
-			end := offset + scrollHeight
-			if end > totalLines {
-				end = totalLines
-			}
-			detailLines = detailLines[offset:end]
-		}
-		detailView = strings.Join(detailLines, "\n")
+	if m.OrderViewState >= 1 || m.FaqFocused {
+		m.AccountDetailVP.SetContent(detailView)
+		detailView = m.AccountDetailVP.View()
 	}
 
 	detailContainer := lipgloss.NewStyle().

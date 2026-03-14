@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+
 func (m Model) BuildMenuView() string {
 	bold := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
 
@@ -19,10 +20,12 @@ func (m Model) BuildMenuView() string {
 		rowStyle.Render(bold.Render("q") + " " + base.Render("quit")),
 	}
 
+
 	menuContent := ""
 	for _, row := range rows {
 		menuContent += row + "\n"
 	}
+
 
 	logoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
 	logo := logoStyle.Render("terminal coffee")

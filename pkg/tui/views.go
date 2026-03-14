@@ -2,7 +2,9 @@ package tui
 
 import (
 	"strings"
+	"terminalShop/pkg/models"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -35,6 +37,11 @@ func (m Model) View() string {
 	// If the menu modal is showing, render it full-screen (bypass container)
 	if m.ShowingMenu {
 		return m.BuildMenuView()
+	}
+
+	// If the help modal is showing, render it full-screen (bypass container)
+	if m.ShowingHelp {
+		return m.BuildHelpView()
 	}
 
 	// Build header with cart tab
@@ -79,6 +86,23 @@ func (m Model) View() string {
 		errorBanner := errorStyle.Render("⚠ " + m.ErrorMsg)
 
 		if m.ViewingAccount {
+			if !m.accountDetailVPReady {
+				leftWidth := 18
+				vpWidth := m.widthContent - leftWidth - 2
+				if m.size < large {
+					vpWidth = m.widthContent
+				}
+				vpHeight := availableContentHeight
+				if m.size < large {
+					vpHeight -= len(models.AccountMenuItems) + 1
+				}
+				if vpHeight < 3 {
+					vpHeight = 3
+				}
+				m.AccountDetailVP = viewport.New(vpWidth, vpHeight)
+				m.AccountDetailVP.KeyMap = viewport.KeyMap{}
+				m.accountDetailVPReady = true
+			}
 			content = errorBanner + "\n" + m.BuildAccountView(availableContentHeight)
 		} else if m.ViewingCart && m.CheckoutStep == 1 {
 			if m.ShippingView == 0 && m.ShippingForm == nil {
@@ -86,6 +110,8 @@ func (m Model) View() string {
 			} else if m.ShippingForm != nil {
 				content = errorBanner + "\n" + m.RenderShippingForm(m.ShippingForm)
 			}
+
+			// TODO! THIS NEEDS TO BE REFACTORED - JESUS CHIRST
 		} else if m.ViewingCart && m.CheckoutStep == 2 && m.CheckingOut {
 			content = errorBanner + "\n  submitting order..."
 		} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentView == 0 && m.PaymentForm == nil {
@@ -100,6 +126,23 @@ func (m Model) View() string {
 			content = errorBanner + "\n" + m.BuildShopView()
 		}
 	} else if m.ViewingAccount {
+		if !m.accountDetailVPReady {
+			leftWidth := 18
+			vpWidth := m.widthContent - leftWidth - 2
+			if m.size < large {
+				vpWidth = m.widthContent
+			}
+			vpHeight  := availableContentHeight
+			if m.size < large {
+				vpHeight -= len(models.AccountMenuItems) + 1
+		}
+		if vpHeight < 3 {
+			vpHeight = 3
+		}
+		m.AccountDetailVP = viewport.New(vpWidth, vpHeight)
+		m.AccountDetailVP.KeyMap = viewport.KeyMap{} // we handle keys manually
+		m.accountDetailVPReady = true
+	}
 		content = m.BuildAccountView(availableContentHeight)
 	} else if m.ViewingCart && m.CheckoutStep == 1 {
 		if m.ShippingView == 0 && m.ShippingForm == nil {
@@ -126,7 +169,9 @@ func (m Model) View() string {
 	totalLines := len(contentLines)
 
 	// Skip global scroll when account view handles its own scrolling
-	if !(m.ViewingAccount && m.OrderViewState >= 1) {
+	// (order list/detail and FAQ focused use the viewport in BuildAccountView)
+	accountHandlesScroll := m.ViewingAccount && (m.OrderViewState >= 1 || m.FaqFocused)
+	if !accountHandlesScroll {
 		// Ensure scroll offset is without bounds
 		if m.ScrollOffset < 0 {
 			m.ScrollOffset = 0

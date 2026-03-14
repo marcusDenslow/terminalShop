@@ -42,6 +42,7 @@ type Address struct {
 	Phone   string
 }
 
+
 type validationMatch struct {
 	StreetName  string `json:"street_name"`
 	HouseNumber int    `json:"house_number"`

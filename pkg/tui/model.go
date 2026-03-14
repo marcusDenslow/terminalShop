@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	gossh "golang.org/x/crypto/ssh"
 
@@ -63,6 +64,7 @@ type Model struct {
 
 	// Menu modal state
 	ShowingMenu  bool // true when full-screen menu is showing
+	ShowingHelp  bool // true when help-screen is showing
 	menuLastCart bool // was viewing cart when menu was opened
 	menuLastAcct bool // was viewing account when menu was opened
 
@@ -101,6 +103,14 @@ type Model struct {
 	OrdersLoaded   bool
 	OrderCursor    int // which order is selected in the list
 	OrderViewState int // 0=preview, 1=browsing list, 2=viewing detail
+
+	// Static content
+	FAQs       []FAQ // loaded from embedded faq.json
+	FaqFocused bool  // true when FAQ detail is focused
+
+	// Account detail viewport - handles scrolling for the right panel
+	AccountDetailVP      viewport.Model
+	accountDetailVPReady bool
 }
 
 // updateLayout recalculates all layout variables from the raw viewport dimensions.
@@ -129,6 +139,23 @@ func (m *Model) updateLayout(width, height int) {
 	}
 
 	m.widthContent = m.widthContainer - 2
+
+	if m.accountDetailVPReady {
+		vpHeight := m.heightContainer - 7
+		if m.size < large {
+			vpHeight -= len(models.AccountMenuItems) + 1
+		}
+		if vpHeight < 3 {
+			vpHeight = 3
+		}
+		leftWidth := 18
+		vpWidth := m.widthContent - leftWidth - 2
+		if m.size < large {
+			vpWidth = m.widthContent
+		}
+		m.AccountDetailVP.Width = vpWidth
+		m.AccountDetailVP.Height = vpHeight
+	}
 }
 
 // ProductsMsg is sent when products are fetched from API
@@ -211,6 +238,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.PaymentForm = nil
 				m.ScrollOffset = 0
 				m.OrderViewState = 0
+				m.FaqFocused = false
+				m.AccountDetailVP.GotoTop()
 			case "a":
 				m.ShowingMenu = false
 				m.ViewingCart = false
@@ -220,6 +249,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.PaymentForm = nil
 				m.ScrollOffset = 0
 				m.OrderViewState = 0
+				m.FaqFocused = false
+				m.AccountDetailVP.GotoTop()
 				if !m.OrdersLoaded {
 					return m, m.fetchOrdersCmd()
 				}
@@ -232,8 +263,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.PaymentForm = nil
 				m.ScrollOffset = 0
 				m.OrderViewState = 0
+				m.FaqFocused = false
+				m.AccountDetailVP.GotoTop()
 			case "esc":
 				m.ShowingMenu = false
+			case "?":
+				m.ShowingMenu = false
+				m.ShowingHelp = true
+			case "q", "ctrl+c":
+				return m, tea.Quit
+			}
+		}
+		return m, nil
+	}
+
+	// Help Modal
+	if m.ShowingHelp {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "esc", "?":
+				m.ShowingHelp = false
 			case "q", "ctrl+c":
 				return m, tea.Quit
 			}
@@ -679,6 +728,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 
 	case tea.KeyMsg:
+		// Toggle help overlay from any view
+		if msg.String() == "?" {
+			m.ShowingHelp = true
+			return m, nil
+		}
+
 		// Normal shop mode
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -692,6 +747,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
 			m.OrderViewState = 0
+			m.FaqFocused = false
+			m.AccountDetailVP.GotoTop()
 
 		case "c":
 			m.ViewingCart = true
@@ -701,6 +758,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
 			m.OrderViewState = 0
+			m.FaqFocused = false
+			m.AccountDetailVP.GotoTop()
 
 		case "a":
 			m.ViewingCart = false
@@ -710,6 +769,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
 			m.OrderViewState = 0
+			m.FaqFocused = false
+			m.AccountDetailVP.GotoTop()
 			if !m.OrdersLoaded {
 				return m, m.fetchOrdersCmd()
 			}
@@ -734,6 +795,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+			// Account view: focus into FAQ for scrolling
+			if m.ViewingAccount && m.AccountCursor == 1 && !m.FaqFocused {
+				m.FaqFocused = true
+				m.ScrollOffset = 0
+				return m, nil
+			}
 			// Proceed to checkout from cart
 			if m.ViewingCart && m.CheckoutStep == 0 && len(m.Cart) > 0 {
 				m.CheckoutStep = 1
@@ -741,6 +808,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "esc":
+			// Unfocus FAQ scrolling
+			if m.ViewingAccount && m.FaqFocused {
+				m.FaqFocused = false
+				m.ScrollOffset = 0
+				m.AccountDetailVP.GotoTop()
+				return m, nil
+			}
 			// Navigate back through order view states
 			if m.ViewingAccount && m.OrderViewState > 0 {
 				m.OrderViewState--
@@ -775,7 +849,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "up", "k":
 			if m.ViewingAccount {
-				if m.OrderViewState == 1 && m.OrderCursor > 0 {
+				if m.FaqFocused {
+					// Scroll FAQ content up via viewport
+					m.AccountDetailVP.LineUp(3)
+				} else if m.OrderViewState == 1 && m.OrderCursor > 0 {
 					// Navigate up within order list
 					m.OrderCursor--
 					// Auto-scroll to keep cursor visible
@@ -791,6 +868,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else if m.OrderViewState == 0 && m.AccountCursor > 0 {
 					// Navigate up within account tabs
 					m.AccountCursor--
+					m.ScrollOffset = 0
+					m.AccountDetailVP.GotoTop()
 				}
 			} else if !m.ViewingCart && !m.ViewingAccount && m.Cursor > 0 {
 				m.Cursor--
@@ -806,7 +885,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "down", "j":
 			if m.ViewingAccount {
-				if m.OrderViewState == 1 && m.OrderCursor < len(m.Orders)-1 {
+				if m.FaqFocused {
+					// Scroll FAQ content down via viewport
+					m.AccountDetailVP.LineDown(3)
+				} else if m.OrderViewState == 1 && m.OrderCursor < len(m.Orders)-1 {
 					// Navigate down within order list
 					m.OrderCursor++
 					// Auto-scroll to keep cursor visible
@@ -831,6 +913,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else if m.OrderViewState == 0 && m.AccountCursor < len(models.AccountMenuItems)-1 {
 					// Navigate down within account tabs
 					m.AccountCursor++
+					m.ScrollOffset = 0
+					m.AccountDetailVP.GotoTop()
 				}
 			} else if !m.ViewingCart && !m.ViewingAccount && m.Cursor < len(m.Coffees)-1 {
 				m.Cursor++
@@ -1409,6 +1493,7 @@ func NewModel(username string) Model {
 		Loading:        true,
 		APIClient:      api.NewClient("http://localhost:8080", ""),
 		StripeKey:      os.Getenv("STRIPE_PUBLIC_KEY"),
+		FAQs:           LoadFaqs(),
 	}
 	m.updateLayout(120, 30)
 	return m

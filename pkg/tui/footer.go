@@ -23,7 +23,20 @@ func (m Model) BuildFooter() string {
 	}
 
 	var footerText string
-	if m.ViewingAccount {
+	if m.FaqFocused {
+		footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s",
+			keybindStyle.Render("j/k"),
+			descStyle.Render("scroll"),
+			keybindStyle.Render("esc"),
+			descStyle.Render("back"),
+			keybindStyle.Render("s"),
+			descStyle.Render("shop"),
+			keybindStyle.Render("c"),
+			descStyle.Render("cart"),
+			keybindStyle.Render("q"),
+			descStyle.Render("quit"),
+		)
+	} else if m.ViewingAccount {
 		switch m.OrderViewState {
 		case 2:
 			// Viewing single order detail
@@ -49,7 +62,7 @@ func (m Model) BuildFooter() string {
 			)
 		default:
 			// Account tabs
-			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s",
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s    %s %s",
 				keybindStyle.Render("j/k"),
 				descStyle.Render("navigate"),
 				keybindStyle.Render("enter"),
@@ -58,6 +71,8 @@ func (m Model) BuildFooter() string {
 				descStyle.Render("shop"),
 				keybindStyle.Render("c"),
 				descStyle.Render("cart"),
+				keybindStyle.Render("?"),
+				descStyle.Render("help"),
 				keybindStyle.Render("q"),
 				descStyle.Render("quit"),
 			)
@@ -124,7 +139,7 @@ func (m Model) BuildFooter() string {
 	} else if m.ViewingCart && m.CheckoutStep == 0 {
 		// In cart view, show proceed option
 		if len(m.Cart) > 0 {
-			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s    %s %s    %s %s",
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s    %s %s    %s %s    %s %s",
 				keybindStyle.Render("j/k"),
 				descStyle.Render("items"),
 				keybindStyle.Render("+/-"),
@@ -137,11 +152,13 @@ func (m Model) BuildFooter() string {
 				descStyle.Render("account"),
 				keybindStyle.Render("pgup/pgdn"),
 				descStyle.Render("scroll"),
+				keybindStyle.Render("?"),
+				descStyle.Render("help"),
 				keybindStyle.Render("q"),
 				descStyle.Render("quit"),
 			)
 		} else {
-			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s",
+			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s    %s %s",
 				keybindStyle.Render("j/k"),
 				descStyle.Render("items"),
 				keybindStyle.Render("+/-"),
@@ -150,6 +167,8 @@ func (m Model) BuildFooter() string {
 				descStyle.Render("shop"),
 				keybindStyle.Render("a"),
 				descStyle.Render("account"),
+				keybindStyle.Render("?"),
+				descStyle.Render("help"),
 				keybindStyle.Render("q"),
 				descStyle.Render("quit"),
 			)
@@ -165,7 +184,7 @@ func (m Model) BuildFooter() string {
 			descStyle.Render("quit"),
 		)
 	} else {
-		footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s",
+		footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s    %s %s",
 			keybindStyle.Render("j/k"),
 			descStyle.Render("products"),
 			keybindStyle.Render("+/-"),
@@ -174,6 +193,8 @@ func (m Model) BuildFooter() string {
 			descStyle.Render("cart"),
 			keybindStyle.Render("a"),
 			descStyle.Render("account"),
+			keybindStyle.Render("?"),
+			descStyle.Render("help"),
 			keybindStyle.Render("q"),
 			descStyle.Render("quit"),
 		)

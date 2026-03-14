@@ -3,13 +3,7 @@ package shippo
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"time"
-)
-
-const baseURL = "https://api.goshippo.com"
+	"fmt" "io" "net/http" "time") const baseURL = "https://api.goshippo.com"
 
 // Client handles communication with the Shippo API.
 type Client struct {
