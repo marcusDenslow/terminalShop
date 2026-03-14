@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	gossh "golang.org/x/crypto/ssh"
 
@@ -108,9 +107,6 @@ type Model struct {
 	FAQs       []FAQ // loaded from embedded faq.json
 	FaqFocused bool  // true when FAQ detail is focused
 
-	// Account detail viewport - handles scrolling for the right panel
-	AccountDetailVP      viewport.Model
-	accountDetailVPReady bool
 }
 
 // updateLayout recalculates all layout variables from the raw viewport dimensions.
@@ -139,23 +135,6 @@ func (m *Model) updateLayout(width, height int) {
 	}
 
 	m.widthContent = m.widthContainer - 2
-
-	if m.accountDetailVPReady {
-		vpHeight := m.heightContainer - 7
-		if m.size < large {
-			vpHeight -= len(models.AccountMenuItems) + 1
-		}
-		if vpHeight < 3 {
-			vpHeight = 3
-		}
-		leftWidth := 18
-		vpWidth := m.widthContent - leftWidth - 2
-		if m.size < large {
-			vpWidth = m.widthContent
-		}
-		m.AccountDetailVP.Width = vpWidth
-		m.AccountDetailVP.Height = vpHeight
-	}
 }
 
 // ProductsMsg is sent when products are fetched from API
@@ -239,7 +218,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ScrollOffset = 0
 				m.OrderViewState = 0
 				m.FaqFocused = false
-				m.AccountDetailVP.GotoTop()
 			case "a":
 				m.ShowingMenu = false
 				m.ViewingCart = false
@@ -250,7 +228,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ScrollOffset = 0
 				m.OrderViewState = 0
 				m.FaqFocused = false
-				m.AccountDetailVP.GotoTop()
 				if !m.OrdersLoaded {
 					return m, m.fetchOrdersCmd()
 				}
@@ -264,7 +241,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ScrollOffset = 0
 				m.OrderViewState = 0
 				m.FaqFocused = false
-				m.AccountDetailVP.GotoTop()
 			case "esc":
 				m.ShowingMenu = false
 			case "?":
@@ -748,7 +724,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ScrollOffset = 0
 			m.OrderViewState = 0
 			m.FaqFocused = false
-			m.AccountDetailVP.GotoTop()
 
 		case "c":
 			m.ViewingCart = true
@@ -759,7 +734,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ScrollOffset = 0
 			m.OrderViewState = 0
 			m.FaqFocused = false
-			m.AccountDetailVP.GotoTop()
 
 		case "a":
 			m.ViewingCart = false
@@ -770,7 +744,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ScrollOffset = 0
 			m.OrderViewState = 0
 			m.FaqFocused = false
-			m.AccountDetailVP.GotoTop()
+
 			if !m.OrdersLoaded {
 				return m, m.fetchOrdersCmd()
 			}
@@ -812,7 +786,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.ViewingAccount && m.FaqFocused {
 				m.FaqFocused = false
 				m.ScrollOffset = 0
-				m.AccountDetailVP.GotoTop()
 				return m, nil
 			}
 			// Navigate back through order view states
@@ -850,8 +823,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "up", "k":
 			if m.ViewingAccount {
 				if m.FaqFocused {
-					// Scroll FAQ content up via viewport
-					m.AccountDetailVP.LineUp(3)
+					// Scroll FAQ content up
+					m.ScrollOffset -= 3
+					if m.ScrollOffset < 0 {
+						m.ScrollOffset = 0
+					}
 				} else if m.OrderViewState == 1 && m.OrderCursor > 0 {
 					// Navigate up within order list
 					m.OrderCursor--
@@ -869,7 +845,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Navigate up within account tabs
 					m.AccountCursor--
 					m.ScrollOffset = 0
-					m.AccountDetailVP.GotoTop()
 				}
 			} else if !m.ViewingCart && !m.ViewingAccount && m.Cursor > 0 {
 				m.Cursor--
@@ -886,8 +861,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "down", "j":
 			if m.ViewingAccount {
 				if m.FaqFocused {
-					// Scroll FAQ content down via viewport
-					m.AccountDetailVP.LineDown(3)
+					// Scroll FAQ content down
+					m.ScrollOffset += 3
+					maxScroll := m.computeFaqScrollMax()
+					if m.ScrollOffset > maxScroll {
+						m.ScrollOffset = maxScroll
+					}
 				} else if m.OrderViewState == 1 && m.OrderCursor < len(m.Orders)-1 {
 					// Navigate down within order list
 					m.OrderCursor++
@@ -914,7 +893,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// Navigate down within account tabs
 					m.AccountCursor++
 					m.ScrollOffset = 0
-					m.AccountDetailVP.GotoTop()
 				}
 			} else if !m.ViewingCart && !m.ViewingAccount && m.Cursor < len(m.Coffees)-1 {
 				m.Cursor++
@@ -941,15 +919,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "pgup", "ctrl+u":
-			// Scroll up
-			m.ScrollOffset -= 3
-			if m.ScrollOffset < 0 {
-				m.ScrollOffset = 0
+			if m.ViewingAccount {
+				// Only scroll when focused into scrollable content
+				if m.FaqFocused || m.OrderViewState >= 2 {
+					m.ScrollOffset -= 3
+					if m.ScrollOffset < 0 {
+						m.ScrollOffset = 0
+					}
+				}
+			} else {
+				// Scroll up in shop/cart views
+				m.ScrollOffset -= 3
+				if m.ScrollOffset < 0 {
+					m.ScrollOffset = 0
+				}
 			}
 
 		case "pgdown", "ctrl+d":
-			// Scroll down
-			m.ScrollOffset += 3
+			if m.ViewingAccount {
+				// Only scroll when focused into scrollable content
+				if m.FaqFocused || m.OrderViewState >= 2 {
+					m.ScrollOffset += 3
+					maxScroll := m.computeFaqScrollMax()
+					if m.FaqFocused && maxScroll >= 0 && m.ScrollOffset > maxScroll {
+						m.ScrollOffset = maxScroll
+					}
+				}
+			} else {
+				// Scroll down in shop/cart views
+				m.ScrollOffset += 3
+			}
 
 		case "+", "=":
 			if !m.ViewingCart && !m.ViewingAccount {

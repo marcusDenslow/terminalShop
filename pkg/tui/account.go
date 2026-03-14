@@ -132,9 +132,44 @@ func (m Model) BuildAccountView(availableHeight int) string {
 		}
 	}
 
+	// Apply internal scrolling to just the detail view
+	// Scrolling is needed for: order detail/list and FAQ when focused
 	if m.OrderViewState >= 1 || m.FaqFocused {
-		m.AccountDetailVP.SetContent(detailView)
-		detailView = m.AccountDetailVP.View()
+		detailLines := strings.Split(detailView, "\n")
+		totalLines := len(detailLines)
+
+		// In stacked mode, reduce available height by left panel
+		scrollHeight := availableHeight
+		if m.size < large {
+			leftPanelHeight := len(models.AccountMenuItems) + 1
+			scrollHeight = availableHeight - leftPanelHeight
+		}
+		if scrollHeight < 3 {
+			scrollHeight = 3
+		}
+
+		// Clamp scroll offset locally (don't mutate m since value receiver)
+		offset := m.ScrollOffset
+		maxScroll := totalLines - scrollHeight
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		if offset > maxScroll {
+			offset = maxScroll
+		}
+		if offset < 0 {
+			offset = 0
+		}
+
+		// Slice to visible window
+		if totalLines > scrollHeight {
+			end := offset + scrollHeight
+			if end > totalLines {
+				end = totalLines
+			}
+			detailLines = detailLines[offset:end]
+		}
+		detailView = strings.Join(detailLines, "\n")
 	}
 
 	detailContainer := lipgloss.NewStyle().
@@ -315,4 +350,54 @@ func (m Model) buildOrderDetailView(order models.Order, width int) string {
 	b.WriteString(dimStyle.Render("esc: back to orders"))
 
 	return b.String()
+}
+
+// computeFaqScrollMax calculates the maximum scroll offset for the FAQ content.
+// This renders the FAQ the same way BuildAccountView does, counts the lines,
+// and returns the max scroll value. Returns 0 if no scrolling is needed.
+func (m Model) computeFaqScrollMax() int {
+	leftWidth := 18
+	rightWidth := m.widthContent - leftWidth - 2
+	detailContentWidth := rightWidth - 2
+	if m.size < large {
+		detailContentWidth = m.widthContent - 2
+	}
+
+	questionStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#4682B4")).
+		Bold(true)
+	contentStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#AAAAAA")).
+		Width(detailContentWidth)
+
+	faqContent := ""
+	for i, faq := range m.FAQs {
+		faqContent += questionStyle.Render(wordWrap(faq.Question, detailContentWidth)) + "\n"
+		faqContent += contentStyle.Render(wordWrap(faq.Answer, detailContentWidth))
+		if i < len(m.FAQs)-1 {
+			faqContent += "\n\n"
+		}
+	}
+
+	titleStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#FFFFFF")).
+		MarginBottom(2)
+	detailView := titleStyle.Render("FAQ") + "\n\n" + faqContent
+
+	totalLines := len(strings.Split(detailView, "\n"))
+
+	scrollHeight := m.heightContainer - 7
+	if m.size < large {
+		scrollHeight -= len(models.AccountMenuItems) + 1
+	}
+	if scrollHeight < 3 {
+		scrollHeight = 3
+	}
+
+	maxScroll := totalLines - scrollHeight
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	return maxScroll
 }

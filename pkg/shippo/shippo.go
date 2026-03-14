@@ -3,7 +3,13 @@ package shippo
 import (
 	"bytes"
 	"encoding/json"
-	"fmt" "io" "net/http" "time") const baseURL = "https://api.goshippo.com"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+)
+
+const baseURL = "https://api.goshippo.com"
 
 // Client handles communication with the Shippo API.
 type Client struct {
@@ -115,7 +121,7 @@ func (c *Client) ValidateAddress(addr Address) (*Address, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	// Only accept addresses that Shippo explicitly validates as valid. 
+	// Only accept addresses that Shippo explicitly validates as valid.
 	// International addressees where Shippo cannot validate are rejected.
 	// Address validation for addresses in other countries need to be added on a per-country API basis.
 	// Going to add Bring validation for Norway next
