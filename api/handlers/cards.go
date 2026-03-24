@@ -33,12 +33,41 @@ func (h *CardHandler) GetCards(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var cards []models.Card
-	db.Where("user_id = ?", userID).Order("created_at DESC").Find(&cards)
+	db.Where("user_id = ?", userID).Order("is_default DESC, created_at DESC").Find(&cards)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"cards": cards,
 	})
 }
+
+func (h *CardHandler) setDefaultCard(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB()
+	userID := middleware.UserIDFromContext(r.Context())
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_ID", "invalid card id", nil)
+		return
+	}
+
+	var card models.Card
+	if err := db.Where("id = ? AND user_id = ?", id, userID).First(&card).Error; err != nil {
+		utils.RespondError(w, http.StatusNotFound, "CARD_NOT_FOUND", "card not found", nil)
+		return
+	}
+
+	db.Model(&models.Card{}).Where("user_id = ?", userID).Update("id_default", false)
+
+	card.IsDefault = true
+	db.Save(&card)
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+		"card": card,
+	})
+}
+
+// func utils.RespondError(w http.ResponseWriter, statusCode int, code string, message string, details map[string]interface{})
 
 // GetCard returns a single saved card by ID.
 func (h *CardHandler) GetCard(w http.ResponseWriter, r *http.Request) {

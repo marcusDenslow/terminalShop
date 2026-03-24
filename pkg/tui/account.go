@@ -125,6 +125,8 @@ func (m Model) BuildAccountView(availableHeight int) string {
 			aboutContent += userStyle.Render("@iamdavidhill") + "\n\n"
 			aboutContent += contentStyle.Render("And me:") + "\n\n"
 			aboutContent += userStyle.Render("@marcusDenslow") + "\n\n"
+			aboutContent += contentStyle.Render(wordWrap("This project tries to copy the idea of terminalDotShop, but with one twist: write everything in GO. this is my humble attempt",
+			detailContentWidth)) + "\n"
 			aboutContent += accentStyle.Render("Terminal Products, Inc.")
 
 			detailView = titleStyle.Render("About") + "\n\n" + aboutContent
