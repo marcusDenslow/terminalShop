@@ -83,7 +83,7 @@ func (h *CardHandler) SetDefaultCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Model(&models.Card{}).Where("user_id = ?", userID).Update("id_default", false)
+	db.Model(&models.Card{}).Where("user_id = ?", userID).Update("is_default", false)
 
 	card.IsDefault = true
 	db.Save(&card)

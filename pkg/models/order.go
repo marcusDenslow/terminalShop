@@ -16,6 +16,7 @@ const (
 	OrderStatusDelivered OrderStatus = "delivered"
 	OrderStatusCancelled OrderStatus = "cancelled"
 	OrderStatusRefunded  OrderStatus = "refunded"
+	OrderStatusFailed    OrderStatus = "failed"
 )
 
 // Order represents a completed purchase.

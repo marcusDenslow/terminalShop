@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"terminalShop/api/middleware"
@@ -10,6 +11,7 @@ import (
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/utils"
 
+	"gorm.io/gorm"
 	"github.com/stripe/stripe-go/v78"
 	"github.com/stripe/stripe-go/v78/customer"
 	"github.com/stripe/stripe-go/v78/paymentintent"
@@ -339,45 +341,13 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		db.Save(&card)
 	}
 
-	// Charge via PaymentIntent (matching reference implementation)
-	piParams := &stripe.PaymentIntentParams{
-		Amount:        stripe.Int64(int64(total)),
-		Currency:      stripe.String(string(stripe.CurrencyUSD)),
-		Customer:      stripe.String(user.StripeCustomerID),
-		PaymentMethod: stripe.String(paymentMethodID),
-		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
-			Enabled:        stripe.Bool(true),
-			AllowRedirects: stripe.String("never"),
-		},
-		Confirm:     stripe.Bool(true),
-		Description: stripe.String(fmt.Sprintf("terminal.shop order for user %d", user.ID)),
-		Shipping: &stripe.ShippingDetailsParams{
-			Name: stripe.String(address.Name),
-			Address: &stripe.AddressParams{
-				Line1:      stripe.String(address.Street),
-				Line2:      stripe.String(address.Street2),
-				City:       stripe.String(address.City),
-				State:      stripe.String(address.State),
-				PostalCode: stripe.String(address.Zip),
-				Country:    stripe.String(address.Country),
-			},
-		},
-	}
-
-	pi, err := paymentintent.New(piParams)
-	if err != nil {
-		if stripeErr, ok := err.(*stripe.Error); ok && stripeErr.Type == stripe.ErrorTypeCard {
-			utils.RespondError(w, http.StatusPaymentRequired, "CARD_ERROR", stripeErr.Msg, nil)
-			return
-		}
-		utils.RespondError(w, http.StatusPaymentRequired, "PAYMENT_FAILED", "payment failed", nil)
-		return
-	}
 	order := models.Order{
+		// Create the order record first before charging the card so we always
+		// have a record we can reconcile against if anything goes wrong mid-flight.
 		UserID:          user.ID,
 		CardID:          card.ID,
-		StripePaymentID: pi.ID,
-		Status:          models.OrderStatusPaid,
+		StripePaymentID: "",
+		Status:          models.OrderStatusPending,
 		Subtotal:        subtotal,
 		ShippingCost:    cart.ShippingCost,
 		Total:           total,
@@ -397,12 +367,63 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Where("cart_id = ?", cart.ID).Delete(&models.CartItem{})
+	// Charge via stripe, keyed to the order ID so retrieves never double-charge.
+	piParams := &stripe.PaymentIntentParams{
+		Amount:        stripe.Int64(int64(total)),
+		Currency:      stripe.String(string(stripe.CurrencyUSD)),
+		Customer:      stripe.String(user.StripeCustomerID),
+		PaymentMethod: stripe.String(paymentMethodID),
+		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+			Enabled:        stripe.Bool(true),
+			AllowRedirects: stripe.String("never"),
+		},
+		Confirm:     stripe.Bool(true),
+		Description: stripe.String(fmt.Sprintf("terminal.shop order for user %d", userID)),
+		Shipping: &stripe.ShippingDetailsParams{
+			Name: stripe.String(address.Name),
+			Address: &stripe.AddressParams{
+				Line1:      stripe.String(address.Street),
+				Line2:      stripe.String(address.Street2),
+				City:       stripe.String(address.City),
+				State:      stripe.String(address.State),
+				PostalCode: stripe.String(address.Zip),
+				Country:    stripe.String(address.Country),
+			},
+		},
+	}
+	piParams.SetIdempotencyKey(fmt.Sprintf("order-%d", order.ID))
 
-	db.Model(cart).Updates(map[string]interface{}{
-		"address_id": nil,
-		"card_id":    nil,
+	pi, err := paymentintent.New(piParams)
+	if err != nil {
+		// charge failed, mark the otder so it can be identified and or cleaned up
+		db.Model(&order).Update("status", models.OrderStatusFailed)
+		if stripeErr, ok := err.(*stripe.Error); ok && stripeErr.Type == stripe.ErrorTypeCard {
+			utils.RespondError(w, http.StatusPaymentRequired, "CARD_ERROR", stripeErr.Msg, nil)
+			return
+		}
+		utils.RespondError(w, http.StatusPaymentRequired, "PAYMENT_FAILED", "payment failed", nil)
+		return
+	}
+
+	txErr := db.Transaction(func(tx *gorm.DB) error {
+		order.StripePaymentID = pi.ID
+		order.Status = models.OrderStatusPaid
+		if err := tx.Save(&order).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("cart_id = ?", cart.ID).Delete(&models.CartItem{}).Error; err != nil {
+			return err
+		}
+		return tx.Model(cart).Updates(map[string]interface{}{
+			"address_id": nil,
+			"card_id":    nil,
+		}).Error
 	})
+	if txErr != nil {
+		log.Printf("[CRITICAL] order %d charged (pi=%s) but failed to record: %v", order.ID, pi.ID, txErr) 
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "payment succeeded but failed to record order", nil)
+		return
+	}
 
 	db.Preload("Items").First(&order, order.ID)
 
