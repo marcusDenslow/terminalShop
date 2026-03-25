@@ -729,22 +729,3 @@ func (c *Client) DeleteAddress(id uint) error {
 	return nil
 }
 
-func(c *Client) SetDefaultAddress(id uint) error {
-	url := fmt.Sprintf("%s/api/v1/addresses/%d/default", c.BaseURL, id)
-	req, err := http.NewRequest("PUT", url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to set default address: status %d", resp.StatusCode)
-	}
-	return nil
-}

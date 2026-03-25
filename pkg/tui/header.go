@@ -24,7 +24,7 @@ func (m Model) BuildHeader() string {
 	itemCountText := grayStyle.Render(fmt.Sprintf("[%d]", itemCount))
 
 	var cartKeybind, cartName, cartInfo string
-	if m.ViewingCart {
+	if m.inCartFlow() {
 		// Active: bold white keybind and name
 		cartKeybind = boldWhiteStyle.Render("c")
 		cartName = boldWhiteStyle.Render("cart")
@@ -57,7 +57,7 @@ func (m Model) BuildHeader() string {
 		separator := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Render("|")
 
 		var shopKeybind, shopName string
-		if !m.ViewingCart && !m.ViewingAccount {
+		if m.currentPage == shopPage {
 			shopKeybind = boldWhiteStyle.Render("s")
 			shopName = boldWhiteStyle.Render("shop")
 		} else {
@@ -66,7 +66,7 @@ func (m Model) BuildHeader() string {
 		}
 
 		var accountKeybind, accountName string
-		if m.ViewingAccount {
+		if m.currentPage == accountPage {
 			accountKeybind = boldWhiteStyle.Render("a")
 			accountName = boldWhiteStyle.Render("account")
 		} else {

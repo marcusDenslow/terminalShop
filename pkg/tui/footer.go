@@ -36,7 +36,7 @@ func (m Model) BuildFooter() string {
 			keybindStyle.Render("q"),
 			descStyle.Render("quit"),
 		)
-	} else if m.ViewingAccount {
+	} else if m.currentPage == accountPage {
 		switch m.OrderViewState {
 		case 2:
 			// Viewing single order detail
@@ -77,7 +77,7 @@ func (m Model) BuildFooter() string {
 				descStyle.Render("quit"),
 			)
 		}
-	} else if m.ViewingCart && m.CheckoutStep == 3 {
+	} else if m.currentPage == confirmPage {
 		// Confirmation screen
 		footerText = fmt.Sprintf("%s %s    %s %s",
 			keybindStyle.Render("esc"),
@@ -85,7 +85,7 @@ func (m Model) BuildFooter() string {
 			keybindStyle.Render("q"),
 			descStyle.Render("quit"),
 		)
-	} else if m.ViewingCart && m.CheckoutStep == 1 {
+	} else if m.currentPage == shippingPage {
 		if m.ShippingView == 0 && m.ShippingForm == nil {
 			// Address list
 			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s",
@@ -109,7 +109,7 @@ func (m Model) BuildFooter() string {
 				descStyle.Render("back"),
 			)
 		}
-	} else if m.ViewingCart && m.CheckoutStep == 2 {
+	} else if m.currentPage == paymentPage {
 		if m.PaymentView == 0 && m.PaymentForm == nil {
 			// Card list
 			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s",
@@ -136,7 +136,7 @@ func (m Model) BuildFooter() string {
 				descStyle.Render("back"),
 			)
 		}
-	} else if m.ViewingCart && m.CheckoutStep == 0 {
+	} else if m.currentPage == cartPage {
 		// In cart view, show proceed option
 		if len(m.Cart) > 0 {
 			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s    %s %s    %s %s    %s %s",
@@ -173,16 +173,6 @@ func (m Model) BuildFooter() string {
 				descStyle.Render("quit"),
 			)
 		}
-	} else if m.ViewingCart {
-		// Other checkout steps
-		footerText = fmt.Sprintf("%s %s    %s %s    %s %s",
-			keybindStyle.Render("esc"),
-			descStyle.Render("back"),
-			keybindStyle.Render("s"),
-			descStyle.Render("shop"),
-			keybindStyle.Render("q"),
-			descStyle.Render("quit"),
-		)
 	} else {
 		footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s    %s %s",
 			keybindStyle.Render("j/k"),

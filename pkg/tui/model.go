@@ -28,6 +28,18 @@ const (
 	large                      // viewportWidth >= 80
 )
 
+// page represetnts the currently active TUI screen
+type page int
+
+const (
+	shopPage page = iota
+	cartPage
+	shippingPage
+	paymentPage
+	confirmPage
+	accountPage
+)
+
 // This msg is sent after a debounce delay to apply a pending resize.
 // the seq field makes sure that only the tick from the most recent resize is applied.
 type resizeTickMsg struct {
@@ -54,18 +66,16 @@ type Model struct {
 	Cart             map[uint]*models.CartItem // maps CoffeeID to cart item
 	CartCursor       int                       // cursor position in cart view
 	AccountCursor    int
-	CheckoutStep     int   // 0=cart, 1=shipping, 2=payment, 3=confirmation
+	currentPage      page  // currently active screen
+	switched         bool  // true when the page just changed (for state resets)
 	ScrollOffset     int   // scroll position for content
-	ViewingCart      bool  // true when viewing cart details
 	CheckingOut      bool  // true while saveCardAndConvert is running
 	lastCartUpdateID int64 // debounce ID for optimistic cart sync
-	ViewingAccount   bool
 
 	// Menu modal state
 	ShowingMenu  bool // true when full-screen menu is showing
 	ShowingHelp  bool // true when help-screen is showing
-	menuLastCart bool // was viewing cart when menu was opened
-	menuLastAcct bool // was viewing account when menu was opened
+	menuLastPage page // page we were on before opening menu
 
 	// Layout fields — responsive container system
 	viewportWidth   int      // raw terminal width
@@ -107,6 +117,34 @@ type Model struct {
 	FAQs       []FAQ // loaded from embedded faq.json
 	FaqFocused bool  // true when FAQ detail is focused
 
+}
+
+// SwitchPage changed the active page and marks that a switch happened
+func (m Model) SwitchPage(p page) Model {
+	m.currentPage = p
+	m.switched = true
+	return m
+}
+
+// inCartFlow returns true when the user is anywhere in the cart or checkout flow
+func (m Model) inCartFlow() bool {
+	return m.currentPage == cartPage ||
+		m.currentPage == shippingPage ||
+		m.currentPage == paymentPage ||
+		m.currentPage == confirmPage
+}
+
+func (m Model) checkoutStep() int {
+	switch m.currentPage {
+	case shippingPage:
+		return 1
+	case paymentPage:
+		return 2
+	case confirmPage:
+		return 3
+	default:
+		return 0
+	}
 }
 
 // updateLayout recalculates all layout variables from the raw viewport dimensions.
@@ -210,9 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.String() {
 			case "s":
 				m.ShowingMenu = false
-				m.ViewingCart = false
-				m.ViewingAccount = false
-				m.CheckoutStep = 0
+				m = m.SwitchPage(shopPage)
 				m.ShippingForm = nil
 				m.PaymentForm = nil
 				m.ScrollOffset = 0
@@ -220,9 +256,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.FaqFocused = false
 			case "a":
 				m.ShowingMenu = false
-				m.ViewingCart = false
-				m.ViewingAccount = true
-				m.CheckoutStep = 0
+				m = m.SwitchPage(accountPage)
 				m.ShippingForm = nil
 				m.PaymentForm = nil
 				m.ScrollOffset = 0
@@ -233,9 +267,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			case "c":
 				m.ShowingMenu = false
-				m.ViewingCart = true
-				m.ViewingAccount = false
-				m.CheckoutStep = 0
+				m.SwitchPage(cartPage)
 				m.ShippingForm = nil
 				m.PaymentForm = nil
 				m.ScrollOffset = 0
@@ -266,7 +298,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.ViewingCart && m.CheckoutStep == 1 {
+	if m.currentPage == shippingPage {
 		switch msg := msg.(type) {
 		case ShippingFormCompleteMsg:
 			addr := models.Address{
@@ -306,7 +338,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.ShippingInfo = &msg.Address
 			m.ShippingForm = nil
-			m.CheckoutStep = 2
+			m = m.SwitchPage(paymentPage)
 			m.SelectedCard = nil
 			return m, m.fetchCardsCmd()
 
@@ -329,7 +361,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ErrorMsg = ""
 				switch keyMsg.String() {
 				case "esc":
-					m.CheckoutStep = 0
+					m = m.SwitchPage(cartPage)
 					m.ErrorMsg = ""
 					return m, nil
 				case "up", "k":
@@ -345,7 +377,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						addr := m.SavedAddresses[m.AddressCursor]
 						selected := addr // copy so we have a stable pointer
 						m.ShippingInfo = &selected
-						m.CheckoutStep = 2
+						m = m.SwitchPage(paymentPage)
 						m.SelectedCard = nil
 						return m, m.fetchCardsCmd()
 					}
@@ -382,8 +414,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, nil
 					}
 
-					m.CheckoutStep = 0
 					m.ShippingForm = nil
+					m = m.SwitchPage(cartPage)
 					return m, nil
 				}
 				m.ErrorMsg = ""
@@ -395,7 +427,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// When the payment form is active, route ALL messages to it.
-	if m.ViewingCart && m.CheckoutStep == 2 {
+	if m.currentPage == paymentPage {
 		switch msg := msg.(type) {
 
 		case CardsMsg:
@@ -406,7 +438,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.PaymentForm.form.Init()
 			}
 			m.SavedCards = msg.Cards
-			m.PaymentView = 0 // show card list
+			m.PaymentView = 0
 			m.CardCursor = 0
 			m.PaymentForm = nil
 			return m, nil
@@ -426,7 +458,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.CheckingOut = false
 			if msg.Err != nil {
 				m.ErrorMsg = fmt.Sprintf("checkout failed: %v", msg.Err)
-				m.CheckoutStep = 2
+				// already on paymentPage, no page switch needed
 				// Return to card list if we have saved cards, otherwise show form
 				if len(m.SavedCards) > 0 {
 					m.PaymentView = 0
@@ -438,7 +470,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-			m.CheckoutStep = 3
+			m = m.SwitchPage(confirmPage)
 			m.OrdersLoaded = false
 			return m, nil
 		case StripeTokenErrMsg:
@@ -479,8 +511,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ErrorMsg = ""
 				switch keyMsg.String() {
 				case "esc":
-					m.CheckoutStep = 1
 					m.ErrorMsg = ""
+					m = m.SwitchPage(shippingPage)
 					return m, m.fetchAddressesCmd()
 				case "up", "k":
 					if m.CardCursor > 0 {
@@ -516,7 +548,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						}
 						return m, m.deleteCardCmd(card.ID)
 					}
-
 				}
 			}
 			return m, nil
@@ -533,8 +564,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, nil
 					}
 					// No saved cards - go back to shipping
-					m.CheckoutStep = 1
 					m.PaymentForm = nil
+					m = m.SwitchPage(shippingPage)
 					return m, m.fetchAddressesCmd()
 				}
 				m.ErrorMsg = ""
@@ -575,26 +606,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.ShippingInfo = &msg.Address
 		m.ShippingForm = nil
-		m.CheckoutStep = 2
+		m = m.SwitchPage(paymentPage)
 		m.SelectedCard = nil
 		return m, m.fetchCardsCmd()
 
 	case ShippingFormErrorMsg:
 		m.ErrorMsg = msg.Message
-		return m, nil
-
-	case PaymentFormCompleteMsg:
-		m.CheckoutStep = 3
-		m.PaymentForm = nil
-		return m, nil
-
-	case PaymentFormErrorMsg:
-		m.ErrorMsg = msg.Message
-		return m, nil
-
-	case StripeTokenMsg:
-		m.CheckoutStep = 3
-		m.PaymentForm = nil
 		return m, nil
 
 	case StripeTokenErrMsg:
@@ -716,9 +733,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "s":
-			m.ViewingCart = false
-			m.ViewingAccount = false
-			m.CheckoutStep = 0
+			m = m.SwitchPage(shopPage)
 			m.ShippingForm = nil
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
@@ -726,9 +741,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.FaqFocused = false
 
 		case "c":
-			m.ViewingCart = true
-			m.ViewingAccount = false
-			m.CheckoutStep = 0
+			m = m.SwitchPage(cartPage)
 			m.ShippingForm = nil
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
@@ -736,9 +749,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.FaqFocused = false
 
 		case "a":
-			m.ViewingCart = false
-			m.ViewingAccount = true
-			m.CheckoutStep = 0
+			m = m.SwitchPage(accountPage)
 			m.ShippingForm = nil
 			m.PaymentForm = nil
 			m.ScrollOffset = 0
@@ -751,13 +762,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "m":
 			m.ShowingMenu = true
-			m.menuLastCart = m.ViewingCart
-			m.menuLastAcct = m.ViewingAccount
+			m.menuLastPage = m.currentPage
 			return m, nil
 
 		case "p", "enter":
 			// Account view: enter order list or order detail
-			if m.ViewingAccount && m.AccountCursor == 0 && len(m.Orders) > 0 {
+			if m.currentPage == accountPage && m.AccountCursor == 0 && len(m.Orders) > 0 {
 				if m.OrderViewState == 0 {
 					m.OrderViewState = 1
 					m.OrderCursor = 0
@@ -770,34 +780,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			// Account view: focus into FAQ for scrolling
-			if m.ViewingAccount && m.AccountCursor == 1 && !m.FaqFocused {
+			if m.currentPage == accountPage && m.AccountCursor == 1 && !m.FaqFocused {
 				m.FaqFocused = true
 				m.ScrollOffset = 0
 				return m, nil
 			}
 			// Proceed to checkout from cart
-			if m.ViewingCart && m.CheckoutStep == 0 && len(m.Cart) > 0 {
-				m.CheckoutStep = 1
+			if m.currentPage == cartPage && len(m.Cart) > 0 {
+				m = m.SwitchPage(shippingPage)
 				return m, m.fetchAddressesCmd()
 			}
 
 		case "esc":
 			// Unfocus FAQ scrolling
-			if m.ViewingAccount && m.FaqFocused {
+			if m.currentPage == accountPage && m.FaqFocused {
 				m.FaqFocused = false
 				m.ScrollOffset = 0
 				return m, nil
 			}
 			// Navigate back through order view states
-			if m.ViewingAccount && m.OrderViewState > 0 {
+			if m.currentPage == accountPage && m.OrderViewState > 0 {
 				m.OrderViewState--
 				m.ScrollOffset = 0
 				return m, nil
 			}
 			// From confirmation, go back to shop
-			if m.ViewingCart && m.CheckoutStep == 3 {
-				m.ViewingCart = false
-				m.CheckoutStep = 0
+			if m.currentPage == confirmPage {
+				m = m.SwitchPage(shopPage)
 				m.ShippingForm = nil
 				m.PaymentForm = nil
 				m.ShippingInfo = nil
@@ -812,16 +821,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return nil
 				}
 			}
-			// Go back in checkout flow
-			if m.ViewingCart && m.CheckoutStep > 0 {
-				m.CheckoutStep--
-				m.ShippingForm = nil
-				m.PaymentForm = nil
-				return m, nil
-			}
 
 		case "up", "k":
-			if m.ViewingAccount {
+			if m.currentPage == accountPage {
 				if m.FaqFocused {
 					// Scroll FAQ content up
 					m.ScrollOffset -= 3
@@ -846,9 +848,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.AccountCursor--
 					m.ScrollOffset = 0
 				}
-			} else if !m.ViewingCart && !m.ViewingAccount && m.Cursor > 0 {
+			} else if m.currentPage == shopPage && m.Cursor > 0 {
 				m.Cursor--
-			} else if m.ViewingCart && m.CartCursor > 0 {
+			} else if m.currentPage == cartPage && m.CartCursor > 0 {
 				m.CartCursor--
 				// Auto-scroll to keep cursor visible (each cart item is ~5 lines)
 				itemHeight := 5
@@ -859,7 +861,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "down", "j":
-			if m.ViewingAccount {
+			if m.currentPage == accountPage {
 				if m.FaqFocused {
 					// Scroll FAQ content down
 					m.ScrollOffset += 3
@@ -894,9 +896,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.AccountCursor++
 					m.ScrollOffset = 0
 				}
-			} else if !m.ViewingCart && !m.ViewingAccount && m.Cursor < len(m.Coffees)-1 {
+			} else if m.currentPage == shopPage && m.Cursor < len(m.Coffees)-1 {
 				m.Cursor++
-			} else if m.ViewingCart && m.CartCursor < len(m.Cart)-1 {
+			} else if m.currentPage == cartPage && m.CartCursor < len(m.Cart)-1 {
 				m.CartCursor++
 				// Auto-scroll to keep cursor visible (each cart item is ~5 lines)
 				itemHeight := 5
@@ -919,7 +921,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "pgup", "ctrl+u":
-			if m.ViewingAccount {
+			if m.currentPage == accountPage {
 				// Only scroll when focused into scrollable content
 				if m.FaqFocused || m.OrderViewState >= 2 {
 					m.ScrollOffset -= 3
@@ -936,7 +938,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "pgdown", "ctrl+d":
-			if m.ViewingAccount {
+			if m.currentPage == accountPage {
 				// Only scroll when focused into scrollable content
 				if m.FaqFocused || m.OrderViewState >= 2 {
 					m.ScrollOffset += 3
@@ -951,7 +953,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "+", "=":
-			if !m.ViewingCart && !m.ViewingAccount {
+			if m.currentPage == shopPage {
 				// Increment quantity in shop view (keyed by CoffeeID)
 				coffeeID := m.Coffees[m.Cursor].ID
 				if item, exists := m.Cart[coffeeID]; exists {
@@ -964,7 +966,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, m.syncCartItemCmd(coffeeID, m.Cart[coffeeID].Quantity)
-			} else if m.ViewingCart {
+			} else if m.currentPage == cartPage {
 				// Increment quantity in cart view
 				cartItems := m.GetCartItemsSlice()
 				if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
@@ -974,7 +976,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "-", "_":
-			if !m.ViewingCart && !m.ViewingAccount {
+			if m.currentPage == shopPage {
 				// Decrement quantity in shop view (keyed by CoffeeID)
 				coffeeID := m.Coffees[m.Cursor].ID
 				if item, exists := m.Cart[coffeeID]; exists {
@@ -992,7 +994,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, m.syncCartItemCmd(coffeeID, newQty)
 				}
-			} else if m.ViewingCart {
+			} else if m.currentPage == cartPage {
 				// Decrement quantity in cart view
 				cartItems := m.GetCartItemsSlice()
 				if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
@@ -1487,8 +1489,6 @@ func NewModel(username string) Model {
 		AccountCursor:  0,
 		OrderCursor:    0,
 		OrderViewState: 0,
-		ViewingCart:    false,
-		ViewingAccount: false,
 		Loading:        true,
 		APIClient:      api.NewClient("http://localhost:8080", ""),
 		StripeKey:      os.Getenv("STRIPE_PUBLIC_KEY"),

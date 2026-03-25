@@ -68,62 +68,16 @@ func (m Model) View() string {
 		marginBottom = 0
 	}
 
-	// Build main content based on view
 	var content string
 	if m.Loading {
-		loadingStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("205")).
-			Padding(2, 4)
+		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Padding(2, 4)
 		content = loadingStyle.Render("Loading products from API...")
 	} else if m.ErrorMsg != "" {
-		errorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196")).
-			Background(lipgloss.Color("52")).
-			Padding(0, 1).
-			MarginBottom(1)
-		errorBanner := errorStyle.Render("⚠ " + m.ErrorMsg)
-
-		if m.ViewingAccount {
-			content = errorBanner + "\n" + m.BuildAccountView(availableContentHeight)
-		} else if m.ViewingCart && m.CheckoutStep == 1 {
-			if m.ShippingView == 0 && m.ShippingForm == nil {
-				content = errorBanner + "\n" + m.RenderAddressList()
-			} else if m.ShippingForm != nil {
-				content = errorBanner + "\n" + m.RenderShippingForm(m.ShippingForm)
-			}
-		} else if m.ViewingCart && m.CheckoutStep == 2 && m.CheckingOut {
-			content = errorBanner + "\n  submitting order..."
-		} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentView == 0 && m.PaymentForm == nil {
-			content = errorBanner + "\n" + m.RenderCardList()
-		} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentForm != nil {
-			content = errorBanner + "\n" + m.RenderPaymentForm(m.PaymentForm)
-		} else if m.ViewingCart && m.CheckoutStep == 3 {
-			content = errorBanner + "\n" + m.RenderConfirmation()
-		} else if m.ViewingCart {
-			content = errorBanner + "\n" + m.BuildCartView()
-		} else {
-			content = errorBanner + "\n" + m.BuildShopView()
-		}
-	} else if m.ViewingAccount {
-		content = m.BuildAccountView(availableContentHeight)
-	} else if m.ViewingCart && m.CheckoutStep == 1 {
-		if m.ShippingView == 0 && m.ShippingForm == nil {
-			content = m.RenderAddressList()
-		} else if m.ShippingForm != nil {
-			content = m.RenderShippingForm(m.ShippingForm)
-		}
-	} else if m.ViewingCart && m.CheckoutStep == 2 && m.CheckingOut {
-		content = "  submitting order..."
-	} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentView == 0 && m.PaymentForm == nil {
-		content = m.RenderCardList()
-	} else if m.ViewingCart && m.CheckoutStep == 2 && m.PaymentForm != nil {
-		content = m.RenderPaymentForm(m.PaymentForm)
-	} else if m.ViewingCart && m.CheckoutStep == 3 {
-		content = m.RenderConfirmation()
-	} else if m.ViewingCart {
-		content = m.BuildCartView()
+		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Background(lipgloss.Color("52")).Padding(0, 1).MarginBottom(1)
+		errorBanner := errorStyle.Render(m.ErrorMsg)
+		content = errorBanner + "\n" + m.buildPageContent(availableContentHeight)
 	} else {
-		content = m.BuildShopView()
+		content = m.buildPageContent(availableContentHeight)
 	}
 
 	// Split content into lines and handle scrolling
@@ -132,7 +86,7 @@ func (m Model) View() string {
 
 	// Skip global scroll when account view handles its own scrolling
 	// (order list/detail and FAQ focused use internal scrolling in BuildAccountView)
-	accountHandlesScroll := m.ViewingAccount && (m.OrderViewState >= 1 || m.FaqFocused)
+	accountHandlesScroll := m.currentPage == accountPage && (m.OrderViewState >= 1 || m.FaqFocused)
 	if !accountHandlesScroll {
 		// Ensure scroll offset is within bounds
 		if m.ScrollOffset < 0 {
@@ -201,4 +155,30 @@ func (m Model) View() string {
 		lipgloss.Center,
 		constrained,
 	)
+}
+
+func (m Model) buildPageContent(height int) string {
+	switch m.currentPage {
+	case accountPage:
+		return m.BuildAccountView(height)
+	case shippingPage:
+		if m.ShippingView == 0 && m.ShippingForm == nil {
+			return m.RenderAddressList()
+		}
+		return m.RenderShippingForm(m.ShippingForm)
+	case paymentPage:
+		if m.CheckingOut {
+			return "  submitting order..."
+		}
+		if m.PaymentView == 0 && m.PaymentForm == nil {
+			return m.RenderCardList()
+		}
+		return m.RenderPaymentForm(m.PaymentForm)
+	case confirmPage:
+		return m.RenderConfirmation()
+	case cartPage:
+		return m.BuildCartView()
+	default:
+		return m.BuildShopView()
+	}
 }

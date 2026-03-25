@@ -6,7 +6,7 @@ import (
 
 func (m Model) BuildBreadcrumbs() string {
 	// Only show breadcrumbs in cart view
-	if !m.ViewingCart {
+	if !m.inCartFlow() {
 		return ""
 	}
 
@@ -31,7 +31,7 @@ func (m Model) BuildBreadcrumbs() string {
 	}
 
 	// Get current checkout step from model
-	currentStep := m.CheckoutStep
+	currentStep := m.checkoutStep()
 
 	var items []string
 	for i, label := range labels {

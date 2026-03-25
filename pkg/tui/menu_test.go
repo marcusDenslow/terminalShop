@@ -21,10 +21,8 @@ func TestModel_BuildMenuView(t *testing.T) {
 		Cart            map[uint]*models.CartItem
 		CartCursor      int
 		AccountCursor   int
-		CheckoutStep    int
 		ScrollOffset    int
-		ViewingCart     bool
-		ViewingAccount  bool
+		currentPage     page
 		viewportWidth   int
 		viewportHeight  int
 		widthContainer  int
@@ -68,10 +66,8 @@ func TestModel_BuildMenuView(t *testing.T) {
 				Cart:            tt.fields.Cart,
 				CartCursor:      tt.fields.CartCursor,
 				AccountCursor:   tt.fields.AccountCursor,
-				CheckoutStep:    tt.fields.CheckoutStep,
 				ScrollOffset:    tt.fields.ScrollOffset,
-				ViewingCart:     tt.fields.ViewingCart,
-				ViewingAccount:  tt.fields.ViewingAccount,
+				currentPage:     tt.fields.currentPage,
 				viewportWidth:   tt.fields.viewportWidth,
 				viewportHeight:  tt.fields.viewportHeight,
 				widthContainer:  tt.fields.widthContainer,
