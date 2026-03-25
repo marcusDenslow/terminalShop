@@ -62,6 +62,7 @@ func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTMan
 				r.Get("/{id}", cardHandler.GetCard)
 				r.Post("/", cardHandler.SaveCard)
 				r.Delete("/{id}", cardHandler.DeleteCard)
+				r.Put("/{id}/default", cardHandler.SetDefaultCard)
 			})
 
 			// Orders

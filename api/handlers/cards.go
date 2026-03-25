@@ -40,32 +40,6 @@ func (h *CardHandler) GetCards(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *CardHandler) setDefaultCard(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
-	userID := middleware.UserIDFromContext(r.Context())
-
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.ParseUint(idStr, 10, 32)
-	if err != nil {
-		utils.RespondError(w, http.StatusBadRequest, "INVALID_ID", "invalid card id", nil)
-		return
-	}
-
-	var card models.Card
-	if err := db.Where("id = ? AND user_id = ?", id, userID).First(&card).Error; err != nil {
-		utils.RespondError(w, http.StatusNotFound, "CARD_NOT_FOUND", "card not found", nil)
-		return
-	}
-
-	db.Model(&models.Card{}).Where("user_id = ?", userID).Update("id_default", false)
-
-	card.IsDefault = true
-	db.Save(&card)
-
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
-		"card": card,
-	})
-}
 
 // func utils.RespondError(w http.ResponseWriter, statusCode int, code string, message string, details map[string]interface{})
 
@@ -86,6 +60,33 @@ func (h *CardHandler) GetCard(w http.ResponseWriter, r *http.Request) {
 		utils.RespondError(w, http.StatusNotFound, "CARD_NOT_FOUND", "card not found", nil)
 		return
 	}
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+		"card": card,
+	})
+}
+
+func (h *CardHandler) SetDefaultCard(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB()
+	userID := middleware.UserIDFromContext(r.Context())
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_ID", "invalid card id", nil)
+		return
+	}
+
+	var card models.Card
+	if err := db.Where("id = ? AND user_id = ?", id, userID).First(&card).Error; err != nil {
+		utils.RespondError(w, http.StatusNotFound, "CARD_NOT_FOUND", "card not found", nil)
+		return
+	}
+
+	db.Model(&models.Card{}).Where("user_id = ?", userID).Update("id_default", false)
+
+	card.IsDefault = true
+	db.Save(&card)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"card": card,
@@ -233,3 +234,4 @@ func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 		"message": "card deleted",
 	})
 }
+
