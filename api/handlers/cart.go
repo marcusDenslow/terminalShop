@@ -392,6 +392,9 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	piParams.SetIdempotencyKey(fmt.Sprintf("order-%d", order.ID))
+	piParams.Metadata = map[string]string{
+		"order_id": fmt.Sprintf("%d", order.ID),
+	}
 
 	pi, err := paymentintent.New(piParams)
 	if err != nil {

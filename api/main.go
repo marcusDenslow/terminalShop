@@ -10,8 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"terminalShop/pkg/auth"
+	"terminalShop/api/handlers"
 	"terminalShop/api/routes"
+	"terminalShop/pkg/auth"
 	"terminalShop/pkg/config"
 	"terminalShop/pkg/database"
 )
@@ -19,6 +20,8 @@ import (
 const version = "v0.1.0"
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -73,14 +76,30 @@ func main() {
 		}
 	}()
 
+	// Start reconciliation job. runs every 5 minutes to catch any orders
+	// that were charged but not recorded due to a crash.
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				handlers.ReconcileOrders(cfg.StripeSecretKey)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	log.Println("API server started. Press Ctrl+C to shutdown.")
 
 	// Block until signal received
 	<-done
+	cancel()
 	log.Println("Server is shutting down...")
 
 	// Graceful shutdown with 30 second timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
