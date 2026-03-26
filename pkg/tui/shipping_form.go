@@ -383,7 +383,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		case "d", "x":
 			if m.AddressCursor < len(m.SavedAddresses) {
 				addr := m.SavedAddresses[m.AddressCursor]
-				m.SavedAddresses = append(m.SavedAddresses[:m.AddressCursor], m.SavedAddresses[m.AddressCursor])
+				m.SavedAddresses = append(m.SavedAddresses[:m.AddressCursor], m.SavedAddresses[m.AddressCursor+1:]...)
 				if m.AddressCursor >= len(m.SavedAddresses) && m.AddressCursor > 0 {
 					m.AddressCursor--
 				}
