@@ -38,6 +38,7 @@ const (
 	paymentPage
 	confirmPage
 	accountPage
+	splashPage
 )
 
 // This msg is sent after a debounce delay to apply a pending resize.
@@ -116,6 +117,11 @@ type Model struct {
 	// Static content
 	FAQs       []FAQ // loaded from embedded faq.json
 	FaqFocused bool  // true when FAQ detail is focused
+
+	// Splash screen
+	splashDataReady bool // true when products have loaded
+	splashDelayDone bool // true when minimum display time has elapsed
+	splashCursor    bool // toggles for blinking cursor animation
 
 }
 
@@ -217,7 +223,16 @@ func (m Model) fetchProductsCmd() tea.Msg {
 
 func (m Model) Init() tea.Cmd {
 	// Fetch products and cart from API on startup, and schedule token refresh
-	cmds := []tea.Cmd{m.fetchProductsCmd, m.fetchCartCmd}
+	cmds := []tea.Cmd {
+		m.fetchProductsCmd,
+		m.fetchCartCmd,
+		tea.Tick(1500*time.Millisecond, func(t time.Time) tea.Msg {
+			return DelayCompleteMsg{}
+		}),
+		tea.Tick(700*time.Microsecond, func(t time.Time) tea.Msg {
+			return splashCursorTickMsg{}
+		}),
+	}
 	if m.User != nil && m.AuthFingerprintKey != "" {
 		cmds = append(cmds, m.scheduleTokenRefreshCmd())
 	}
@@ -232,7 +247,6 @@ func (m Model) resetPageState() Model {
 	m.FaqFocused = false
 	return m
 }
-
 
 type StripeTokenMsg struct {
 	TokenID string
@@ -642,6 +656,7 @@ func (m Model) GetCartItemsSlice() []*models.CartItem {
 func NewModel(username string) Model {
 	m := Model{
 		Username: username,
+		currentPage: splashPage,
 		Coffees: []models.Coffee{
 			{
 				Name:        "Espresso",

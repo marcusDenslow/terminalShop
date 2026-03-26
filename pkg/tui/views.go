@@ -32,6 +32,10 @@ func (m Model) View() string {
 		return m.ResizeView()
 	}
 
+	if m.currentPage == splashPage {
+		return m.SplashView()
+	}
+
 	// If the menu modal is showing, render it full-screen (bypass container)
 	if m.ShowingMenu {
 		return m.BuildMenuView()

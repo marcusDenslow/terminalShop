@@ -47,6 +47,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Coffees = msg.Products
 			m.ErrorMsg = ""
 		}
+		m.splashDataReady = true
+		if m.currentPage == splashPage && m.splashDelayDone {
+			return m.SwitchPage(shopPage), nil
+		}
 		return m, nil
 	case CartFetchedMsg:
 		if msg.Err == nil && msg.Cart != nil {
@@ -88,6 +92,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ErrorMsg = fmt.Sprintf("failed to delete card: %v", msg.Err)
 		}
 		return m, nil
+	case DelayCompleteMsg:
+		m.splashDelayDone = true
+		if m.currentPage == splashPage && m.splashDataReady {
+			return m.SwitchPage(shopPage), nil
+		}
+		return m, nil
+	case splashCursorTickMsg:
+		m.splashCursor = !m.splashCursor
+		return m, tea.Tick(700*time.Millisecond, func(t time.Time) tea.Msg {
+			return splashCursorTickMsg{}
+		})
 	case tea.KeyMsg:
 		// If a form is active, skip global keys — let the page handler own input
 		if m.ShippingForm != nil || m.PaymentForm != nil {
