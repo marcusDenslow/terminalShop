@@ -35,13 +35,13 @@ func (m Model) BuildMenuView() string {
 	hint := base.Render("press esc to close")
 
 	itemCount := 0
-	total := 0.0
+	total := 0
 	for _, item := range m.Cart {
-		total += float64(item.Quantity) * item.Coffee.Price
+		total += item.Quantity * item.Coffee.Price
 		itemCount += item.Quantity
 	}
 
-	cartHint := base.Render(fmt.Sprintf("cart $%.2f [%d]", total, itemCount))
+	cartHint := base.Render(fmt.Sprintf("cart $%.2f [%d]", float64(total)/100, itemCount))
 
 	assembled := lipgloss.JoinVertical(
 		lipgloss.Center,

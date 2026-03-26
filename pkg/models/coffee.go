@@ -13,7 +13,7 @@ type Coffee struct {
 	RoastType   string         `gorm:"size:100" json:"roast_type"`
 	Ounces      int            `json:"ounces"`
 	BeanType    string         `gorm:"size:100" json:"bean_type"`
-	Price       float64        `gorm:"not null" json:"price"`
+	Price       int            `gorm:"not null" json:"price"`
 	Color       string         `gorm:"size:7" json:"color"` // Hex color for background
 	Description string         `gorm:"type:text" json:"description"`
 	CreatedAt   time.Time      `json:"created_at"`
@@ -25,7 +25,6 @@ type Coffee struct {
 func (Coffee) TableName() string {
 	return "coffees"
 }
-
 
 // AccountMenuItems something
 var AccountMenuItems = []string{

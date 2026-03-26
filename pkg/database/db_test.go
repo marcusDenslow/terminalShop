@@ -108,7 +108,7 @@ func TestSeed(t *testing.T) {
 			t.Errorf("Unexpected product name: %s", p.Name)
 		}
 		if p.Price <= 0 {
-			t.Errorf("Product %s has invalid price: %f", p.Name, p.Price)
+			t.Errorf("Product %s has invalid price: %d", p.Name, p.Price)
 		}
 	}
 }

@@ -50,14 +50,13 @@ func cartResponse(cart *models.Cart) map[string]interface{} {
 	subtotal := 0
 	itemsData := make([]map[string]interface{}, 0, len(items))
 	for _, item := range items {
-		priceInCents := int(item.Coffee.Price * 100)
-		lineTotal := priceInCents * item.Quantity
+		lineTotal := item.Coffee.Price * item.Quantity
 		subtotal += lineTotal
 		itemsData = append(itemsData, map[string]interface{}{
 			"id":        item.ID,
 			"coffee_id": item.CoffeeID,
 			"quantity":  item.Quantity,
-			"subtotal":  lineTotal,
+			"subtotal":  lineTotal, // already in cents
 			"coffee":    item.Coffee,
 		})
 	}
@@ -296,13 +295,12 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	var subtotal int
 	var orderItems []models.OrderItem
 	for _, item := range items {
-		priceInCents := int(item.Coffee.Price * 100)
-		lineTotal := priceInCents * item.Quantity
+		lineTotal := item.Coffee.Price * item.Quantity
 		subtotal += lineTotal
 		orderItems = append(orderItems, models.OrderItem{
 			CoffeeID: item.CoffeeID,
 			Name:     item.Coffee.Name,
-			Price:    priceInCents,
+			Price:    item.Coffee.Price,
 			Quantity: item.Quantity,
 		})
 	}

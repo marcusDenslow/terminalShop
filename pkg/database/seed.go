@@ -27,7 +27,7 @@ func Seed(db *gorm.DB) error {
 			RoastType:   "Dark Roast",
 			Ounces:      2,
 			BeanType:    "Arabica",
-			Price:       3.50,
+			Price:       350, // $3.50
 			Color:       "#8B4513",
 			Description: "Bold and intense coffee with a rich crema",
 		},
@@ -36,7 +36,7 @@ func Seed(db *gorm.DB) error {
 			RoastType:   "Medium Roast",
 			Ounces:      8,
 			BeanType:    "Arabica",
-			Price:       4.00,
+			Price:       400, // $4.00
 			Color:       "#A0522D",
 			Description: "Smooth and balanced espresso diluted with hot water",
 		},
@@ -45,7 +45,7 @@ func Seed(db *gorm.DB) error {
 			RoastType:   "Medium Roast",
 			Ounces:      6,
 			BeanType:    "Arabica",
-			Price:       4.50,
+			Price:       450, // $4.50
 			Color:       "#C4A574",
 			Description: "Espresso with steamed milk and a thick layer of foam",
 		},
@@ -54,7 +54,7 @@ func Seed(db *gorm.DB) error {
 			RoastType:   "Medium Roast",
 			Ounces:      12,
 			BeanType:    "Arabica",
-			Price:       5.00,
+			Price:       500, // $5.00
 			Color:       "#D2B48C",
 			Description: "Creamy espresso with plenty of steamed milk and a touch of foam",
 		},
@@ -63,7 +63,7 @@ func Seed(db *gorm.DB) error {
 			RoastType:   "Dark Roast",
 			Ounces:      12,
 			BeanType:    "Arabica",
-			Price:       5.50,
+			Price:       550, // $5.50
 			Color:       "#8B4513",
 			Description: "Chocolate and espresso combined with steamed milk. Sweet and indulgent.",
 		},
@@ -72,7 +72,7 @@ func Seed(db *gorm.DB) error {
 			RoastType:   "Dark Roast",
 			Ounces:      3,
 			BeanType:    "Robusta Blend",
-			Price:       4.25,
+			Price:       425, // $4.25
 			Color:       "#DAA520",
 			Description: "Espresso 'marked' with a dollop of foamed milk. Small but mighty, like a tiny caffeinated warrior.",
 		},

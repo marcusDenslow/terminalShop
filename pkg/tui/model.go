@@ -1433,7 +1433,7 @@ func NewModel(username string) Model {
 				RoastType:   "Dark Roast",
 				Ounces:      2,
 				BeanType:    "Arabica",
-				Price:       3.50,
+				Price:       350, // $3.50
 				Color:       "#8B4513",
 				Description: "A bold, concentrated shot of pure coffee bliss. Perfect for those who need an immediate caffeine injection to survive the day.",
 			},
@@ -1442,7 +1442,7 @@ func NewModel(username string) Model {
 				RoastType:   "Medium Roast",
 				Ounces:      12,
 				BeanType:    "Arabica Blend",
-				Price:       5.00,
+				Price:       500, // $5.00
 				Color:       "#D2691E",
 				Description: "Smooth espresso paired with steamed milk and a light layer of foam. For when you want coffee but also want to feel fancy about it.",
 			},
@@ -1451,7 +1451,7 @@ func NewModel(username string) Model {
 				RoastType:   "Medium Roast",
 				Ounces:      8,
 				BeanType:    "Italian Blend",
-				Price:       4.50,
+				Price:       450, // $4.50
 				Color:       "#CD853F",
 				Description: "Equal parts espresso, steamed milk, and foam. The classic Italian choice for people who know what they're doing.",
 			},
@@ -1460,7 +1460,7 @@ func NewModel(username string) Model {
 				RoastType:   "Dark Roast",
 				Ounces:      16,
 				BeanType:    "Arabica",
-				Price:       4.00,
+				Price:       400, // $4.00
 				Color:       "#A0522D",
 				Description: "Espresso with hot water. Simple, strong, and no-nonsense. This is coffee for people who actually like the taste of coffee.",
 			},
@@ -1469,7 +1469,7 @@ func NewModel(username string) Model {
 				RoastType:   "Medium Roast",
 				Ounces:      16,
 				BeanType:    "Colombian",
-				Price:       5.50,
+				Price:       550, // $5.50
 				Color:       "#4682B4",
 				Description: "Some really good Mocha",
 			},
@@ -1478,7 +1478,7 @@ func NewModel(username string) Model {
 				RoastType:   "Dark Roast",
 				Ounces:      3,
 				BeanType:    "Robusta Blend",
-				Price:       4.25,
+				Price:       425, // $4.25
 				Color:       "#DAA520",
 				Description: "Espresso 'marked' with a dollop of foamed milk. Small but mighty, like a tiny caffeinated warrior.",
 			},

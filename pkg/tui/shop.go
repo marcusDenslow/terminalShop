@@ -88,7 +88,7 @@ func (m Model) BuildShopView() string {
 			selectedCoffee.RoastType,
 			selectedCoffee.Ounces,
 			selectedCoffee.BeanType)) + "\n\n"
-		detailView += priceStyle.Render(fmt.Sprintf("$%.2f", selectedCoffee.Price)) + "\n\n"
+		detailView += priceStyle.Render(fmt.Sprintf("$%.2f", float64(selectedCoffee.Price)/100)) + "\n\n"
 		detailView += descStyle.Render(selectedCoffee.Description) + "\n\n"
 		detailView += quantityStyle.Render(fmt.Sprintf("-  %d  +", quantity)) + "\n"
 	}

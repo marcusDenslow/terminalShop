@@ -8,10 +8,10 @@ import (
 
 func (m Model) BuildHeader() string {
 	// Calculate cart total and item count
-	total := 0.0
+	total := 0
 	itemCount := 0
 	for _, item := range m.Cart {
-		total += float64(item.Quantity) * item.Coffee.Price
+		total += item.Quantity * item.Coffee.Price
 		itemCount += item.Quantity
 	}
 
@@ -29,14 +29,14 @@ func (m Model) BuildHeader() string {
 		cartKeybind = boldWhiteStyle.Render("c")
 		cartName = boldWhiteStyle.Render("cart")
 		cartInfo = fmt.Sprintf(" %s %s",
-			boldWhiteStyle.Render(fmt.Sprintf("$%.2f", total)),
+			boldWhiteStyle.Render(fmt.Sprintf("$%.2f", float64(total)/100)),
 			itemCountText)
 	} else {
 		// Inactive: bold gray keybind, gray name
 		cartKeybind = boldGrayStyle.Render("c")
 		cartName = grayStyle.Render("cart")
 		cartInfo = fmt.Sprintf(" %s %s",
-			boldWhiteStyle.Render(fmt.Sprintf("$%.2f", total)),
+			boldWhiteStyle.Render(fmt.Sprintf("$%.2f", float64(total)/100)),
 			itemCountText)
 	}
 	cartTab := cartKeybind + " " + cartName + cartInfo

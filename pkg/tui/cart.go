@@ -27,7 +27,7 @@ func (m Model) BuildCartView() string {
 	}
 
 	for idx, item := range itemSlice {
-		itemTotal := float64(item.Quantity) * item.Coffee.Price
+		itemTotal := item.Quantity * item.Coffee.Price
 
 		// Left side: name and individual price
 		nameStyle := lipgloss.NewStyle().
@@ -51,13 +51,13 @@ func (m Model) BuildCartView() string {
 
 		// Build content with proper spacing
 		nameText := nameStyle.Render(item.Coffee.Name)
-		individualPriceText := individualPriceStyle.Render(fmt.Sprintf(" $%.2f", item.Coffee.Price))
+		individualPriceText := individualPriceStyle.Render(fmt.Sprintf(" $%.2f", float64(item.Coffee.Price)/100))
 		infoText := infoStyle.Render(fmt.Sprintf("%s | %doz | %s",
 			item.Coffee.RoastType,
 			item.Coffee.Ounces,
 			item.Coffee.BeanType))
 		quantityText := quantityStyle.Render(fmt.Sprintf("-  %d  +", item.Quantity))
-		totalPriceText := totalPriceStyle.Render(fmt.Sprintf("$%.2f", itemTotal))
+		totalPriceText := totalPriceStyle.Render(fmt.Sprintf("$%.2f", float64(itemTotal)/100))
 
 		// Calculate spacing
 		nameAndPriceWidth := lipgloss.Width(nameText) + lipgloss.Width(individualPriceText)

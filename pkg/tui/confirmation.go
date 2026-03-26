@@ -45,15 +45,15 @@ func (m Model) RenderConfirmation() string {
 
 	// Cart summary
 	cartSection := ""
-	total := 0.0
+	total := 0
 	items := m.GetCartItemsSlice()
 	for _, item := range items {
-		line := fmt.Sprintf("  %s x%d  $%.2f", item.Coffee.Name, item.Quantity, item.Coffee.Price*float64(item.Quantity))
+		line := fmt.Sprintf("  %s x%d  $%.2f", item.Coffee.Name, item.Quantity, float64(item.Coffee.Price * item.Quantity)/100) 
 		cartSection += sectionStyle.Render(line) + "\n"
-		total += item.Coffee.Price * float64(item.Quantity)
+		total += item.Coffee.Price * item.Quantity
 	}
 	cartSection += sectionStyle.Render(
-		labelStyle.Render("Total: ") + valueStyle.Render(fmt.Sprintf("$%.2f", total)),
+		labelStyle.Render("Total: ") + valueStyle.Render(fmt.Sprintf("$%.2f", float64(total)/100)),
 	)
 
 	success := successStyle.Render("Order placed successfully!")
