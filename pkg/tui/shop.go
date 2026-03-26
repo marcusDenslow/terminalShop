@@ -2,8 +2,11 @@ package tui
 
 import (
 	"fmt"
+	
+	"terminalShop/pkg/models"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) BuildShopView() string {
@@ -111,4 +114,50 @@ func (m Model) BuildShopView() string {
 		"  ",
 		detailContainer.Render(detailView),
 	)
+}
+
+func (m Model) ShopUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch keyMsg.String() {
+	case "up", "k":
+		if m.Cursor > 0 {
+			m.Cursor--
+		}
+	case "down", "j":
+		if m.Cursor < len(m.Coffees)-1 {
+			m.Cursor++
+		}
+	case "+", "=":
+		coffeeID := m.Coffees[m.Cursor].ID
+		if item, exists := m.Cart[coffeeID]; exists {
+			item.Quantity++
+		} else {
+			m.Cart[coffeeID] = &models.CartItem{
+				CoffeeID: coffeeID,
+				Coffee: m.Coffees[m.Cursor],
+				Quantity: 1,
+			}
+		}
+		return m, m.syncCartItemCmd(coffeeID, m.Cart[coffeeID].Quantity)
+	case "-", "_":
+		coffeeID := m.Coffees[m.Cursor].ID
+		if item, exists := m.Cart[coffeeID]; exists {
+			item.Quantity--
+			newQty := item.Quantity
+			if item.Quantity <= 0 {
+				delete(m.Cart, coffeeID)
+				if len(m.Cart) == 0 {
+					m.CardCursor = 0
+				} else if m.CartCursor >= len(m.Cart) {
+					m.CartCursor = len(m.Cart) - 1
+				}
+				newQty = 0
+			}
+			return m, m.syncCartItemCmd(coffeeID, newQty)
+		}
+	}
+	return m, nil
 }

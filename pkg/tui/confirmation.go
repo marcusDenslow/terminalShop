@@ -3,7 +3,10 @@ package tui
 import (
 	"fmt"
 
+	"terminalShop/pkg/models"
+
 	"github.com/charmbracelet/lipgloss"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // RenderConfirmation renders the order confirmation view
@@ -68,4 +71,28 @@ func (m Model) RenderConfirmation() string {
 		"",
 		success,
 	)
+}
+
+func (m Model) ConfirmUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	if keyMsg.String() != "esc" {
+		return m, nil
+	}
+
+	m = m.SwitchPage(shopPage)
+	m.ShippingInfo = nil
+	m.CheckingOut = false
+	m.Cart = make(map[uint]*models.CartItem)
+	m.CartCursor = 0 
+	m = m.resetPageState()
+	return m, func() tea.Msg {
+		if m.APIClient != nil {
+			_ = m.APIClient.ClearCart()
+		}
+		return nil
+	}
 }

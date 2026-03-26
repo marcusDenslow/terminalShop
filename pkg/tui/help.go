@@ -1,6 +1,7 @@
 package tui
 
 import (
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -102,4 +103,18 @@ func (m Model) BuildHelpView() string {
 		lipgloss.Center,
 		assembled,
 	)
+}
+
+func (m Model) HelpUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch keyMsg.String() {
+	case "esc", "?":
+		m.ShowingHelp = false
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
 }

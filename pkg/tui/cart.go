@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -110,4 +111,71 @@ func (m Model) BuildCartView() string {
 	}
 
 	return cartItems
+}
+
+func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch keyMsg.String() {
+	case "up", "k":
+		if m.CartCursor > 0 {
+			m.CartCursor--
+			itemHeight := 5
+			targetLine := m.CartCursor * itemHeight
+			if targetLine < m.ScrollOffset {
+				m.ScrollOffset = targetLine
+			}
+		}
+	case "down", "j":
+		if m.CartCursor < len(m.Cart)-1 {
+			m.CartCursor++
+			itemHeight := 5
+			targetLineEnd := (m.CartCursor * itemHeight) + itemHeight
+			viewportHeight := m.heightContainer - 9
+			if viewportHeight < 6 {
+				viewportHeight = 6
+			}
+			if targetLineEnd > m.ScrollOffset+viewportHeight {
+				m.ScrollOffset = targetLineEnd - viewportHeight
+			}
+		}
+	case "pgup", "ctrl+u":
+		m.ScrollOffset -= 3
+		if m.ScrollOffset < 0 {
+			m.ScrollOffset = 0
+		}
+	case "pgdown", "ctrl+d":
+		m.ScrollOffset += 3
+	case "+", "=":
+		cartItems := m.GetCartItemsSlice()
+		if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
+			cartItems[m.CardCursor].Quantity++
+			return m, m.syncCartItemCmd(cartItems[m.CartCursor].CoffeeID, cartItems[m.CartCursor].Quantity)
+		}
+	case "-", "_":
+		cartItems := m.GetCartItemsSlice()
+		if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
+			coffeeID := cartItems[m.CartCursor].CoffeeID
+			cartItems[m.CartCursor].Quantity--
+			newQty := cartItems[m.CartCursor].Quantity
+			if cartItems[m.CartCursor].Quantity <= 0 {
+				delete(m.Cart, coffeeID)
+				if len(m.Cart) == 0 {
+					m.CartCursor = 0
+				} else if m.CartCursor >= len(m.Cart) {
+					m.CartCursor = len(m.Cart) - 1
+				}
+				newQty = 0
+			}
+			return m, m.syncCartItemCmd(coffeeID, newQty)
+		}
+	case "p", "enter":
+		if len(m.Cart) > 0 {
+			m = m.SwitchPage(shippingPage)
+			return m, m.fetchAddressesCmd()
+		}
+	}
+	return m, nil
 }

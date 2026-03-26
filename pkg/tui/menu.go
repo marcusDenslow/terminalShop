@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 
@@ -61,4 +62,34 @@ func (m Model) BuildMenuView() string {
 		assembled,
 		)
 	
+}
+
+func (m Model) MenuUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch keyMsg.String() {
+	case "s":
+		m.ShowingMenu = false
+		return m.SwitchPage(shopPage).resetPageState(), nil
+	case "a":
+		m.ShowingMenu = false
+		m = m.SwitchPage(accountPage).resetPageState()
+		if !m.OrdersLoaded {
+			return m, m.fetchOrdersCmd()
+		}
+		return m, nil
+	case "c":
+		m.ShowingMenu = false
+		return m.SwitchPage(cartPage).resetPageState(), nil
+	case "esc":
+		m.ShowingMenu = false
+	case "?":
+		m.ShowingMenu = false
+		m.ShowingHelp = true
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	}
+	return m, nil
 }

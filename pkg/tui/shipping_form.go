@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"terminalShop/pkg/models"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -303,4 +305,117 @@ func (m Model) RenderAddressList() string {
 	parts = append(parts, strings.Join(lines, "\n"))
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case ShippingFormCompleteMsg:
+		addr := models.Address{
+			Name: msg.Name, Street: msg.Street1, Street2: msg.Street2,
+			City: msg.City, State: msg.State, Country: msg.Country,
+			Zip: msg.Zip, Phone: msg.Phone,
+		}
+		return m, m.saveAddressCmd(addr)
+
+	case AddressesMsg:
+		if msg.Err != nil || len(msg.Addresses) == 0 {
+			m.SavedAddresses = nil
+			m.ShippingView = 1
+			m.ShippingForm = m.InitShippingForm()
+			return m, m.ShippingForm.form.Init()
+		}
+		m.SavedAddresses = msg.Addresses
+		m.ShippingView = 0
+		m.AddressCursor = 0
+		m.ShippingForm = nil
+		return m, nil
+
+	case AddressSavedMsg:
+		if msg.Err != nil {
+			if m.ShippingForm != nil {
+				m.ShippingForm.submitting = false
+				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
+			}
+			m.ErrorMsg = "Invalid address. Currently only US and Norwegian addresses are supported."
+			return m, m.ShippingForm.form.Init()
+		}
+		m.ShippingInfo = &msg.Address
+		m.ShippingForm = nil
+		m = m.SwitchPage(paymentPage)
+		m.SelectedCard = nil
+		return m, m.fetchCardsCmd()
+
+	case ShippingFormErrorMsg:
+		m.ErrorMsg = msg.Message
+		return m, nil
+	}
+
+	// Address list navigation
+	if m.ShippingView == 0 && m.ShippingForm == nil {
+		keyMsg, ok := msg.(tea.KeyMsg)
+		if !ok {
+			return m, nil
+		}
+		m.ErrorMsg = ""
+		switch keyMsg.String() {
+		case "esc":
+			m = m.SwitchPage(cartPage)
+			return m, nil
+		case "up", "k":
+			if m.AddressCursor > 0 {
+				m.AddressCursor--
+			}
+		case "down", "j":
+			if m.AddressCursor < len(m.SavedAddresses) {
+				m.AddressCursor++
+			}
+		case "enter":
+			if m.AddressCursor < len(m.SavedAddresses) {
+				selected := m.SavedAddresses[m.AddressCursor]
+				m.ShippingInfo = &selected
+				m = m.SwitchPage(paymentPage)
+				m.SelectedCard = nil
+				return m, m.fetchCardsCmd()
+			}
+			m.ShippingView = 1
+			m.ShippingForm = m.InitShippingForm()
+			return m, m.ShippingForm.form.Init()
+		case "d", "x":
+			if m.AddressCursor < len(m.SavedAddresses) {
+				addr := m.SavedAddresses[m.AddressCursor]
+				m.SavedAddresses = append(m.SavedAddresses[:m.AddressCursor], m.SavedAddresses[m.AddressCursor])
+				if m.AddressCursor >= len(m.SavedAddresses) && m.AddressCursor > 0 {
+					m.AddressCursor--
+				}
+				if len(m.SavedAddresses) == 0 {
+					m.ShippingView = 1
+					m.ShippingForm = m.InitShippingForm()
+					return m, tea.Batch(m.ShippingForm.form.Init(), m.deleteAddressCmd(addr.ID))
+				}
+				return m, m.deleteAddressCmd(addr.ID)
+			}
+		}
+		return m, nil
+	}
+
+	// Form navigation
+	if m.ShippingForm != nil {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if keyMsg.String() == "esc" {
+				m.ErrorMsg = ""
+				if len(m.SavedAddresses) > 0 {
+					m.ShippingView = 0
+					m.ShippingForm = nil
+					return m, nil
+				}
+				m.ShippingForm = nil
+				m = m.SwitchPage(cartPage)
+				return m, nil
+			}
+			// Clear error only when user starts typing, not on internal huh messages
+			m.ErrorMsg = ""
+		}
+		return m, m.UpdateShippingForm(msg, m.ShippingForm)
+	}
+	return m, nil
 }

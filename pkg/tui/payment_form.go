@@ -283,3 +283,132 @@ func (m Model) RenderCardList() string {
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
+
+// PaymentUpdate handles all messages while on the payment page.
+// Moved from model.go Update() lines 429-578.
+func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case CardsMsg:
+		if msg.Err != nil || len(msg.Cards) == 0 {
+			m.SavedCards = nil
+			m.PaymentView = 1
+			m.PaymentForm = m.InitPaymentForm()
+			return m, m.PaymentForm.form.Init()
+		}
+		m.SavedCards = msg.Cards
+		m.PaymentView = 0
+		m.CardCursor = 0
+		m.PaymentForm = nil
+		return m, nil
+
+	case PaymentFormCompleteMsg:
+		if m.PaymentForm != nil {
+			return m, m.tokenizeCard(msg)
+		}
+		return m, nil
+
+	case StripeTokenMsg:
+		m.PaymentForm = nil
+		m.CheckingOut = true
+		return m, m.saveCardAndConvert(msg)
+
+	case CheckoutResultMsg:
+		m.CheckingOut = false
+		if msg.Err != nil {
+			m.ErrorMsg = fmt.Sprintf("checkout failed: %v", msg.Err)
+			if len(m.SavedCards) > 0 {
+				m.PaymentView = 0
+				m.PaymentForm = nil
+				return m, nil
+			}
+			m.PaymentView = 1
+			m.PaymentForm = m.InitPaymentForm()
+			return m, m.PaymentForm.form.Init()
+		}
+		m = m.SwitchPage(confirmPage)
+		m.OrdersLoaded = false
+		return m, nil
+
+	case StripeTokenErrMsg:
+		if m.PaymentForm != nil {
+			m.PaymentForm.submitting = false
+			m.ErrorMsg = fmt.Sprintf("Payment failed: %v", msg.Err)
+			m.PaymentForm.form = m.buildPaymentForm(m.PaymentForm)
+			return m, m.PaymentForm.form.Init()
+		}
+		m.ErrorMsg = fmt.Sprintf("Payment failed: %v", msg.Err)
+		return m, nil
+
+	case PaymentFormErrorMsg:
+		m.ErrorMsg = msg.Message
+		return m, nil
+	}
+
+	// Card list navigation
+	if m.PaymentView == 0 && m.PaymentForm == nil {
+		keyMsg, ok := msg.(tea.KeyMsg)
+		if !ok || m.CheckingOut {
+			return m, nil
+		}
+		m.ErrorMsg = ""
+		switch keyMsg.String() {
+		case "esc":
+			m = m.SwitchPage(shippingPage)
+			return m, m.fetchAddressesCmd()
+		case "up", "k":
+			if m.CardCursor > 0 {
+				m.CardCursor--
+			}
+		case "down", "j":
+			if m.CardCursor < len(m.SavedCards) {
+				m.CardCursor++
+			}
+		case "enter":
+			if m.CardCursor < len(m.SavedCards) {
+				selected := m.SavedCards[m.CardCursor]
+				m.SelectedCard = &selected
+				m.CheckingOut = true
+				return m, m.checkoutWithSavedCard()
+			}
+			m.PaymentView = 1
+			m.PaymentForm = m.InitPaymentForm()
+			return m, m.PaymentForm.form.Init()
+		case "d", "x":
+			if m.CardCursor < len(m.SavedCards) {
+				card := m.SavedCards[m.CardCursor]
+				m.SavedCards = append(m.SavedCards[:m.CardCursor], m.SavedCards[m.CardCursor+1:]...)
+				if m.CardCursor >= len(m.SavedCards) && m.CardCursor > 0 {
+					m.CardCursor--
+				}
+				if len(m.SavedCards) == 0 {
+					m.PaymentView = 1
+					m.PaymentForm = m.InitPaymentForm()
+					return m, tea.Batch(m.PaymentForm.form.Init(), m.deleteCardCmd(card.ID))
+				}
+				return m, m.deleteCardCmd(card.ID)
+			}
+		}
+		return m, nil
+	}
+
+	// Payment form navigation
+	if m.PaymentForm != nil {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if keyMsg.String() == "esc" {
+				m.ErrorMsg = ""
+				if len(m.SavedCards) > 0 {
+					m.PaymentView = 0
+					m.PaymentForm = nil
+					return m, nil
+				}
+				m.PaymentForm = nil
+				m = m.SwitchPage(shippingPage)
+				return m, m.fetchAddressesCmd()
+			}
+			// Clear error only when user starts typing, not on internal huh messages
+			m.ErrorMsg = ""
+		}
+		return m, m.UpdatePaymentForm(msg, m.PaymentForm)
+	}
+	return m, nil
+}

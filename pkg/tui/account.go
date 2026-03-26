@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"terminalShop/pkg/models"
@@ -126,7 +127,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 			aboutContent += contentStyle.Render("And me:") + "\n\n"
 			aboutContent += userStyle.Render("@marcusDenslow") + "\n\n"
 			aboutContent += contentStyle.Render(wordWrap("This project tries to copy the idea of terminalDotShop, but with one twist: write everything in GO. this is my humble attempt",
-			detailContentWidth)) + "\n"
+				detailContentWidth)) + "\n"
 			aboutContent += accentStyle.Render("Terminal Products, Inc.")
 
 			detailView = titleStyle.Render("About") + "\n\n" + aboutContent
@@ -402,4 +403,99 @@ func (m Model) computeFaqScrollMax() int {
 		maxScroll = 0
 	}
 	return maxScroll
+}
+
+func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch keyMsg.String() {
+	case "up", "k":
+		if m.FaqFocused {
+			m.ScrollOffset -= 3
+			if m.ScrollOffset < 0 {
+				m.ScrollOffset = 0
+			}
+		} else if m.OrderViewState == 1 && m.OrderCursor > 0 {
+			m.OrderCursor--
+			cardHeight := 5
+			if m.heightContainer >= 25 {
+				cardHeight = 7
+			}
+			targetTop := 3 + m.OrderCursor*cardHeight
+			if targetTop < m.ScrollOffset {
+				m.ScrollOffset = targetTop
+			}
+		} else if m.OrderViewState == 0 && m.AccountCursor > 0 {
+			m.AccountCursor--
+			m.ScrollOffset = 0
+		}
+	case "down", "j":
+		if m.FaqFocused {
+			m.ScrollOffset += 3
+			maxScroll := m.computeFaqScrollMax()
+			if m.ScrollOffset > maxScroll {
+				m.ScrollOffset = maxScroll
+			}
+		} else if m.OrderViewState == 1 && m.OrderCursor < len(m.Orders)-1 {
+			m.OrderCursor++
+			cardHeight := 5
+			if m.heightContainer >= 25 {
+				cardHeight = 7
+			}
+			viewportHeight := m.heightContainer - 7
+			if m.size < large {
+				viewportHeight -= len(models.AccountMenuItems) + 1
+			}
+			if viewportHeight < 5 {
+				viewportHeight = 5
+			}
+			targetBottom := 3 + (m.OrderCursor+1)*cardHeight
+			if targetBottom > m.ScrollOffset+viewportHeight {
+				m.ScrollOffset = targetBottom - viewportHeight
+			}
+		} else if m.OrderViewState == 0 && m.AccountCursor < len(models.AccountMenuItems)-1 {
+			m.AccountCursor++
+			m.ScrollOffset = 0
+		}
+	case "pgup", "ctrl+u":
+		if m.FaqFocused || m.OrderViewState >= 2 {
+			m.ScrollOffset -= 3
+			if m.ScrollOffset < 0 {
+				m.ScrollOffset = 0
+			}
+		}
+	case "pgdown", "ctrl+d":
+		if m.FaqFocused || m.OrderViewState >= 2 {
+			m.ScrollOffset += 3
+			maxScroll := m.computeFaqScrollMax()
+			if m.FaqFocused && maxScroll >= 0 && m.ScrollOffset > maxScroll {
+				m.ScrollOffset = maxScroll
+			}
+		}
+	case "p", "enter":
+		if m.AccountCursor == 0 && len(m.Orders) > 0 {
+			if m.OrderViewState == 0 {
+				m.OrderViewState = 1
+				m.OrderCursor = 0
+				m.ScrollOffset = 0
+			} else if m.OrderViewState == 1 {
+				m.OrderViewState = 2
+				m.ScrollOffset = 0
+			}
+		} else if m.AccountCursor == 1 && !m.FaqFocused {
+			m.FaqFocused = true
+			m.ScrollOffset = 0
+		}
+	case "esc":
+		if m.FaqFocused {
+			m.FaqFocused = false
+			m.ScrollOffset = 0
+		} else if m.OrderViewState > 0 {
+			m.OrderViewState--
+			m.ScrollOffset = 0
+		}
+	}
+	return m, nil
 }
