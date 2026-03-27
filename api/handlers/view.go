@@ -28,8 +28,8 @@ func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
 	var products []models.Coffee
 	db.Find(&products)
 
-	var cartItems []models.CartItem
-	db.Where("user_id = ?", userID).Preload("Coffee").Find(&cartItems)
+	var cart models.Cart
+	db.Where("user_id = ?", userID).First(&cart)
 
 	var addresses []models.Address
 	db.Where("user_id = ?", userID).Find(&addresses)
@@ -39,6 +39,10 @@ func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
 
 	var orders []models.Order
 	db.Where("user_id = ?", userID).Preload("Items").Order("created_at desc").Find(&orders)
+	var cartItems []models.CartItem
+	if cart.ID != 0 {
+		db.Where("cart_id = ? AND quantity > 0", cart.ID).Preload("Coffee").Find(&cartItems)
+	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"user":      user.ToPublic(),

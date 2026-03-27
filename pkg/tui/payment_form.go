@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 
+	"terminalShop/pkg/models"
 	"terminalShop/pkg/validate"
 )
 
@@ -327,6 +328,9 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m = m.SwitchPage(confirmPage)
 		m.OrdersLoaded = false
+		m.Cart = make(map[uint]*models.CartItem)
+		m.CartCursor = 0
+		m.ShippingInfo = nil
 		return m, nil
 
 	case StripeTokenErrMsg:

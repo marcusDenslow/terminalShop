@@ -151,7 +151,7 @@ func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case "+", "=":
 		cartItems := m.GetCartItemsSlice()
 		if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
-			cartItems[m.CardCursor].Quantity++
+			cartItems[m.CartCursor].Quantity++
 			return m, m.syncCartItemCmd(cartItems[m.CartCursor].CoffeeID, cartItems[m.CartCursor].Quantity)
 		}
 	case "-", "_":

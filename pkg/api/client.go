@@ -767,5 +767,8 @@ func (c *Client) GetViewInit() (ViewInitData, error) {
 	}
 	var viewResp ViewInitResponse
 
+	if err := json.NewDecoder(resp.Body).Decode(&viewResp); err != nil {
+		return ViewInitData{}, fmt.Errorf("failed to decode view init response: %w", err)
+	}
 	return viewResp.Data, nil
 }

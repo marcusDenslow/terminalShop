@@ -79,7 +79,7 @@ func (m Model) ConfirmUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if keyMsg.String() != "esc" {
+	if keyMsg.String() != "esc" && keyMsg.String() != "s" { 
 		return m, nil
 	}
 
