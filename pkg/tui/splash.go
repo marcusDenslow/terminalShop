@@ -1,11 +1,48 @@
 package tui
 
 import (
+	"fmt"
+	"terminalShop/pkg/api"
+	"terminalShop/pkg/models"
+
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
 type DelayCompleteMsg struct{}
 type splashCursorTickMsg struct{}
+
+type SplashAuthMsg struct {
+	Token string
+	User  models.PublicUser
+	Err   error
+}
+
+type ViewInitMsg struct {
+	Data api.ViewInitData
+	Err  error
+}
+
+func (m Model) splashAuthCmd() tea.Msg {
+	token, user, err := m.APIClient.GetOrCreateToken(
+		m.Fingerprint,
+		m.SSHPublicKeyStr,
+		m.AuthFingerprintKey,
+	)
+	if err != nil {
+		return SplashAuthMsg{Err: fmt.Errorf("auth failed: %w", err)}
+	}
+	return SplashAuthMsg{Token: token, User: user}
+}
+
+func (m Model) splashViewInitCmd() tea.Msg {
+	data, err := m.APIClient.GetViewInit()
+	if err != nil {
+		return ViewInitMsg{Err: fmt.Errorf("failed to load data: %w", err)}
+	}
+	return ViewInitMsg{Data: data}
+}
 
 func (m Model) SplashView() string {
 	accent := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")).Bold(true)
@@ -25,7 +62,7 @@ func (m Model) SplashView() string {
 	)
 
 	return lipgloss.Place(
-		m.viewportWidth, 
+		m.viewportWidth,
 		m.viewportHeight,
 		lipgloss.Center,
 		lipgloss.Center,

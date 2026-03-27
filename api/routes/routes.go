@@ -26,6 +26,7 @@ func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTMan
 	cardHandler := handlers.NewCardHandler(stripeSecretKey)
 	orderHandler := handlers.NewOrderHandler()
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)
+	viewHandler := handlers.NewViewHandler()
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
@@ -45,6 +46,8 @@ func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTMan
 		// Protected routes - requires a valid JWT
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireAuth)
+
+			r.Get("/view/init", viewHandler.GetViewInit)
 
 			// Cart
 			r.Route("/cart", func(r chi.Router) {

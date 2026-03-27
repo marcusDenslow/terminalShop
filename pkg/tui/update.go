@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"terminalShop/pkg/api"
+	"terminalShop/pkg/models"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -39,22 +41,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Tick(resizeDebounce, func(t time.Time) tea.Msg {
 			return resizeTickMsg{seq: seq}
 		})
-	case ProductsMsg:
-		m.Loading = false
+	case SplashAuthMsg:
 		if msg.Err != nil {
-			m.ErrorMsg = "Failed to load products from the API, using the fallback values"
-		} else if len(msg.Products) > 0 {
-			m.Coffees = msg.Products
-			m.ErrorMsg = ""
+			m.ErrorMsg = fmt.Sprintf("authentication failed: %v", msg.Err)
+			return m, nil
 		}
+		m.AccessToken = msg.Token
+		m.APIClient.Token = msg.Token
+		if msg.User.ID != 0 {
+			m.Username = msg.User.Name
+		}
+		return m, tea.Batch(m.splashViewInitCmd, m.scheduleTokenRefreshCmd())
+	case ViewInitMsg:
+		if msg.Err != nil {
+			m.ErrorMsg = fmt.Sprintf("failed to load: %v", msg.Err)
+			m.Loading = false
+			return m, nil
+		}
+		m.Loading = false
+		if len(msg.Data.Products) > 0 {
+			m.Coffees = msg.Data.Products
+		}
+		if msg.Data.User.ID != 0 {
+			u := models.User{
+				ID:    msg.Data.User.ID,
+				Name:  msg.Data.User.Email,
+				Email: msg.Data.User.Email,
+			}
+			m.User = &u
+			m.Username = u.Name
+		}
+		cart := &api.CartData{Items: msg.Data.Cart}
+		m.loadCartFromAPI(cart)
+		m.SavedAddresses = msg.Data.Addresses
+		m.SavedCards = msg.Data.Cards
+		m.Orders = msg.Data.Orders
+		m.OrdersLoaded = true
 		m.splashDataReady = true
-		if m.currentPage == splashPage && m.splashDelayDone {
+		if m.splashDelayDone {
 			return m.SwitchPage(shopPage), nil
-		}
-		return m, nil
-	case CartFetchedMsg:
-		if msg.Err == nil && msg.Cart != nil {
-			m.loadCartFromAPI(msg.Cart)
 		}
 		return m, nil
 	case CartSyncedMsg:

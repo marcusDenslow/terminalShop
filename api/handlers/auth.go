@@ -8,6 +8,8 @@ import (
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/utils"
+
+	"gorm.io/gorm"
 )
 
 // AuthHandler handles authentication-related requests
@@ -27,14 +29,16 @@ func NewAuthHandler(jwtManager *auth.JWTManager, authFingerprintKey string) *Aut
 // Type to represent a request to exchange SSH fingerprint for JWT
 type TokenRequest struct {
 	Fingerprint  string `json:"fingerprint"`
+	SSHPublicKey string `json:"ssh_public_key"`
 	ClientSecret string `json:"client_secret"`
 }
 
 // Type to represent the JWT token response
 type TokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int    `json:"expires_in"`
+	AccessToken string            `json:"access_token"`
+	TokenType   string            `json:"token_type"`
+	ExpiresIn   int               `json:"expires_in"`
+	User        models.PublicUser `json:"user"`
 }
 
 func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
@@ -60,8 +64,22 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 
 	// look up user by his fingies
 	var user models.User
-	if err := db.Where("ssh_key_fingerprint = ?", req.Fingerprint).First(&user).Error; err != nil {
-		utils.RespondError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "no user found for this fingerprint", nil)
+	err := db.Where("ssh_key_fingerprint = ?", req.Fingerprint).First(&user).Error
+	if err == gorm.ErrRecordNotFound {
+		if req.SSHPublicKey == "" {
+			utils.RespondError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "no user found for this fingerprint", nil)
+			return
+		}
+		user = models.User{
+			SSHKeyFingerprint: req.Fingerprint,
+			SSHPublicKey: req.SSHPublicKey,
+		}
+		if err := db.Create(&user).Error; err != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to create user", nil)
+			return
+		}
+	} else if err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "database error", nil)
 		return
 	}
 
@@ -75,6 +93,7 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 		"access_token": token,
 		"token_type":   "Bearer",
 		"expires_in":   1800, // 30 minutes in seconds
+		"user": user.ToPublic(),
 	})
 }
 

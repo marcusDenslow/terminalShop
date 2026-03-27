@@ -11,10 +11,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	gossh "golang.org/x/crypto/ssh"
 
 	"terminalShop/pkg/api"
-	"terminalShop/pkg/auth"
 	"terminalShop/pkg/models"
 )
 
@@ -53,12 +51,11 @@ const resizeDebounce = 50 * time.Millisecond
 
 type Model struct {
 	// User authentication
-	User               *models.User    // Authenticated user (nil if not logged in)
-	IsNewUser          bool            // True if user needs to register
-	SSHPublicKey       gossh.PublicKey // SSH public key for registration
+	User               *models.User
+	Fingerprint        string
+	SSHPublicKeyStr    string
 	AccessToken        string
 	AuthFingerprintKey string // shared secret for /auth/token refresh
-	UsernameInput      string // Input for username during registration
 
 	// Shop state
 	Username         string
@@ -158,7 +155,6 @@ func (m Model) checkoutStep() int {
 func (m *Model) updateLayout(width, height int) {
 	m.viewportWidth = width
 	m.viewportHeight = height
-
 	switch {
 	case width < 20 || height < 10:
 		m.size = undersized
@@ -222,21 +218,15 @@ func (m Model) fetchProductsCmd() tea.Msg {
 }
 
 func (m Model) Init() tea.Cmd {
-	// Fetch products and cart from API on startup, and schedule token refresh
-	cmds := []tea.Cmd {
-		m.fetchProductsCmd,
-		m.fetchCartCmd,
+	return tea.Batch(
+		m.splashAuthCmd,
 		tea.Tick(1500*time.Millisecond, func(t time.Time) tea.Msg {
 			return DelayCompleteMsg{}
 		}),
-		tea.Tick(700*time.Microsecond, func(t time.Time) tea.Msg {
+		tea.Tick(700*time.Millisecond, func(t time.Time) tea.Msg {
 			return splashCursorTickMsg{}
 		}),
-	}
-	if m.User != nil && m.AuthFingerprintKey != "" {
-		cmds = append(cmds, m.scheduleTokenRefreshCmd())
-	}
-	return tea.Batch(cmds...)
+	)
 }
 
 func (m Model) resetPageState() Model {
@@ -301,12 +291,11 @@ func (m Model) scheduleTokenRefreshCmd() tea.Cmd {
 // refreshTokenCmd calls the /auth/token endpoint to get a fresh JWT.
 func (m Model) refreshTokenCmd() tea.Cmd {
 	return func() tea.Msg {
-		if m.APIClient == nil || m.User == nil || m.SSHPublicKey == nil {
+		if m.APIClient == nil || m.Fingerprint == "" { 
 			return TokenRefreshedMsg{Err: fmt.Errorf("not authenticated, cannot refresh token")}
 		}
 
-		fingerprint := auth.GetSSHKeyFingerprint(m.SSHPublicKey)
-		token, err := m.APIClient.RefreshToken(fingerprint, m.AuthFingerprintKey)
+		token, err := m.APIClient.RefreshToken(m.Fingerprint, m.AuthFingerprintKey)
 		if err != nil {
 			log.Printf("[TUI] Token refresh failed: %v", err)
 			return TokenRefreshedMsg{Err: err}
@@ -655,7 +644,7 @@ func (m Model) GetCartItemsSlice() []*models.CartItem {
 // NewModel creates a new model with default coffee options
 func NewModel(username string) Model {
 	m := Model{
-		Username: username,
+		Username:    username,
 		currentPage: splashPage,
 		Coffees: []models.Coffee{
 			{
@@ -729,23 +718,16 @@ func NewModel(username string) Model {
 }
 
 // NewModelWithAuth creates a new model with user authentication context
-func NewModelWithAuth(user *models.User, isNewUser bool, pubKey gossh.PublicKey, token string, apiURL string, authFingerprintKey string) Model {
-	username := "guest"
-	if user != nil {
-		username = user.Name
-	}
-
-	m := NewModel(username)
-	m.User = user
-	m.IsNewUser = isNewUser
-	m.SSHPublicKey = pubKey
-	m.AccessToken = token
-	m.AuthFingerprintKey = authFingerprintKey
+func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clientSecret string) Model {
+	m := NewModel("")
+	m.Fingerprint = fingerprint
+	m.SSHPublicKeyStr = pubKeyStr
+	m.AuthFingerprintKey = clientSecret
+	m.currentPage = splashPage
 	if apiURL != "" {
-		m.APIClient = api.NewClient(apiURL, token)
+		m.APIClient = api.NewClient(apiURL, "")
 	} else {
-		m.APIClient = api.NewClient("http://localhost:8080", token)
+		m.APIClient = api.NewClient("http://localhost:8000", "")
 	}
-
 	return m
 }

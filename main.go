@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,8 +18,6 @@ import (
 
 	"terminalShop/pkg/auth"
 	"terminalShop/pkg/config"
-	"terminalShop/pkg/database"
-	"terminalShop/pkg/models"
 	"terminalShop/pkg/tui"
 )
 
@@ -28,7 +27,6 @@ const (
 )
 
 var (
-	authService        *auth.SSHAuthService
 	apiURL             string
 	authFingerprintKey string
 )
@@ -37,28 +35,14 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	// Extract SSH public key from session
 	pubKey := s.PublicKey()
 
-	var user *models.User
-	var token string
-
+	var fingerprint, pubKeyStr string 
 	if pubKey != nil {
-		// Authenticate with SSH key (auto-creates user on first connect!)
-		authenticatedUser, jwtToken, err := authService.AuthenticateSSHKey(pubKey)
-		if err != nil {
-			log.Printf("Auth error: %v", err)
-			// Continue as guest
-		} else {
-			user = authenticatedUser
-			token = jwtToken
-			displayName := user.SSHKeyFingerprint[:16]
-			if user.Name != "" {
-				displayName = user.Name
-			}
-			log.Printf("User authenticated: %s (ID: %d)", displayName, user.ID)
-		}
+		fingerprint = auth.GetSSHKeyFingerprint(pubKey)
+		pubKeyStr = auth.FormatSSHPublicKey(pubKey)
 	}
 
 	// Create TUI model with user context (no registration screen needed!)
-	m := tui.NewModelWithAuth(user, false, s.PublicKey(), token, apiURL, authFingerprintKey)
+	m := tui.NewModelWithAuth(fingerprint, pubKeyStr, apiURL, authFingerprintKey)
 	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
 
@@ -68,25 +52,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
-
-	// Initialize database connection (for user management)
-	// Use same database as API server
-	db, err := database.Connect(cfg.DatabaseURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer database.Close()
-
-	// Run migrations (includes users table)
-	if err := database.Migrate(db); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
-	}
-
-	// Initialize JWT manager (uses same secret as API)
-	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 30*time.Minute)
-
-	// Initialize SSH auth service
-	authService = auth.NewSSHAuthService(db, jwtManager)
 
 	// Set API URL and auth key from config for TUI connections
 	apiURL = cfg.APIURL

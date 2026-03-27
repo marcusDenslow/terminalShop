@@ -39,6 +39,7 @@ func (c *Client) doRequest(req *http.Request) (*http.Response, error) {
 // TokenRequest represents a request to exchange SSH fingerprint for JWT.
 type TokenRequest struct {
 	Fingerprint  string `json:"fingerprint"`
+	SSHPublicKey string `json:"ssh_public_key"`
 	ClientSecret string `json:"client_secret"`
 }
 
@@ -46,16 +47,16 @@ type TokenRequest struct {
 type TokenResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
-		AccessToken string `json:"access_token"`
-		TokenType   string `json:"token_type"`
-		ExpiresIn   int    `json:"expires_in"`
+		AccessToken string            `json:"access_token"`
+		TokenType   string            `json:"token_type"`
+		ExpiresIn   int               `json:"expires_in"`
+		User        models.PublicUser `json:"user"`
 	} `json:"data"`
 	Error *APIError `json:"error,omitempty"`
 }
 
-// RefreshToken exchanges an SSH fingerprint and client secret for a new JWT.
-// It does not update c.Token — the caller is responsible for that.
-func (c *Client) RefreshToken(fingerprint, clientSecret string) (string, error) {
+func (c *Client) GetOrCreateToken(fingerprint, pubKeyStr, clientSecret string) (string, models.PublicUser, error) {
+
 	url := fmt.Sprintf("%s/api/v1/auth/token", c.BaseURL)
 
 	reqBody := TokenRequest{
@@ -65,35 +66,40 @@ func (c *Client) RefreshToken(fingerprint, clientSecret string) (string, error) 
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal token request: %w", err)
+		return "", models.PublicUser{}, fmt.Errorf("failed to marshal token request: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("failed to create token request: %w", err)
+		return "", models.PublicUser{}, fmt.Errorf("failed to create token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("token refresh request failed: %w", err)
+		return "", models.PublicUser{}, fmt.Errorf("token refresh request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("token refresh returned status %d", resp.StatusCode)
+		return "", models.PublicUser{}, fmt.Errorf("token refresh returned status %d", resp.StatusCode)
 	}
 
 	var tokenResp TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf("failed to decode token response: %w", err)
+		return "", models.PublicUser{}, fmt.Errorf("failed to decode token response: %w", err)
 	}
 
 	if !tokenResp.Success || tokenResp.Data.AccessToken == "" {
-		return "", fmt.Errorf("token refresh failed: no access token in response")
+		return "", models.PublicUser{}, fmt.Errorf("token refresh failed: no access token in response")
 	}
 
-	return tokenResp.Data.AccessToken, nil
+	return tokenResp.Data.AccessToken, tokenResp.Data.User, nil
+}
+
+func (c *Client) RefreshToken(fingerprint, clientSecret string) (string, error) {
+	token, _, err := c.GetOrCreateToken(fingerprint, "", clientSecret)
+	return token, err
 }
 
 // APIResponse represents the standard API response format
@@ -729,3 +735,37 @@ func (c *Client) DeleteAddress(id uint) error {
 	return nil
 }
 
+type ViewInitData struct {
+	User      models.PublicUser `json:"user"`
+	Products  []models.Coffee   `json:"products"`
+	Cart      []CartItemData    `json:"cart"`
+	Addresses []models.Address  `json:"addresses"`
+	Cards     []models.Card     `json:"cards"`
+	Orders    []models.Order    `json:"orders"`
+}
+
+type ViewInitResponse struct {
+	Success bool         `json:"success"`
+	Data    ViewInitData `json:"data"`
+	Error   *APIError    `json:"error"`
+}
+
+// GetViewInit fetches all initial data in one request
+func (c *Client) GetViewInit() (ViewInitData, error) {
+	url := fmt.Sprintf("%s/api/v1/view/init", c.BaseURL)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return ViewInitData{}, fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return ViewInitData{}, fmt.Errorf("view init request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ViewInitData{}, fmt.Errorf("view init returned status: %d", resp.StatusCode)
+	}
+	var viewResp ViewInitResponse
+
+	return viewResp.Data, nil
+}

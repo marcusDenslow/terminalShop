@@ -1,0 +1,51 @@
+package handlers
+
+import (
+	"net/http"
+
+	"terminalShop/api/middleware"
+	"terminalShop/pkg/database"
+	"terminalShop/pkg/models"
+	"terminalShop/pkg/utils"
+)
+
+type ViewHandler struct{}
+
+func NewViewHandler() *ViewHandler {
+	return &ViewHandler{}
+}
+
+func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB()
+	userID := middleware.UserIDFromContext(r.Context())
+
+	var user models.User
+	if err := db.First(&user, userID).Error; err != nil {
+		utils.RespondError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "user not found", nil)
+		return
+	}
+
+	var products []models.Coffee
+	db.Find(&products)
+
+	var cartItems []models.CartItem
+	db.Where("user_id = ?", userID).Preload("Coffee").Find(&cartItems)
+
+	var addresses []models.Address
+	db.Where("user_id = ?", userID).Find(&addresses)
+
+	var cards []models.Card
+	db.Where("user_id = ?", userID).Find(&cards)
+
+	var orders []models.Order
+	db.Where("user_id = ?", userID).Preload("Items").Order("created_at desc").Find(&orders)
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+		"user":      user.ToPublic(),
+		"products":  products,
+		"cart":      cartItems,
+		"addresses": addresses,
+		"cards":     cards,
+		"orders":    orders,
+	})
+}
