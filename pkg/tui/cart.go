@@ -3,11 +3,31 @@ package tui
 import (
 	"fmt"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m Model) BuildCartView() string {
+func (m Model) updateCartViewport() Model {
+	headerH := lipgloss.Height(m.BuildHeader())
+	breadH := lipgloss.Height(m.BuildBreadcrumbs())
+	footerH := lipgloss.Height(m.BuildFooter())
+	availH := m.heightContainer - headerH - footerH - breadH
+	if availH < 1 {
+		availH = 1
+	}
+	if !m.cartVPReady {
+		m.cartVP = viewport.New(m.widthContent, availH)
+		m.cartVP.KeyMap = viewport.KeyMap{}
+		m.cartVPReady = true
+	} else {
+		m.cartVP.Width = m.widthContent
+		m.cartVP.Height = availH
+	}
+	return m
+}
+
+func (m Model) generateCartContent() string {
 	if len(m.Cart) == 0 {
 		emptyStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#666666")).
@@ -18,10 +38,9 @@ func (m Model) BuildCartView() string {
 	}
 
 	cartItems := ""
-	boxWidth := m.widthContent - 4 // Leave some margin within the container
+	boxWidth := m.widthContent - 4
 	itemSlice := m.GetCartItemsSlice()
 
-	// Adjust padding based on container height
 	boxPadding := 0
 	if m.heightContainer >= 25 {
 		boxPadding = 1
@@ -30,7 +49,6 @@ func (m Model) BuildCartView() string {
 	for idx, item := range itemSlice {
 		itemTotal := item.Quantity * item.Coffee.Price
 
-		// Left side: name and individual price
 		nameStyle := lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#FFFFFF"))
@@ -42,7 +60,6 @@ func (m Model) BuildCartView() string {
 		infoStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#AAAAAA"))
 
-		// Right side: quantity controls and total price
 		quantityStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FFFFFF"))
 
@@ -50,7 +67,6 @@ func (m Model) BuildCartView() string {
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Bold(true)
 
-		// Build content with proper spacing
 		nameText := nameStyle.Render(item.Coffee.Name)
 		individualPriceText := individualPriceStyle.Render(fmt.Sprintf(" $%.2f", float64(item.Coffee.Price)/100))
 		infoText := infoStyle.Render(fmt.Sprintf("%s | %doz | %s",
@@ -60,11 +76,10 @@ func (m Model) BuildCartView() string {
 		quantityText := quantityStyle.Render(fmt.Sprintf("-  %d  +", item.Quantity))
 		totalPriceText := totalPriceStyle.Render(fmt.Sprintf("$%.2f", float64(itemTotal)/100))
 
-		// Calculate spacing
 		nameAndPriceWidth := lipgloss.Width(nameText) + lipgloss.Width(individualPriceText)
 		quantityWidth := lipgloss.Width(quantityText)
 		totalPriceWidth := lipgloss.Width(totalPriceText)
-		spacing := boxWidth - nameAndPriceWidth - quantityWidth - totalPriceWidth - 8 // 8 for padding and gaps
+		spacing := boxWidth - nameAndPriceWidth - quantityWidth - totalPriceWidth - 8
 
 		if spacing < 1 {
 			spacing = 1
@@ -78,7 +93,6 @@ func (m Model) BuildCartView() string {
 
 		boxContent := contentLine1 + "\n" + contentLine2
 
-		// Create box for this item - highlight if it's the selected item
 		var itemBox lipgloss.Style
 		if idx == m.CartCursor {
 			itemBox = lipgloss.NewStyle().
@@ -97,20 +111,41 @@ func (m Model) BuildCartView() string {
 				Foreground(lipgloss.Color("#FFFFFF"))
 		}
 
-		// Center the box within the container
 		centered := lipgloss.NewStyle().
 			Width(m.widthContent).
 			Align(lipgloss.Center)
 
 		cartItems += centered.Render(itemBox.Render(boxContent))
 
-		// Add spacing between items
 		if idx < len(itemSlice)-1 {
 			cartItems += "\n"
 		}
 	}
-
 	return cartItems
+}
+
+func (m Model) CartView() string {
+	if !m.cartVPReady {
+		m = m.updateCartViewport()
+	}
+	content := m.generateCartContent()
+	m.cartVP.SetContent(content)
+	if len(m.Cart) > 0 {
+		itemHeight := 5
+		targetY := m.CartCursor * itemHeight
+		if targetY < m.cartVP.YOffset {
+			m.cartVP.SetYOffset(targetY)
+		}
+		if targetY+itemHeight > m.cartVP.YOffset+m.cartVP.Height {
+			m.cartVP.SetYOffset(targetY - m.cartVP.Height + itemHeight)
+		}
+	}
+	return lipgloss.Place(
+		m.widthContainer,
+		lipgloss.Height(m.cartVP.View()),
+		lipgloss.Center, lipgloss.Center,
+		m.cartVP.View(),
+	)
 }
 
 func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
@@ -122,32 +157,11 @@ func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case "up", "k":
 		if m.CartCursor > 0 {
 			m.CartCursor--
-			itemHeight := 5
-			targetLine := m.CartCursor * itemHeight
-			if targetLine < m.ScrollOffset {
-				m.ScrollOffset = targetLine
-			}
 		}
 	case "down", "j":
 		if m.CartCursor < len(m.Cart)-1 {
 			m.CartCursor++
-			itemHeight := 5
-			targetLineEnd := (m.CartCursor * itemHeight) + itemHeight
-			viewportHeight := m.heightContainer - 9
-			if viewportHeight < 6 {
-				viewportHeight = 6
-			}
-			if targetLineEnd > m.ScrollOffset+viewportHeight {
-				m.ScrollOffset = targetLineEnd - viewportHeight
-			}
 		}
-	case "pgup", "ctrl+u":
-		m.ScrollOffset -= 3
-		if m.ScrollOffset < 0 {
-			m.ScrollOffset = 0
-		}
-	case "pgdown", "ctrl+d":
-		m.ScrollOffset += 3
 	case "+", "=":
 		cartItems := m.GetCartItemsSlice()
 		if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
@@ -174,6 +188,7 @@ func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case "p", "enter":
 		if len(m.Cart) > 0 {
 			m = m.SwitchPage(shippingPage)
+			m = m.updateShippingViewport()
 			return m, m.fetchAddressesCmd()
 		}
 	}

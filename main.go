@@ -29,20 +29,21 @@ const (
 var (
 	apiURL             string
 	authFingerprintKey string
+	stripePublicKey    string
 )
 
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	// Extract SSH public key from session
 	pubKey := s.PublicKey()
 
-	var fingerprint, pubKeyStr string 
+	var fingerprint, pubKeyStr string
 	if pubKey != nil {
 		fingerprint = auth.GetSSHKeyFingerprint(pubKey)
 		pubKeyStr = auth.FormatSSHPublicKey(pubKey)
 	}
 
 	// Create TUI model with user context (no registration screen needed!)
-	m := tui.NewModelWithAuth(fingerprint, pubKeyStr, apiURL, authFingerprintKey)
+	m := tui.NewModelWithAuth(fingerprint, pubKeyStr, apiURL, authFingerprintKey, stripePublicKey)
 	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
 
@@ -56,6 +57,7 @@ func main() {
 	// Set API URL and auth key from config for TUI connections
 	apiURL = cfg.APIURL
 	authFingerprintKey = cfg.AuthFingerprintKey
+	stripePublicKey = cfg.StripePublicKey
 	log.Printf("TUI will connect to API at: %s", apiURL)
 
 	// Create SSH server

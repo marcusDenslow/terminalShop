@@ -1,16 +1,16 @@
 package tui
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
-	"net/http"
-	"os"
-	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/stripe/stripe-go/v78"
+	stripetoken "github.com/stripe/stripe-go/v78/token"
 
 	"terminalShop/pkg/api"
 	"terminalShop/pkg/models"
@@ -56,13 +56,22 @@ type Model struct {
 	SSHPublicKeyStr    string
 	AccessToken        string
 	AuthFingerprintKey string // shared secret for /auth/token refresh
+	StripePublicKey    string
 
 	// Shop state
 	Username         string
 	Coffees          []models.Coffee
-	Cursor           int
-	Cart             map[uint]*models.CartItem // maps CoffeeID to cart item
-	CartCursor       int                       // cursor position in cart view
+	shop             shopState
+	cartVP           viewport.Model
+	cartVPReady      bool
+	shippingVP       viewport.Model
+	shippingVPReady  bool
+	paymentVP        viewport.Model
+	paymentVPReady   bool
+	confirmVP        viewport.Model
+	confirmVPReady   bool
+	Cart             map[uint]*models.CartItem
+	CartCursor       int // cursor position in cart view
 	AccountCursor    int
 	currentPage      page  // currently active screen
 	switched         bool  // true when the page just changed (for state resets)
@@ -93,17 +102,18 @@ type Model struct {
 	APIClient *api.Client
 
 	// Checkout state
-	ShippingForm   *ShippingFormState // Shipping form state (nil when not in shipping step)
-	PaymentForm    *PaymentFormState  // Payment form state (nil when not in payment step)
-	ShippingInfo   *models.Address    // Selected shipping address for current order
-	SavedAddresses []models.Address   // Saved addresses from database
-	ShippingView   int
-	AddressCursor  int
-	StripeKey      string        // Stripe publishable key for client-side tokenization
-	SavedCards     []models.Card // Saved cards from database
-	SelectedCard   *models.Card  // Card selected from saved list (nil = new card)
-	CardCursor     int           // cursor position in the card list
-	PaymentView    int           // 0=card list, 1=new card form
+	ShippingForm     *ShippingFormState // Shipping form state (nil when not in shipping step)
+	PaymentForm      *PaymentFormState  // Payment form state (nil when not in payment step)
+	ShippingInfo     *models.Address    // Selected shipping address for current order
+	SavedAddresses   []models.Address   // Saved addresses from database
+	ShippingView     int
+	AddressCursor    int
+	SavedCards       []models.Card // Saved cards from database
+	SelectedCard     *models.Card  // Card selected from saved list (nil = new card)
+	CardCursor       int           // cursor position in the card list
+	PaymentView      int           // 0=card list, 1=new card form, 2 = browser payment
+	CollectURL       *string       // URL for browser-based card entry
+	CollectCardCount int           // card count when browser polling started
 
 	// Order history
 	Orders         []models.Order
@@ -120,6 +130,20 @@ type Model struct {
 	splashDelayDone bool // true when minimum display time has elapsed
 	splashCursor    bool // toggles for blinking cursor animation
 
+}
+
+type shopState struct {
+	selected       int
+	menuViewport   viewport.Model
+	detailViewport viewport.Model
+	viewportsReady bool
+}
+
+var modifiedKeyMap = viewport.KeyMap{
+	PageDown:     key.NewBinding(key.WithKeys("pgdown")),
+	PageUp:       key.NewBinding(key.WithKeys("pgup")),
+	HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u")),
+	HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d")),
 }
 
 // SwitchPage changed the active page and marks that a switch happened
@@ -238,15 +262,6 @@ func (m Model) resetPageState() Model {
 	return m
 }
 
-type StripeTokenMsg struct {
-	TokenID string
-	Last4   string
-}
-
-type StripeTokenErrMsg struct {
-	Err error
-}
-
 type CheckoutResultMsg struct {
 	OrderID uint
 	Total   int
@@ -291,7 +306,7 @@ func (m Model) scheduleTokenRefreshCmd() tea.Cmd {
 // refreshTokenCmd calls the /auth/token endpoint to get a fresh JWT.
 func (m Model) refreshTokenCmd() tea.Cmd {
 	return func() tea.Msg {
-		if m.APIClient == nil || m.Fingerprint == "" { 
+		if m.APIClient == nil || m.Fingerprint == "" {
 			return TokenRefreshedMsg{Err: fmt.Errorf("not authenticated, cannot refresh token")}
 		}
 
@@ -458,62 +473,6 @@ func (m Model) checkoutWithSavedCard() tea.Cmd {
 	}
 }
 
-func (m Model) tokenizeCard(card PaymentFormCompleteMsg) tea.Cmd {
-	return func() tea.Msg {
-		// Use the Stripe secret key for server-side tokenization.
-		// This is a terminal app running over SSH — there is no browser,
-		// so the publishable key / Stripe.js approach does not work.
-		// The secret key is allowed to create tokens with raw card data.
-		secretKey := os.Getenv("STRIPE_SECRET_KEY")
-		if secretKey == "" {
-			// Fall back to the publishable key (will fail on most accounts)
-			secretKey = m.StripeKey
-		}
-
-		data := fmt.Sprintf(
-			"card[number]=%s&card[exp_month]=%s&card[exp_year]=%s&card[cvc]=%s",
-			card.CardNumber, card.ExpiryMonth, card.ExpiryYear, card.CVC,
-		)
-
-		req, err := http.NewRequest("POST", "https://api.stripe.com/v1/tokens", strings.NewReader(data))
-		if err != nil {
-			return StripeTokenErrMsg{Err: err}
-		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("Authorization", "Bearer "+secretKey)
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return StripeTokenErrMsg{Err: err}
-		}
-		defer resp.Body.Close()
-
-		var result struct {
-			ID   string `json:"id"`
-			Card struct {
-				Last4 string `json:"last4"`
-				Brand string `json:"brand"`
-			} `json:"card"`
-			Error *struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			return StripeTokenErrMsg{Err: err}
-		}
-
-		if result.Error != nil {
-			return StripeTokenErrMsg{Err: fmt.Errorf("%s", result.Error.Message)}
-		}
-
-		return StripeTokenMsg{
-			TokenID: result.ID,
-			Last4:   result.Card.Last4,
-		}
-	}
-}
-
 func (m *Model) syncCartItemCmd(coffeeID uint, quantity int) tea.Cmd {
 	if m.APIClient == nil || m.User == nil {
 		return nil
@@ -532,24 +491,34 @@ func (m *Model) syncCartItemCmd(coffeeID uint, quantity int) tea.Cmd {
 	}
 }
 
-// saveCardAndConvert saves the tokenized card, sets address and card on the
-// server cart, then converts the cart to an order
-func (m Model) saveCardAndConvert(tok StripeTokenMsg) tea.Cmd {
+// saveCardAndConvert tokenizes the card locally using the Stripe publishable
+// key (raw card data never reaches the backend), saves the token, then converts the cart
+func (m Model) saveCardAndConvert(form PaymentFormCompleteMsg) tea.Cmd {
 	return func() tea.Msg {
 		if m.APIClient == nil {
 			return CheckoutResultMsg{Err: fmt.Errorf("API client not available")}
 		}
 
-		// 1. Save the card
-		card, err := m.APIClient.SaveCard(tok.TokenID)
+		stripe.Key = m.StripePublicKey
+		tok, err := stripetoken.New(&stripe.TokenParams{
+			Card: &stripe.CardParams{
+				Name:       stripe.String(form.CardName),
+				Number:     stripe.String(form.CardNumber),
+				ExpMonth:   stripe.String(form.ExpiryMonth),
+				ExpYear:    stripe.String(form.ExpiryYear),
+				CVC:        stripe.String(form.CVC),
+				AddressZip: stripe.String(form.BillingZip),
+			},
+		})
 		if err != nil {
-			// Card may already exist — try fetching existing cards
-			cards, listErr := m.APIClient.GetCards()
-			if listErr != nil || len(cards) == 0 {
-				return CheckoutResultMsg{Err: fmt.Errorf("failed to save card: %w", err)}
+			if stripeErr, ok := err.(*stripe.Error); ok {
+				return CheckoutResultMsg{Err: fmt.Errorf("%s", stripeErr.Msg)}
 			}
-			// Use the most recent card
-			card = &cards[0]
+			return CheckoutResultMsg{Err: fmt.Errorf("failed to tokenize card: %w", err)}
+		}
+		card, err := m.APIClient.SaveCard(api.SaveCardRequest{Token: tok.ID})
+		if err != nil {
+			return CheckoutResultMsg{Err: fmt.Errorf("failed to save card: %w", err)}
 		}
 
 		// 2. Set the shipping address on the cart
@@ -702,7 +671,6 @@ func NewModel(username string) Model {
 				Description: "Espresso 'marked' with a dollop of foamed milk. Small but mighty, like a tiny caffeinated warrior.",
 			},
 		},
-		Cursor:         0,
 		Cart:           make(map[uint]*models.CartItem),
 		CartCursor:     0,
 		AccountCursor:  0,
@@ -710,7 +678,6 @@ func NewModel(username string) Model {
 		OrderViewState: 0,
 		Loading:        true,
 		APIClient:      api.NewClient("http://localhost:8080", ""),
-		StripeKey:      os.Getenv("STRIPE_PUBLIC_KEY"),
 		FAQs:           LoadFaqs(),
 	}
 	m.updateLayout(120, 30)
@@ -718,11 +685,12 @@ func NewModel(username string) Model {
 }
 
 // NewModelWithAuth creates a new model with user authentication context
-func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clientSecret string) Model {
+func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clientSecret string, stripePublicKey string) Model {
 	m := NewModel("")
 	m.Fingerprint = fingerprint
 	m.SSHPublicKeyStr = pubKeyStr
 	m.AuthFingerprintKey = clientSecret
+	m.StripePublicKey = stripePublicKey
 	m.currentPage = splashPage
 	if apiURL != "" {
 		m.APIClient = api.NewClient(apiURL, "")
@@ -730,4 +698,37 @@ func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clien
 		m.APIClient = api.NewClient("http://localhost:8000", "")
 	}
 	return m
+}
+
+func newViewport(w, h int) viewport.Model {
+	return viewport.New(w, h)
+}
+
+func (m Model) collectCardCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil {
+			return CheckoutResultMsg{Err: fmt.Errorf("API client not available")}
+		}
+		url, err := m.APIClient.CollectCard()
+		if err != nil {
+			return CheckoutResultMsg{Err: fmt.Errorf("failed to generate payment link: %w", err)}
+		}
+		return PollPaymentInitMsg{URL: url}
+	}
+}
+
+func (m Model) pollCardsCmd(cardCount int) tea.Cmd {
+	return tea.Tick(time.Second, func(_ time.Time) tea.Msg {
+		if m.APIClient == nil {
+			return PollPaymentStatusMsg{CardCount: cardCount}
+		}
+		cards, err := m.APIClient.GetCards()
+		if err != nil {
+			return PollPaymentStatusMsg{CardCount: cardCount}
+		}
+		if len(cards) > cardCount {
+			return PollPaymentCompleteMsg{Cards: cards}
+		}
+		return PollPaymentStatusMsg{CardCount: cardCount}
+	})
 }

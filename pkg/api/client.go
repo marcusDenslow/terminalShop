@@ -526,12 +526,18 @@ func (c *Client) GetCards() ([]models.Card, error) {
 	return cardsResp.Data.Cards, nil
 }
 
-// SaveCard creates a saved card from a Stripe token.
-func (c *Client) SaveCard(token string) (*models.Card, error) {
+// SaveCardRequest holds the raw card fields sent to the backend for
+// server-side tokenization. The Stripe secret key never leaves the server.
+type SaveCardRequest struct {
+	Token string `json:"token"`
+}
+
+// SaveCard sends raw card fields to the backend, which tokenizes them
+// server-side and returns the saved card metadata.
+func (c *Client) SaveCard(params SaveCardRequest) (*models.Card, error) {
 	url := fmt.Sprintf("%s/api/v1/cards", c.BaseURL)
 
-	body := map[string]string{"token": token}
-	jsonData, err := json.Marshal(body)
+	jsonData, err := json.Marshal(params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
@@ -561,6 +567,42 @@ func (c *Client) SaveCard(token string) (*models.Card, error) {
 	}
 
 	return &cardResp.Data.Card, nil
+}
+
+type CollectCardResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		URL string `json:"url"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+func (c *Client) CollectCard() (string, error) {
+	url := fmt.Sprintf("%s/api/v1/cards/collect", c.BaseURL)
+
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to collect card: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var collectResp CollectCardResponse
+	if err := json.NewDecoder(resp.Body).Decode(&collectResp); err != nil {
+		return "", fmt.Errorf("failed to devode collect response: %w", err)
+	}
+
+	if !collectResp.Success {
+		if collectResp.Error != nil {
+			return "", fmt.Errorf("%s: %s", collectResp.Error.Code, collectResp.Error.Message)
+		}
+		return "", fmt.Errorf("failed to collect card")
+	}
+	return collectResp.Data.URL, nil
 }
 
 // DeleteCard removes a saved card by ID.

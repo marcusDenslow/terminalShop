@@ -3,19 +3,18 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
-
-	"terminalShop/api/middleware"
-	"terminalShop/pkg/database"
-	"terminalShop/pkg/models"
-	"terminalShop/pkg/utils"
 
 	"gorm.io/gorm"
 	"github.com/stripe/stripe-go/v78"
-	"github.com/stripe/stripe-go/v78/customer"
 	"github.com/stripe/stripe-go/v78/paymentintent"
 	"github.com/stripe/stripe-go/v78/paymentmethod"
+
+	"terminalShop/api/middleware"
+	"terminalShop/pkg/audit"
+	"terminalShop/pkg/database"
+	"terminalShop/pkg/models"
+	"terminalShop/pkg/utils"
 )
 
 type CartHandler struct {
@@ -235,7 +234,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	var items []models.CartItem
 	db.Where("cart_id = ? AND quantity > 0", cart.ID).Preload("Coffee").Find(&items)
 
-	if len(items) <= 0 {
+	if len(items) == 0 {
 		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "cart is empty", nil)
 		return
 	}
@@ -270,26 +269,35 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	stripe.Key = h.stripeKey
 
-	if user.StripeCustomerID == "" {
-		params := &stripe.CustomerParams{
-			Description: stripe.String(fmt.Sprintf("terminal.shop user %d", user.ID)),
-		}
+	// Ensure the user has a Stripe customer (shared helper with cards handler).
+	if err := ensureStripeCustomer(db, &user); err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create stripe customer", nil)
+		return
+	}
 
-		if user.Email != "" {
-			params.Email = stripe.String(user.Email)
-		}
-
-		if user.Name != "" {
-			params.Name = stripe.String(user.Name)
-		}
-
-		cust, err := customer.New(params)
-		if err != nil {
-			utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create stripe customer", nil)
+	// All cards are now saved as pm_ PaymentMethods. This branch handles any
+	// legacy tok_ records that predate the server-side tokenization refactor.
+	paymentMethodID := card.StripePaymentID
+	if len(paymentMethodID) >= 3 && paymentMethodID[:3] == "tok" {
+		pm, pmErr := paymentmethod.New(&stripe.PaymentMethodParams{
+			Type: stripe.String("card"),
+			Card: &stripe.PaymentMethodCardParams{
+				Token: stripe.String(paymentMethodID),
+			},
+		})
+		if pmErr != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create payment method", nil)
 			return
 		}
-		user.StripeCustomerID = cust.ID
-		db.Save(&user)
+		if _, attachErr := paymentmethod.Attach(pm.ID, &stripe.PaymentMethodAttachParams{
+			Customer: stripe.String(user.StripeCustomerID),
+		}); attachErr != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to attach payment method", nil)
+			return
+		}
+		paymentMethodID = pm.ID
+		card.StripePaymentID = pm.ID
+		db.Save(&card)
 	}
 
 	var subtotal int
@@ -312,36 +320,9 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If the saved card has a token (tok_), convert to a PaymentMethod and attach
-	paymentMethodID := card.StripePaymentID
-	if len(paymentMethodID) >= 4 && paymentMethodID[:3] == "tok" {
-		pm, err := paymentmethod.New(&stripe.PaymentMethodParams{
-			Type: stripe.String("card"),
-			Card: &stripe.PaymentMethodCardParams{
-				Token: stripe.String(paymentMethodID),
-			},
-		})
-		if err != nil {
-			utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create payment method", nil)
-			return
-		}
-
-		_, err = paymentmethod.Attach(pm.ID, &stripe.PaymentMethodAttachParams{
-			Customer: stripe.String(user.StripeCustomerID),
-		})
-		if err != nil {
-			utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to attach payment method", nil)
-			return
-		}
-
-		paymentMethodID = pm.ID
-		card.StripePaymentID = pm.ID
-		db.Save(&card)
-	}
-
+	// Create the order record BEFORE charging so we always have something to
+	// reconcile against if the server crashes mid-flight.
 	order := models.Order{
-		// Create the order record first before charging the card so we always
-		// have a record we can reconcile against if anything goes wrong mid-flight.
 		UserID:          user.ID,
 		CardID:          card.ID,
 		StripePaymentID: "",
@@ -365,7 +346,10 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Charge via stripe, keyed to the order ID so retrieves never double-charge.
+	audit.OrderCreated(userID, order.ID, total)
+
+	// Charge the card. The idempotency key is tied to the order ID so retries
+	// never produce a double charge.
 	piParams := &stripe.PaymentIntentParams{
 		Amount:        stripe.Int64(int64(total)),
 		Currency:      stripe.String(string(stripe.CurrencyUSD)),
@@ -376,7 +360,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 			AllowRedirects: stripe.String("never"),
 		},
 		Confirm:     stripe.Bool(true),
-		Description: stripe.String(fmt.Sprintf("terminal.shop order for user %d", userID)),
+		Description: stripe.String(fmt.Sprintf("terminal.shop order #%d", order.ID)),
 		Shipping: &stripe.ShippingDetailsParams{
 			Name: stripe.String(address.Name),
 			Address: &stripe.AddressParams{
@@ -396,16 +380,27 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	pi, err := paymentintent.New(piParams)
 	if err != nil {
-		// charge failed, mark the otder so it can be identified and or cleaned up
 		db.Model(&order).Update("status", models.OrderStatusFailed)
-		if stripeErr, ok := err.(*stripe.Error); ok && stripeErr.Type == stripe.ErrorTypeCard {
-			utils.RespondError(w, http.StatusPaymentRequired, "CARD_ERROR", stripeErr.Msg, nil)
+		if stripeErr, ok := err.(*stripe.Error); ok {
+			switch stripeErr.Type {
+			case stripe.ErrorTypeCard:
+				audit.OrderFailed(userID, order.ID, total, stripeErr.Msg)
+				utils.RespondError(w, http.StatusPaymentRequired, "CARD_DECLINED", stripeErr.Msg, nil)
+			case stripe.ErrorTypeInvalidRequest:
+				audit.OrderFailed(userID, order.ID, total, stripeErr.Msg)
+				utils.RespondError(w, http.StatusBadRequest, "INVALID_PAYMENT", stripeErr.Msg, nil)
+			default:
+				audit.OrderFailed(userID, order.ID, total, stripeErr.Error())
+				utils.RespondError(w, http.StatusInternalServerError, "PAYMENT_FAILED", "payment failed", nil)
+			}
 			return
 		}
-		utils.RespondError(w, http.StatusPaymentRequired, "PAYMENT_FAILED", "payment failed", nil)
+		audit.OrderFailed(userID, order.ID, total, err.Error())
+		utils.RespondError(w, http.StatusInternalServerError, "PAYMENT_FAILED", "payment failed", nil)
 		return
 	}
 
+	// Commit payment ID and clear cart in a single transaction.
 	txErr := db.Transaction(func(tx *gorm.DB) error {
 		order.StripePaymentID = pi.ID
 		order.Status = models.OrderStatusPaid
@@ -421,10 +416,16 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		}).Error
 	})
 	if txErr != nil {
-		log.Printf("[CRITICAL] order %d charged (pi=%s) but failed to record: %v", order.ID, pi.ID, txErr) 
-		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "payment succeeded but failed to record order", nil)
+		// Card was charged but we could not persist the outcome. This is the
+		// most dangerous failure mode: the customer paid but has no order.
+		// The reconciliation job will catch this within 5 minutes.
+		// The audit log entry below must be treated as a critical alert.
+		audit.PaymentCritical(order.ID, pi.ID, txErr)
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "payment succeeded but failed to record order — please contact support", nil)
 		return
 	}
+
+	audit.OrderPaid(userID, order.ID, total, pi.ID)
 
 	db.Preload("Items").First(&order, order.ID)
 
@@ -432,3 +433,4 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		"order": order,
 	})
 }
+

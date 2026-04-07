@@ -1,100 +1,30 @@
 package tui
 
 import (
-	"terminalShop/pkg/api"
-	"terminalShop/pkg/models"
 	"testing"
-
-	gossh "golang.org/x/crypto/ssh"
 )
 
 func TestModel_updateLayout(t *testing.T) {
-	type fields struct {
-		User            *models.User
-		IsNewUser       bool
-		SSHPublicKey    gossh.PublicKey
-		AccessToken     string
-		UsernameInput   string
-		Username        string
-		Coffees         []models.Coffee
-		Cursor          int
-		Cart            map[uint]*models.CartItem
-		CartCursor      int
-		AccountCursor   int
-		ScrollOffset    int
-		currentPage     page
-		viewportWidth   int
-		viewportHeight  int
-		widthContainer  int
-		heightContainer int
-		widthContent    int
-		size            termSize
-		resizeSeq       int
-		pendingWidth    int
-		pendingHeight   int
-		Loading         bool
-		ErrorMsg        string
-		APIClient       *api.Client
-		ShippingForm    *ShippingFormState
-		PaymentForm     *PaymentFormState
-		ShippingInfo    *models.Address
-		SavedAddresses  []models.Address
-		ShippingView    int
-		AddressCursor   int
-		StripeKey       string
-		Orders          []models.Order
-		OrdersLoaded    bool
-	}
-	type args struct {
-		width  int
-		height int
-	}
 	tests := []struct {
 		name   string
-		fields fields
-		args   args
+		width  int
+		height int
 	}{
-		// TODO: Add test cases.
+		{"large terminal", 120, 40},
+		{"medium terminal", 70, 25},
+		{"small terminal", 45, 20},
+		{"undersized", 15, 8},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := &Model{
-				User:            tt.fields.User,
-				IsNewUser:       tt.fields.IsNewUser,
-				SSHPublicKey:    tt.fields.SSHPublicKey,
-				AccessToken:     tt.fields.AccessToken,
-				UsernameInput:   tt.fields.UsernameInput,
-				Username:        tt.fields.Username,
-				Coffees:         tt.fields.Coffees,
-				Cursor:          tt.fields.Cursor,
-				Cart:            tt.fields.Cart,
-				CartCursor:      tt.fields.CartCursor,
-				AccountCursor:   tt.fields.AccountCursor,
-				ScrollOffset:    tt.fields.ScrollOffset,
-				currentPage:     tt.fields.currentPage,
-				viewportWidth:   tt.fields.viewportWidth,
-				viewportHeight:  tt.fields.viewportHeight,
-				widthContainer:  tt.fields.widthContainer,
-				heightContainer: tt.fields.heightContainer,
-				widthContent:    tt.fields.widthContent,
-				size:            tt.fields.size,
-				resizeSeq:       tt.fields.resizeSeq,
-				pendingWidth:    tt.fields.pendingWidth,
-				pendingHeight:   tt.fields.pendingHeight,
-				Loading:         tt.fields.Loading,
-				ErrorMsg:        tt.fields.ErrorMsg,
-				APIClient:       tt.fields.APIClient,
-				ShippingForm:    tt.fields.ShippingForm,
-				PaymentForm:     tt.fields.PaymentForm,
-				ShippingInfo:    tt.fields.ShippingInfo,
-				SavedAddresses:  tt.fields.SavedAddresses,
-				ShippingView:    tt.fields.ShippingView,
-				AddressCursor:   tt.fields.AddressCursor,
-				StripeKey:       tt.fields.StripeKey,
-				Orders:          tt.fields.Orders,
-				OrdersLoaded:    tt.fields.OrdersLoaded,
+			m := NewModel("")
+			m.updateLayout(tt.width, tt.height)
+			if m.viewportWidth != tt.width {
+				t.Errorf("viewportWidth = %d, want %d", m.viewportWidth, tt.width)
 			}
-			m.updateLayout(tt.args.width, tt.args.height)
+			if m.viewportHeight != tt.height {
+				t.Errorf("viewportHeight = %d, want %d", m.viewportHeight, tt.height)
+			}
 		})
 	}
 }

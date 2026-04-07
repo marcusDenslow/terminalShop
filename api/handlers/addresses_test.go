@@ -110,7 +110,7 @@ func TestGetAddressesIsolation(t *testing.T) {
 	if len(resp.Data.Addresses) != 1 {
 		t.Fatalf("expexted 1 address for user1, got %d", len(resp.Data.Addresses))
 	}
-	if resp.Data.Addresses[0].Name != "User Addr" {
+	if resp.Data.Addresses[0].Name != "User1 Addr" {
 		t.Errorf("expected 'User1 Addr', got %q", resp.Data.Addresses[0].Name)
 	}
 }
@@ -159,43 +159,3 @@ func TestGetAddressesWithData(t *testing.T) {
 	}
 }
 
-func TestGetAddressesIsolation(t *testing.T) {
-	testDB, user1 := setupAddressTestDB(t)
-	defer os.Remove(testDB)
-	defer database.ResetForTesting()
-
-	db := database.GetDB()
-	user2 := models.User{
-		SSHKeyFingerprint: "SHA256:otheraddressuser",
-		SSHPublicKey:      "ssh-ed25519 AAAA otheraddresskey",
-	}
-	db.Create(&models.Address{
-		UserID: user1.ID, Name: "User1 Addr", Street: "111 St",
-		City: "Portland", State: "OR", Zip: "97201", Country: "US",
-	})
-	db.Create(&models.Address{
-		UserID: user2.ID, Name: "User2 Addr", Street: "222 St",
-		City: "Seattle", State: "WA", Zip: "98101", Country: "US",
-	})
-
-	handler := NewAddressHandler("", "", "")
-
-	req := authRequest("GET", "/api/v1/addresses", nil, user1.ID)
-	w := httptest.NewRecorder()
-	handler.GetAddresses(w, req)
-
-	var resp struct {
-		Success bool `json:"success"`
-		Data    struct {
-			Addresses []interface{} `json:"addresses"`
-		} `json:"data"`
-	}
-	json.NewDecoder(w.Body).Decode(&resp)
-
-	if len(resp.Data.Addresses) != 1 {
-		t.Fatalf("expected to get 1 address for user1, found: %d", len(resp.Data.Addresses))
-	}
-	if resp.Data.Addresses[0].Name != "User1 Addr" {
-		t.Errorf("expected 'User1 Addr', got %q", resp.Data.Addresses[0].Name)
-	}
-}

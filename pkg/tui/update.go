@@ -14,6 +14,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if tick, ok := msg.(resizeTickMsg); ok {
 		if tick.seq == m.resizeSeq {
 			m.updateLayout(m.pendingWidth, m.pendingHeight)
+			switch m.currentPage {
+			case shopPage:
+				m = m.updateShopViewports()
+			case cartPage:
+				m = m.updateCartViewport()
+			case shippingPage:
+				m = m.updateShippingViewport()
+			case paymentPage:
+				m = m.updatePaymentViewport()
+			case confirmPage:
+				m = m.updateConfirmViewport()
+			}
 			if m.ShippingForm != nil {
 				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
 			}
@@ -79,7 +91,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.OrdersLoaded = true
 		m.splashDataReady = true
 		if m.splashDelayDone {
-			return m.SwitchPage(shopPage), nil
+			m = m.SwitchPage(shopPage)
+			m = m.updateShopViewports()
+			return m, nil
 		}
 		return m, nil
 	case CartSyncedMsg:
@@ -120,7 +134,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case DelayCompleteMsg:
 		m.splashDelayDone = true
 		if m.currentPage == splashPage && m.splashDataReady {
-			return m.SwitchPage(shopPage), nil
+			m = m.SwitchPage(shopPage)
+			m = m.updateShopViewports()
+			return m, nil
 		}
 		return m, nil
 	case splashCursorTickMsg:
@@ -145,9 +161,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.menuLastPage = m.currentPage
 			return m, nil
 		case "s":
-			return m.SwitchPage(shopPage).resetPageState(), nil
+			m = m.SwitchPage(shopPage).resetPageState()
+			m = m.updateShopViewports()
+			return m, nil
 		case "c":
-			return m.SwitchPage(cartPage).resetPageState(), nil
+			m = m.SwitchPage(cartPage).resetPageState()
+			m = m.updateCartViewport()
+			return m, nil
 		case "a":
 			m = m.SwitchPage(accountPage).resetPageState()
 			if !m.OrdersLoaded {

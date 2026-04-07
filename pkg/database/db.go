@@ -3,8 +3,11 @@ package database
 import (
 	"fmt"
 	"log"
+	"strings"
 	"sync"
+	"time"
 
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -15,21 +18,40 @@ var (
 	once sync.Once
 )
 
-// Connect initializes the database connection (singleton pattern)
-func Connect(dbPath string) (*gorm.DB, error) {
+// Connect initializes the database connection (singleton pattern).
+// If dsn starts with postgres:// or postgresql://, connects to PostgreSQL.
+// Otherwise falls back to SQLite (development only).
+func Connect(dsn string) (*gorm.DB, error) {
 	var err error
 
 	once.Do(func() {
-		// Configure GORM logger for development
 		config := &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Info),
+			Logger: logger.Default.LogMode(logger.Warn),
 		}
 
-		// Connect to SQLite database
-		db, err = gorm.Open(sqlite.Open(dbPath), config)
+		isPostgres := strings.HasPrefix(dsn, "postgres://") ||
+			strings.HasPrefix(dsn, "postgresql://")
+
+		if isPostgres {
+			db, err = gorm.Open(postgres.Open(dsn), config)
+		} else {
+			db, err = gorm.Open(sqlite.Open(dsn), config)
+		}
 		if err != nil {
 			err = fmt.Errorf("failed to connect to database: %w", err)
 			return
+		}
+
+		// Configure connection pool for PostgreSQL.
+		if isPostgres {
+			sqlDB, poolErr := db.DB()
+			if poolErr != nil {
+				err = fmt.Errorf("failed to get sql.DB: %w", poolErr)
+				return
+			}
+			sqlDB.SetMaxOpenConns(25)
+			sqlDB.SetMaxIdleConns(5)
+			sqlDB.SetConnMaxLifetime(5 * time.Minute)
 		}
 
 		log.Println("Database connection established")

@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 
 	"terminalShop/pkg/models"
+	"terminalShop/pkg/tui/qrfefe"
 	"terminalShop/pkg/validate"
 )
 
@@ -40,6 +42,23 @@ type PaymentFormCompleteMsg struct {
 // PaymentFormErrorMsg is sent when payment form validation fails
 type PaymentFormErrorMsg struct {
 	Message string
+}
+
+// PollPaymentInitMsg is sent when the collect endpoint returns a URL
+type PollPaymentInitMsg struct {
+	URL string
+}
+
+// PollPaymentStatusMsg is sent each polling tick while waiting for the browser
+// card entry to complete.
+type PollPaymentStatusMsg struct {
+	CardCount int
+}
+
+// PollPaymentCompleteMsg is sent when the card count increases, meaning the
+// webhook saved the new card
+type PollPaymentCompleteMsg struct {
+	Cards []models.Card
 }
 
 // buildPaymentForm creates the huh form bound to state's fields.
@@ -244,6 +263,72 @@ func (m Model) RenderPaymentForm(state *PaymentFormState) string {
 	)
 }
 
+func (m Model) updatePaymentViewport() Model {
+	headerH := lipgloss.Height(m.BuildHeader())
+	breadH := lipgloss.Height(m.BuildBreadcrumbs())
+	footerH := lipgloss.Height(m.BuildFooter())
+	availH := m.heightContainer - headerH - footerH - breadH
+	if availH < 1 {
+		availH = 1
+	}
+	if !m.paymentVPReady {
+		m.paymentVP = viewport.New(m.widthContent, availH)
+		m.paymentVP.KeyMap = viewport.KeyMap{}
+		m.paymentVPReady = true
+	} else {
+		m.paymentVP.Width = m.widthContent
+		m.paymentVP.Height = availH
+	}
+	return m
+}
+
+func (m Model) PaymentPageView() string {
+	if !m.paymentVPReady {
+		m = m.updatePaymentViewport()
+	}
+	var content string
+	if m.CheckingOut {
+		content = "  submitting order..."
+	} else if m.PaymentView == 2 {
+		// Bypass viewport — it strips the raw ANSI codes qrfefe emits.
+		return lipgloss.Place(
+			m.widthContainer,
+			m.paymentVP.Height,
+			lipgloss.Center, lipgloss.Center,
+			m.renderPaymentHttpsView(),
+		)
+	} else if m.PaymentView == 0 && m.PaymentForm == nil {
+		content = m.RenderCardList()
+		m.paymentVP.SetContent(content)
+		itemHeight := 3
+		targetY := m.CardCursor * itemHeight
+		if targetY < m.paymentVP.YOffset {
+			m.paymentVP.SetYOffset(targetY)
+		}
+		if targetY+itemHeight > m.paymentVP.YOffset+m.paymentVP.Height {
+			m.paymentVP.SetYOffset(targetY - m.paymentVP.Height + itemHeight + 1)
+		}
+		if m.CardCursor == len(m.SavedCards) {
+			m.paymentVP.GotoBottom()
+		}
+		return lipgloss.Place(
+			m.widthContainer,
+			lipgloss.Height(m.paymentVP.View()),
+			lipgloss.Center, lipgloss.Center,
+			m.paymentVP.View(),
+		)
+	} else if m.PaymentForm != nil {
+		content = m.RenderPaymentForm(m.PaymentForm)
+	}
+	m.paymentVP.SetContent(content)
+	return lipgloss.Place(
+		m.widthContainer,
+		lipgloss.Height(m.paymentVP.View()),
+		lipgloss.Center, lipgloss.Center,
+		m.paymentVP.View(),
+	)
+}
+
 func (m Model) RenderCardList() string {
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 0, 1, 0)
 	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
@@ -270,14 +355,21 @@ func (m Model) RenderCardList() string {
 		lines = append(lines, "")
 	}
 
-	addCursor := "  "
-	addStyle := inactiveStyle
+	sshCursor := "  "
+	sshStyle := inactiveStyle
 	if m.CardCursor == len(m.SavedCards) {
-		addCursor = "> "
-		addStyle = activeStyle
+		sshCursor = "> "
+		sshStyle = activeStyle
 	}
+	lines = append(lines, sshCursor+sshStyle.Render("+ add card via ssh"))
 
-	lines = append(lines, addCursor+addStyle.Render("+ Add new card"))
+	httpsCursor := "  "
+	httpsStyle := inactiveStyle
+	if m.CardCursor == len(m.SavedCards)+1 {
+		httpsCursor = "> "
+		httpsStyle = activeStyle
+	}
+	lines = append(lines, httpsCursor+httpsStyle.Render("+ add payment via browser"))
 
 	parts := []string{title}
 	parts = append(parts, strings.Join(lines, "\n"))
@@ -285,18 +377,38 @@ func (m Model) RenderCardList() string {
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
+func (m Model) renderPaymentHttpsView() string {
+	baseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#999999"))
+	accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4"))
+
+	if m.CollectURL == nil {
+		return baseStyle.Render("  generating payment link...")
+	}
+
+	qr, qrSize, err := qrfefe.Generate(0, *m.CollectURL)
+	if err != nil || qrSize > m.widthContent {
+		// QR too wide for the terminal — just show the URL.
+		return baseStyle.Render("open in browser to add payment information:") + "\n\n" +
+			accentStyle.Render(*m.CollectURL) + "\n"
+	}
+
+	// Concatenate manually — lipgloss layout functions (JoinVertical with Center)
+	// measure string widths and add padding that corrupts qrfefe's raw ANSI codes.
+	return qr +
+		baseStyle.Render("scan or visit to add payment information") + "\n" +
+		accentStyle.Render(*m.CollectURL) + "\n"
+}
+
 // PaymentUpdate handles all messages while on the payment page.
 // Moved from model.go Update() lines 429-578.
 func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case CardsMsg:
-		if msg.Err != nil || len(msg.Cards) == 0 {
+		if msg.Err != nil {
 			m.SavedCards = nil
-			m.PaymentView = 1
-			m.PaymentForm = m.InitPaymentForm()
-			return m, m.PaymentForm.form.Init()
+		} else {
+			m.SavedCards = msg.Cards
 		}
-		m.SavedCards = msg.Cards
 		m.PaymentView = 0
 		m.CardCursor = 0
 		m.PaymentForm = nil
@@ -304,14 +416,11 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 
 	case PaymentFormCompleteMsg:
 		if m.PaymentForm != nil {
-			return m, m.tokenizeCard(msg)
+			m.PaymentForm.submitting = true
+			m.CheckingOut = true
+			return m, m.saveCardAndConvert(msg)
 		}
 		return m, nil
-
-	case StripeTokenMsg:
-		m.PaymentForm = nil
-		m.CheckingOut = true
-		return m, m.saveCardAndConvert(msg)
 
 	case CheckoutResultMsg:
 		m.CheckingOut = false
@@ -322,6 +431,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.PaymentForm = nil
 				return m, nil
 			}
+			// Re-open the form so the user can retry with corrected details.
 			m.PaymentView = 1
 			m.PaymentForm = m.InitPaymentForm()
 			return m, m.PaymentForm.form.Init()
@@ -333,19 +443,32 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.ShippingInfo = nil
 		return m, nil
 
-	case StripeTokenErrMsg:
-		if m.PaymentForm != nil {
-			m.PaymentForm.submitting = false
-			m.ErrorMsg = fmt.Sprintf("Payment failed: %v", msg.Err)
-			m.PaymentForm.form = m.buildPaymentForm(m.PaymentForm)
-			return m, m.PaymentForm.form.Init()
-		}
-		m.ErrorMsg = fmt.Sprintf("Payment failed: %v", msg.Err)
-		return m, nil
-
 	case PaymentFormErrorMsg:
 		m.ErrorMsg = msg.Message
 		return m, nil
+
+	case PollPaymentInitMsg:
+		url := msg.URL
+		m.CollectURL = &url
+		return m, m.pollCardsCmd(m.CollectCardCount)
+
+	case PollPaymentStatusMsg:
+		if m.PaymentView != 2 {
+			return m, nil // user navigated away, stop polling
+		}
+		return m, m.pollCardsCmd(msg.CardCount)
+
+	case PollPaymentCompleteMsg:
+		if m.PaymentView != 2 {
+			return m, nil
+		}
+		m.SavedCards = msg.Cards
+		m.PaymentView = 0
+		m.CollectURL = nil
+		selected := m.SavedCards[len(m.SavedCards)-1]
+		m.SelectedCard = &selected
+		m.CheckingOut = true
+		return m, m.checkoutWithSavedCard()
 	}
 
 	// Card list navigation
@@ -364,9 +487,10 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.CardCursor--
 			}
 		case "down", "j":
-			if m.CardCursor < len(m.SavedCards) {
+			if m.CardCursor < len(m.SavedCards)+1 {
 				m.CardCursor++
 			}
+
 		case "enter":
 			if m.CardCursor < len(m.SavedCards) {
 				selected := m.SavedCards[m.CardCursor]
@@ -374,9 +498,17 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.CheckingOut = true
 				return m, m.checkoutWithSavedCard()
 			}
-			m.PaymentView = 1
-			m.PaymentForm = m.InitPaymentForm()
-			return m, m.PaymentForm.form.Init()
+			if m.CardCursor == len(m.SavedCards) {
+				m.PaymentView = 1
+				m.PaymentForm = m.InitPaymentForm()
+				return m, m.PaymentForm.form.Init()
+			}
+			// Browser payment
+			m.PaymentView = 2
+			m.CollectURL = nil
+			m.CollectCardCount = len(m.SavedCards)
+			return m, m.collectCardCmd()
+
 		case "d", "x":
 			if m.CardCursor < len(m.SavedCards) {
 				card := m.SavedCards[m.CardCursor]
@@ -391,6 +523,16 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				return m, m.deleteCardCmd(card.ID)
 			}
+		}
+		return m, nil
+	}
+
+	// HTTPS/browser view avigation
+	if m.PaymentView == 2 {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "esc" {
+			m.PaymentView = 0
+			m.CollectURL = nil
+			return m, nil
 		}
 		return m, nil
 	}

@@ -6,6 +6,7 @@ import (
 
 	"terminalShop/pkg/models"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -259,6 +260,54 @@ func (m Model) RenderShippingForm(state *ShippingFormState) string {
 		lipgloss.Left,
 		title,
 		form,
+	)
+}
+
+func (m Model) updateShippingViewport() Model {
+	headerH := lipgloss.Height(m.BuildHeader())
+	breadH := lipgloss.Height(m.BuildBreadcrumbs())
+	footerH := lipgloss.Height(m.BuildFooter())
+	availH := m.heightContainer - headerH - footerH - breadH
+	if availH < 1 {
+		availH = 1
+	}
+	if !m.shippingVPReady {
+		m.shippingVP = viewport.New(m.widthContent, availH)
+		m.shippingVP.KeyMap = viewport.KeyMap{}
+		m.shippingVPReady = true
+	} else {
+		m.shippingVP.Width = m.widthContent
+		m.shippingVP.Height = availH
+	}
+	return m
+}
+
+func (m Model) ShippingPageView() string {
+	if !m.shippingVPReady {
+		m = m.updateShippingViewport()
+	}
+	if m.ShippingView == 0 && m.ShippingForm == nil {
+		content := m.RenderAddressList()
+		m.shippingVP.SetContent(content)
+		itemHeight := 4
+		targetY := m.AddressCursor * itemHeight
+		if targetY < m.shippingVP.YOffset {
+			m.shippingVP.SetYOffset(targetY)
+		}
+		if targetY+itemHeight > m.shippingVP.YOffset+m.shippingVP.Height {
+			m.shippingVP.SetYOffset(targetY - m.shippingVP.Height + itemHeight + 1)
+		}
+		if m.AddressCursor == len(m.SavedAddresses) {
+			m.shippingVP.GotoBottom()
+		}
+	} else if m.ShippingForm != nil {
+		m.shippingVP.SetContent(m.RenderShippingForm(m.ShippingForm))
+	}
+	return lipgloss.Place(
+		m.widthContainer,
+		lipgloss.Height(m.shippingVP.View()),
+		lipgloss.Center, lipgloss.Center,
+		m.shippingVP.View(),
 	)
 }
 

@@ -116,33 +116,25 @@ func (m Model) View() string {
 	}
 	content = strings.Join(contentLines, "\n")
 
-	// Add vertical spacing around content with fixed height
-	contentWithPadding := lipgloss.NewStyle().
-		MarginTop(marginTop).
-		MarginBottom(marginBottom).
-		Height(availableContentHeight).
-		Render(content)
-
-	// Build footer
 	footer := m.BuildFooter()
 
-	// Assemble all layers vertically within the container
+	isViewportPage := m.currentPage == shopPage || m.currentPage == cartPage ||
+		m.currentPage == shippingPage || m.currentPage == paymentPage ||
+		m.currentPage == confirmPage
+
 	var child string
-	if breadcrumbs != "" {
-		child = lipgloss.JoinVertical(
-			lipgloss.Left,
-			header,
-			breadcrumbs,
-			contentWithPadding,
-			footer,
-		)
+	if isViewportPage {
+		if breadcrumbs != "" {
+			child = lipgloss.JoinVertical(lipgloss.Left, header, breadcrumbs, content, footer)
+		} else {
+			child = lipgloss.JoinVertical(lipgloss.Left, header, content, footer)
+		}
+	} else if breadcrumbs != "" {
+		ccontentWithPadding := lipgloss.NewStyle().MarginTop(marginTop).MarginBottom(marginBottom).Height(availableContentHeight).Render(content)
+		child = lipgloss.JoinVertical(lipgloss.Left, header, breadcrumbs, ccontentWithPadding, footer)
 	} else {
-		child = lipgloss.JoinVertical(
-			lipgloss.Left,
-			header,
-			contentWithPadding,
-			footer,
-		)
+		ccontentWithPadding := lipgloss.NewStyle().MarginTop(marginTop).MarginBottom(marginBottom).Height(availableContentHeight).Render(content)
+		child = lipgloss.JoinVertical(lipgloss.Left, header, ccontentWithPadding, footer)
 	}
 
 	// Constrain the assembled layout to the container dimensions
@@ -166,23 +158,16 @@ func (m Model) buildPageContent(height int) string {
 	case accountPage:
 		return m.BuildAccountView(height)
 	case shippingPage:
-		if m.ShippingView == 0 && m.ShippingForm == nil {
-			return m.RenderAddressList()
-		}
-		return m.RenderShippingForm(m.ShippingForm)
+		return m.ShippingPageView()
 	case paymentPage:
-		if m.CheckingOut {
-			return "  submitting order..."
-		}
-		if m.PaymentView == 0 && m.PaymentForm == nil {
-			return m.RenderCardList()
-		}
-		return m.RenderPaymentForm(m.PaymentForm)
+		return m.PaymentPageView()
 	case confirmPage:
-		return m.RenderConfirmation()
+		return m.ConfirmView()
 	case cartPage:
-		return m.BuildCartView()
+		return m.CartView()
+	case shopPage:
+		return m.ShopView()
 	default:
-		return m.BuildShopView()
+		return m.ShopView()
 	}
 }

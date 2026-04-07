@@ -5,8 +5,9 @@ import (
 
 	"terminalShop/pkg/models"
 
-	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // RenderConfirmation renders the order confirmation view
@@ -73,21 +74,58 @@ func (m Model) RenderConfirmation() string {
 	)
 }
 
+func (m Model) updateConfirmViewport() Model {
+	headerH := lipgloss.Height(m.BuildHeader())
+	breadH := lipgloss.Height(m.BuildBreadcrumbs())
+	footerH := lipgloss.Height(m.BuildFooter())
+	availH := m.heightContainer - headerH - footerH - breadH
+	if availH < 1 {
+		availH = 1
+	}
+	if !m.confirmVPReady {
+		m.confirmVP = viewport.New(m.widthContent, availH)
+		m.confirmVP.KeyMap = viewport.DefaultKeyMap()
+		m.confirmVPReady = true
+	} else {
+		m.confirmVP.Width = m.widthContent
+		m.confirmVP.Height = availH
+	}
+	return m
+}
+
+func (m Model) ConfirmView() string {
+	if !m.confirmVPReady {
+		m = m.updateConfirmViewport()
+	}
+	m.confirmVP.SetContent(m.RenderConfirmation())
+	return lipgloss.Place(
+		m.widthContainer,
+		lipgloss.Height(m.confirmVP.View()),
+		lipgloss.Center, lipgloss.Center,
+		m.confirmVP.View(),
+	)
+}
+
 func (m Model) ConfirmUpdate(msg tea.Msg) (Model, tea.Cmd) {
-	keyMsg, ok := msg.(tea.KeyMsg)
-	if !ok {
-		return m, nil
+	var cmd tea.Cmd
+	if m.confirmVPReady {
+		m.confirmVP, cmd = m.confirmVP.Update(msg)
 	}
 
-	if keyMsg.String() != "esc" && keyMsg.String() != "s" { 
-		return m, nil
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, cmd
+	}
+
+	if keyMsg.String() != "esc" && keyMsg.String() != "s" {
+		return m, cmd
 	}
 
 	m = m.SwitchPage(shopPage)
 	m.ShippingInfo = nil
 	m.CheckingOut = false
 	m.Cart = make(map[uint]*models.CartItem)
-	m.CartCursor = 0 
+	m.CartCursor = 0
 	m = m.resetPageState()
 	return m, func() tea.Msg {
 		if m.APIClient != nil {
