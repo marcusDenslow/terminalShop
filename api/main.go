@@ -49,7 +49,7 @@ func main() {
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 30*time.Minute)
 
 	// Setup routes
-	router := routes.SetupRoutes(version, cfg.StripeSecretKey, jwtManager, cfg.AuthFingerprintKey, cfg.ShippoAPIKey, cfg.BringAPIUID, cfg.BringAPIKey)
+	router := routes.SetupRoutes(version, cfg.StripeSecretKey, cfg.StripeWebhookSecret, jwtManager, cfg.AuthFingerprintKey, cfg.ShippoAPIKey, cfg.BringAPIUID, cfg.BringAPIKey, cfg.AppURL)
 
 	// Create HTTP server
 	server := &http.Server{
@@ -68,7 +68,7 @@ func main() {
 	go func() {
 		log.Printf("Starting API server on port %s", cfg.APIPort)
 		log.Printf("Environment: %s", cfg.Environment)
-		log.Printf("Database: %s", cfg.DatabaseURL)
+		log.Printf("Database: %s", cfg.SafeDatabaseURL())
 		log.Printf("Health check: http://localhost:%s/api/v1/health", cfg.APIPort)
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

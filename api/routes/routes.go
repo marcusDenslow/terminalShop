@@ -1,6 +1,9 @@
 package routes
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/go-chi/chi/v5"
 
 	"terminalShop/api/handlers"
@@ -9,41 +12,68 @@ import (
 )
 
 // SetupRoutes configures all API routes
-func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTManager, authFingerprintKey string, shippoAPIKey string, bringAPIUID string, bringAPIKey string) *chi.Mux {
+func SetupRoutes(
+	version string,
+	stripeSecretKey string,
+	stripeWebhookSecret string,
+	jwtManager *auth.JWTManager,
+	authFingerprintKey string,
+	shippoAPIKey string,
+	bringAPIUID string,
+	bringAPIKey string,
+	appURL string,
+) *chi.Mux {
 	r := chi.NewRouter()
 
-	// Apply global middleware
+	// Global middleware
 	r.Use(middleware.Logger)
 	r.Use(middleware.CORS())
 	r.Use(middleware.Recovery)
 	r.Use(middleware.Auth(jwtManager))
+	// Broad IP-level rate limit: 200 req/min per IP across all endpoints.
+	r.Use(middleware.RateLimitByIP(200, time.Minute))
 
 	// Initialize handlers
 	healthHandler := handlers.NewHealthHandler(version)
 	productHandler := handlers.NewProductHandler()
 	authHandler := handlers.NewAuthHandler(jwtManager, authFingerprintKey)
 	cartHandler := handlers.NewCartHandler(stripeSecretKey)
-	cardHandler := handlers.NewCardHandler(stripeSecretKey)
-	orderHandler := handlers.NewOrderHandler()
+	cardHandler := handlers.NewCardHandler(stripeSecretKey, appURL)
+	orderHandler := handlers.NewOrderHandler(stripeSecretKey)
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)
 	viewHandler := handlers.NewViewHandler()
+	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, stripeSecretKey)
 
-	// API v1 routes
+	// Short payment redirect and success page — no auth required.
+	r.Get("/pay/{token}", handlers.PayRedirect)
+	r.Get("/card-added", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<!DOCTYPE html><html><body style="font-family:monospace;text-align:center;padding:4rem"><h2>Card added.</h2><p>You can close this tab.</p></body></html>`))
+	})
+
 	r.Route("/api/v1", func(r chi.Router) {
-		// Health & testing endpoints
+		// Health
 		r.Get("/health", healthHandler.GetHealth)
 		r.Get("/ping", healthHandler.Ping)
 
-		// Authentication endpoints (SSH key-based)
-		r.Post("/auth/register", authHandler.RegisterWithSSHKey) // POST /api/v1/auth/register
-		r.Get("/auth/user", authHandler.GetUserBySSHKey)         // GET /api/v1/auth/user?fingerprint=xxx
-		r.Post("/auth/token", authHandler.GetToken)
+		// Stripe webhooks — unauthenticated, verified via HMAC signature.
+		// Apply a generous IP rate limit here (Stripe retries from many IPs).
+		r.With(middleware.RateLimitByIP(60, time.Minute)).
+			Post("/webhooks/stripe", webhookHandler.HandleStripe)
 
-		// Product endpoints (full CRUD)
-		r.Get("/products", productHandler.GetProducts)     // Public
-		r.Get("/products/{id}", productHandler.GetProduct) // Public
+		// Auth — stricter IP rate limit to protect against brute-force.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RateLimitByIP(20, time.Minute))
+			r.Post("/auth/register", authHandler.RegisterWithSSHKey)
+			r.Get("/auth/user", authHandler.GetUserBySSHKey)
+			r.Post("/auth/token", authHandler.GetToken)
+		})
 
-		// Protected routes - requires a valid JWT
+		// Public product listing
+		r.Get("/products", productHandler.GetProducts)
+		r.Get("/products/{id}", productHandler.GetProduct)
+
+		// Protected routes — require a valid JWT
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireAuth)
 
@@ -56,20 +86,26 @@ func SetupRoutes(version string, stripeSecretKey string, jwtManager *auth.JWTMan
 				r.Put("/address", cartHandler.SetAddress)
 				r.Put("/card", cartHandler.SetCard)
 				r.Delete("/", cartHandler.ClearCart)
-				r.Post("/convert", cartHandler.ConvertCart)
+				// Tighter per-user limit on the checkout endpoint.
+				r.With(middleware.RateLimitByUser(10, time.Minute)).
+					Post("/convert", cartHandler.ConvertCart)
 			})
 
-			// Cards
+			// Cards — per-user limit on card creation to slow fraud probing.
 			r.Route("/cards", func(r chi.Router) {
 				r.Get("/", cardHandler.GetCards)
 				r.Get("/{id}", cardHandler.GetCard)
-				r.Post("/", cardHandler.SaveCard)
+				r.With(middleware.RateLimitByUser(15, time.Minute)).
+					Post("/", cardHandler.SaveCard)
+				r.With(middleware.RateLimitByUser(10, time.Minute)).
+					Post("/collect", cardHandler.CollectCard)
 				r.Delete("/{id}", cardHandler.DeleteCard)
 				r.Put("/{id}/default", cardHandler.SetDefaultCard)
 			})
 
 			// Orders
 			r.Get("/orders", orderHandler.GetOrders)
+			r.Post("/orders/{id}/refund", orderHandler.RefundOrder)
 
 			// Addresses
 			r.Route("/addresses", func(r chi.Router) {
