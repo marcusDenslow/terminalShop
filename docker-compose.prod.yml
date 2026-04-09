@@ -1,0 +1,41 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    env_file: .env.prod
+    volumes:
+      - ./data:/data
+    expose:
+      - "8080"
+
+  ssh:
+    build:
+      context: .
+      dockerfile: Dockerfile.ssh
+    restart: unless-stopped
+    env_file: .env.prod
+    ports:
+      - "22:22"
+    volumes:
+      - ./.ssh:/root/.ssh
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:
