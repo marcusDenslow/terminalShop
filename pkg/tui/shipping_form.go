@@ -121,7 +121,8 @@ func (m Model) buildShippingForm(state *ShippingFormState) *huh.Form {
 		),
 	).
 		WithShowErrors(false).
-		WithShowHelp(false)
+		WithShowHelp(false).
+		WithTheme(m.theme.Form())
 
 	if m.size < medium {
 		f = f.WithLayout(huh.LayoutStack).WithWidth(m.widthContent)
@@ -241,19 +242,10 @@ func (m Model) UpdateShippingForm(msg tea.Msg, state *ShippingFormState) tea.Cmd
 // RenderShippingForm renders the shipping form view
 func (m Model) RenderShippingForm(state *ShippingFormState) string {
 	if state.submitting {
-		loadingStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Bold(true).
-			Padding(1)
-		return loadingStyle.Render("Processing shipping information...")
+		return m.theme.TextAccent().Bold(true).Padding(1).Render("Processing shipping information...")
 	}
 
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 0, 1, 0)
-
-	title := titleStyle.Render("Shipping Address")
+	title := m.theme.TextAccent().Bold(true).Padding(0, 0, 1, 0).Render("Shipping Address")
 	form := state.form.View()
 
 	return lipgloss.JoinVertical(
@@ -312,10 +304,10 @@ func (m Model) ShippingPageView() string {
 }
 
 func (m Model) RenderAddressList() string {
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 0, 1, 0)
-	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
-	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#999999"))
+	titleStyle := m.theme.TextAccent().Bold(true).Padding(0, 0, 1, 0)
+	activeStyle := m.theme.TextAccent().Bold(true)
+	inactiveStyle := m.theme.TextDim()
+	labelStyle := m.theme.TextLabel()
 
 	title := titleStyle.Render("Selected Shipping Address")
 

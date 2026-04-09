@@ -8,9 +8,9 @@ import (
 
 
 func (m Model) BuildMenuView() string {
-	bold := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+	bold := m.theme.TextAccent().Bold(true)
 
-	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA"))
+	base := m.theme.TextBody()
 
 	rowStyle := lipgloss.NewStyle().Padding(0,1)
 	rows := []string{
@@ -28,10 +28,10 @@ func (m Model) BuildMenuView() string {
 	}
 
 
-	logoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+	logoStyle := m.theme.TextAccent().Bold(true)
 	logo := logoStyle.Render("terminal coffee")
 
-	modal := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#666666")).Padding(1,2).Render(menuContent)
+	modal := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(m.theme.Border()).Padding(1, 2).Render(menuContent)
 
 	hint := base.Render("press esc to close")
 

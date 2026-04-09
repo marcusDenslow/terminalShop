@@ -9,11 +9,13 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stripe/stripe-go/v78"
 	stripetoken "github.com/stripe/stripe-go/v78/token"
 
 	"terminalShop/pkg/api"
 	"terminalShop/pkg/models"
+	"terminalShop/pkg/tui/theme"
 )
 
 // termSize represents the terminal size category for responsive layout.
@@ -101,6 +103,10 @@ type Model struct {
 	ErrorMsg  string // error message if API fetch fails
 	APIClient *api.Client
 
+	// Rendering
+	renderer *lipgloss.Renderer
+	theme    theme.Theme
+
 	// Checkout state
 	ShippingForm     *ShippingFormState // Shipping form state (nil when not in shipping step)
 	PaymentForm      *PaymentFormState  // Payment form state (nil when not in payment step)
@@ -129,6 +135,11 @@ type Model struct {
 	splashDataReady bool // true when products have loaded
 	splashDelayDone bool // true when minimum display time has elapsed
 	splashCursor    bool // toggles for blinking cursor animation
+
+	// Confirmation screen — snapshot populated on checkout, cleared when leaving confirm page
+	ConfirmTotal    int              // server-confirmed order total in cents
+	ConfirmItems    []models.CartItem // cart items at time of purchase
+	ConfirmShipping *models.Address  // shipping address at time of purchase
 
 }
 
@@ -610,11 +621,18 @@ func (m Model) GetCartItemsSlice() []*models.CartItem {
 	return items
 }
 
-// NewModel creates a new model with default coffee options
+// NewModel creates a new model using the default renderer.
 func NewModel(username string) Model {
+	return newModelWithRenderer(username, lipgloss.DefaultRenderer())
+}
+
+// newModelWithRenderer creates a new model with the given renderer.
+func newModelWithRenderer(username string, renderer *lipgloss.Renderer) Model {
 	m := Model{
 		Username:    username,
 		currentPage: splashPage,
+		renderer:    renderer,
+		theme:       theme.BasicTheme(renderer),
 		Coffees: []models.Coffee{
 			{
 				Name:        "Espresso",
@@ -684,9 +702,9 @@ func NewModel(username string) Model {
 	return m
 }
 
-// NewModelWithAuth creates a new model with user authentication context
-func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clientSecret string, stripePublicKey string) Model {
-	m := NewModel("")
+// NewModelWithAuth creates a new model with user authentication context.
+func NewModelWithAuth(renderer *lipgloss.Renderer, fingerprint string, pubKeyStr string, apiURL string, clientSecret string, stripePublicKey string) Model {
+	m := newModelWithRenderer("", renderer)
 	m.Fingerprint = fingerprint
 	m.SSHPublicKeyStr = pubKeyStr
 	m.AuthFingerprintKey = clientSecret

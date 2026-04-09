@@ -8,8 +8,7 @@ import (
 
 // ResizeView renders a message when the terminal is too small.
 func (m Model) ResizeView() string {
-	msg := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666")).
+	msg := m.theme.TextDim().
 		Align(lipgloss.Center).
 		Render("Terminal too small.\nPlease resize.")
 
@@ -74,10 +73,10 @@ func (m Model) View() string {
 
 	var content string
 	if m.Loading {
-		loadingStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Padding(2, 4)
+		loadingStyle := m.theme.TextLoading().Padding(2, 4)
 		content = loadingStyle.Render("Loading products from API...")
 	} else if m.ErrorMsg != "" {
-		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Background(lipgloss.Color("52")).Padding(0, 1).MarginBottom(1)
+		errorStyle := m.theme.PanelError().Padding(0, 1).MarginBottom(1)
 		errorBanner := errorStyle.Render(m.ErrorMsg)
 		content = errorBanner + "\n" + m.buildPageContent(availableContentHeight)
 	} else {

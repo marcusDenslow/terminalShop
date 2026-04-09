@@ -8,13 +8,10 @@ import (
 
 func (m Model) BuildFooter() string {
 	// Style for keybinds (bold)
-	keybindStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666")).
-		Bold(true)
+	keybindStyle := m.theme.TextDim().Bold(true)
 
 	// Style for descriptions (normal)
-	descStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666"))
+	descStyle := m.theme.TextDim()
 
 	// On small terminals, only show the menu hint
 	if m.size == small {

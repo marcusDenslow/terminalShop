@@ -66,7 +66,7 @@ func (m Model) updateShopViewports() Model {
 func (m Model) getShopMenuContent() string {
 	menuWidth, _ := m.calculateShopWidths()
 
-	selectedColor := lipgloss.Color("#4682B4")
+	selectedColor := m.theme.Highlight()
 	if m.shop.selected >= 0 && m.shop.selected < len(m.Coffees) {
 		if c := m.Coffees[m.shop.selected].Color; c != "" {
 			selectedColor = lipgloss.Color(c)
@@ -76,19 +76,17 @@ func (m Model) getShopMenuContent() string {
 	var normal, highlighted lipgloss.Style
 	if m.size < large {
 		menuWidth = m.widthContent
-		normal = lipgloss.NewStyle().
+		normal = m.theme.TextBody().
+			Width(menuWidth - 1).Align(lipgloss.Center)
+		highlighted = m.theme.TextAccent().
 			Width(menuWidth - 1).Align(lipgloss.Center).
-			Foreground(lipgloss.Color("#AAAAAA"))
-		highlighted = lipgloss.NewStyle().
-			Width(menuWidth - 1).Align(lipgloss.Center).
-			Background(selectedColor).Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+			Background(selectedColor).Bold(true)
 	} else {
-		normal = lipgloss.NewStyle().
+		normal = m.theme.TextBody().
+			Width(menuWidth + 2).Padding(0, 1)
+		highlighted = m.theme.TextAccent().
 			Width(menuWidth + 2).Padding(0, 1).
-			Foreground(lipgloss.Color("#AAAAAA"))
-		highlighted = lipgloss.NewStyle().
-			Width(menuWidth + 2).Padding(0, 1).
-			Background(selectedColor).Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+			Background(selectedColor).Bold(true)
 	}
 
 	var b strings.Builder
@@ -118,8 +116,8 @@ func (m Model) getShopDetailContent() string {
 	}
 
 	detail := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF")).Render(coffee.Name),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")).Render(
+		m.theme.TextAccent().Bold(true).Render(coffee.Name),
+		m.theme.TextBody().Render(
 			fmt.Sprintf("%s | %doz | %s", coffee.RoastType, coffee.Ounces, coffee.BeanType),
 		),
 		"",
@@ -127,7 +125,7 @@ func (m Model) getShopDetailContent() string {
 			fmt.Sprintf("$%.2f", float64(coffee.Price)/100),
 		),
 		"",
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Width(detailWidth).Render(coffee.Description),
+		m.theme.TextAccent().Width(detailWidth).Render(coffee.Description),
 		"",
 		fmt.Sprintf("-  %d  +", quantity),
 	)

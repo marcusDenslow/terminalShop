@@ -26,7 +26,7 @@ func (Coffee) TableName() string {
 	return "coffees"
 }
 
-// AccountMenuItems something
+// AccountMenuItems 
 var AccountMenuItems = []string{
 	"order history",
 	"faq",

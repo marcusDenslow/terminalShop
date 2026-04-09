@@ -99,7 +99,8 @@ func (m Model) buildPaymentForm(state *PaymentFormState) *huh.Form {
 		),
 	).
 		WithShowErrors(false).
-		WithShowHelp(false)
+		WithShowHelp(false).
+		WithTheme(m.theme.Form())
 
 	if m.size < medium {
 		f = f.WithLayout(huh.LayoutStack).WithWidth(m.widthContent)
@@ -236,17 +237,10 @@ func (m Model) UpdatePaymentForm(msg tea.Msg, state *PaymentFormState) tea.Cmd {
 // RenderPaymentForm renders the payment form view
 func (m Model) RenderPaymentForm(state *PaymentFormState) string {
 	if state.submitting {
-		loadingStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Bold(true).
-			Padding(1)
-		return loadingStyle.Render("Processing payment...")
+		return m.theme.TextAccent().Bold(true).Padding(1).Render("Processing payment...")
 	}
 
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 0, 1, 0)
+	titleStyle := m.theme.TextAccent().Bold(true).Padding(0, 0, 1, 0)
 
 	cardLast4 := ""
 	if len(state.CardNumber) >= 4 {
@@ -330,10 +324,10 @@ func (m Model) PaymentPageView() string {
 }
 
 func (m Model) RenderCardList() string {
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true).Padding(0, 0, 1, 0)
-	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
-	inactiveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#999999"))
+	titleStyle := m.theme.TextAccent().Bold(true).Padding(0, 0, 1, 0)
+	activeStyle := m.theme.TextAccent().Bold(true)
+	inactiveStyle := m.theme.TextDim()
+	labelStyle := m.theme.TextLabel()
 
 	title := titleStyle.Render("Select Payment Method")
 
@@ -378,8 +372,8 @@ func (m Model) RenderCardList() string {
 }
 
 func (m Model) renderPaymentHttpsView() string {
-	baseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#999999"))
-	accentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4"))
+	baseStyle := m.theme.TextLabel()
+	accentStyle := m.theme.TextHighlight()
 
 	if m.CollectURL == nil {
 		return baseStyle.Render("  generating payment link...")
@@ -436,11 +430,19 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.PaymentForm = m.InitPaymentForm()
 			return m, m.PaymentForm.form.Init()
 		}
-		m = m.SwitchPage(confirmPage)
-		m.OrdersLoaded = false
+		// Snapshot order details before clearing cart/shipping
+		m.ConfirmTotal = msg.Total
+		for _, item := range m.GetCartItemsSlice() {
+			m.ConfirmItems = append(m.ConfirmItems, *item)
+		}
+		m.ConfirmShipping = m.ShippingInfo
+
+		// Clear cart and shipping immediately so they don't appear stale elsewhere
 		m.Cart = make(map[uint]*models.CartItem)
 		m.CartCursor = 0
 		m.ShippingInfo = nil
+		m.OrdersLoaded = false
+		m = m.SwitchPage(confirmPage)
 		return m, nil
 
 	case PaymentFormErrorMsg:

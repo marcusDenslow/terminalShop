@@ -33,6 +33,8 @@ var (
 )
 
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
+	renderer := bubbletea.MakeRenderer(s)
+
 	// Extract SSH public key from session
 	pubKey := s.PublicKey()
 
@@ -43,7 +45,7 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 	}
 
 	// Create TUI model with user context (no registration screen needed!)
-	m := tui.NewModelWithAuth(fingerprint, pubKeyStr, apiURL, authFingerprintKey, stripePublicKey)
+	m := tui.NewModelWithAuth(renderer, fingerprint, pubKeyStr, apiURL, authFingerprintKey, stripePublicKey)
 	return m, []tea.ProgramOption{tea.WithAltScreen()}
 }
 

@@ -29,8 +29,7 @@ func (m Model) updateCartViewport() Model {
 
 func (m Model) generateCartContent() string {
 	if len(m.Cart) == 0 {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
+		emptyStyle := m.theme.TextDim().
 			Align(lipgloss.Center).
 			Width(m.widthContent).
 			Padding(2, 0)
@@ -49,23 +48,17 @@ func (m Model) generateCartContent() string {
 	for idx, item := range itemSlice {
 		itemTotal := item.Quantity * item.Coffee.Price
 
-		nameStyle := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FFFFFF"))
+		nameStyle := m.theme.TextAccent().Bold(true)
 
 		individualPriceStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(item.Coffee.Color)).
 			Bold(true)
 
-		infoStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#AAAAAA"))
+		infoStyle := m.theme.TextBody()
 
-		quantityStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF"))
+		quantityStyle := m.theme.TextAccent()
 
-		totalPriceStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Bold(true)
+		totalPriceStyle := m.theme.TextAccent().Bold(true)
 
 		nameText := nameStyle.Render(item.Coffee.Name)
 		individualPriceText := individualPriceStyle.Render(fmt.Sprintf(" $%.2f", float64(item.Coffee.Price)/100))
@@ -97,18 +90,18 @@ func (m Model) generateCartContent() string {
 		if idx == m.CartCursor {
 			itemBox = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), true).
-				BorderForeground(lipgloss.Color("#FFFFFF")).
+				BorderForeground(m.theme.Accent()).
 				Padding(boxPadding, 2).
 				Width(boxWidth).
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Foreground(m.theme.Accent()).
 				Bold(true)
 		} else {
 			itemBox = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder()).
-				BorderForeground(lipgloss.Color("#666666")).
+				BorderForeground(m.theme.Border()).
 				Padding(boxPadding, 2).
 				Width(boxWidth).
-				Foreground(lipgloss.Color("#FFFFFF"))
+				Foreground(m.theme.Accent())
 		}
 
 		centered := lipgloss.NewStyle().

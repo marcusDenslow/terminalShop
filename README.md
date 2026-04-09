@@ -47,7 +47,6 @@ go run main.go
 **Features missing vs reference (terminal.shop):**
 - [ ] Splash/loading screen on connect
 - [ ] Animated logo with blinking cursor
-- [ ] Subscriptions (recurring orders) — subscribe, manage, cancel
 - [ ] API token management page
 - [ ] OAuth app management page
 - [ ] About page

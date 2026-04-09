@@ -19,15 +19,15 @@ func (m Model) BuildAccountView(availableHeight int) string {
 	for i, item := range models.AccountMenuItems {
 		if m.AccountCursor == i {
 			style := lipgloss.NewStyle().
-				Background(lipgloss.Color("#4682B4")).
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(m.theme.Highlight()).
+				Foreground(m.theme.Accent()).
 				Padding(0, 1).
 				Width(leftWidth - 2).
 				Align(lipgloss.Left)
 			leftPanel += style.Render(item) + "\n"
 		} else {
 			style := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#AAAAAA")).
+				Foreground(m.theme.Body()).
 				Padding(0, 1).
 				Width(leftWidth - 2).
 				Align(lipgloss.Left)
@@ -41,10 +41,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 	// Build the detail view (right panel) based on cursor position
 	detailView := ""
 	if m.AccountCursor >= 0 && m.AccountCursor < len(models.AccountMenuItems) {
-		titleStyle := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FFFFFF")).
-			MarginBottom(2)
+		titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
 
 		// On small terminals, use full content width
 		detailContentWidth := rightWidth - 2
@@ -52,9 +49,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 			detailContentWidth = m.widthContent - 2
 		}
 
-		contentStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#AAAAAA")).
-			Width(detailContentWidth)
+		contentStyle := m.theme.TextBody().Width(detailContentWidth)
 
 		selectedItem := models.AccountMenuItems[m.AccountCursor]
 		switch selectedItem {
@@ -84,15 +79,13 @@ func (m Model) BuildAccountView(availableHeight int) string {
 				}
 
 				if m.OrderViewState == 0 {
-					hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+					hintStyle := m.theme.TextDim()
 					lines += "\n" + hintStyle.Render("enter: browse orders")
 				}
 				detailView = lines
 			}
 		case "faq":
-			questionStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#4682B4")).
-				Bold(true)
+			questionStyle := m.theme.TextHighlight().Bold(true)
 
 			faqContent := ""
 			for i, faq := range m.FAQs {
@@ -104,16 +97,12 @@ func (m Model) BuildAccountView(availableHeight int) string {
 			}
 			detailView = titleStyle.Render("FAQ") + "\n\n" + faqContent
 			if !m.FaqFocused {
-				hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+				hintStyle := m.theme.TextDim()
 				detailView += "\n\n" + hintStyle.Render("enter: scroll faq")
 			}
 		case "about":
-			accentStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#4682B4")).
-				Bold(true)
-			userStyle := lipgloss.NewStyle().
-				Foreground(lipgloss.Color("C6DDF0")).
-				Bold(true)
+			accentStyle := m.theme.TextHighlight().Bold(true)
+			userStyle := m.theme.TextAccent().Bold(true)
 
 			aboutContent := contentStyle.Render(wordWrap(
 				"This project is heavily inspired by the wonderful team who made TerminalDotShop. I want to thank them for open-sourcing the code for that project. Cudos to those smart, funny, amazing looking devs:",
@@ -199,16 +188,11 @@ func (m Model) BuildAccountView(availableHeight int) string {
 // Shows order number, date, status, total, and the first 2 items as a preview.
 func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool, boxPadding int, containerWidth int) string {
 	// Order header line: "Order #123" left, "Jan 02 2026  PAID" right
-	nameStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF"))
+	nameStyle := m.theme.TextAccent().Bold(true)
 
-	dimStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666"))
+	dimStyle := m.theme.TextDim()
 
-	statusStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#4682B4")).
-		Bold(true)
+	statusStyle := m.theme.TextHighlight().Bold(true)
 
 	orderLabel := nameStyle.Render(fmt.Sprintf("Order #%d", order.ID))
 	total := nameStyle.Render(fmt.Sprintf("$%.2f", float64(order.Total)/100.0))
@@ -254,13 +238,13 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool,
 	if isSelected {
 		itemBox = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), true).
-			BorderForeground(lipgloss.Color("#FFFFFF")).
+			BorderForeground(m.theme.Accent()).
 			Padding(boxPadding, 2).
 			Width(boxWidth)
 	} else {
 		itemBox = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("#666666")).
+			BorderForeground(m.theme.Border()).
 			Padding(boxPadding, 2).
 			Width(boxWidth)
 	}
@@ -274,20 +258,13 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool,
 
 // buildOrderDetailView renders the full detail view for a single order.
 func (m Model) buildOrderDetailView(order models.Order, width int) string {
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		MarginBottom(1)
+	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(1)
 
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#4682B4")).
-		Bold(true)
+	labelStyle := m.theme.TextHighlight().Bold(true)
 
-	valueStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#AAAAAA"))
+	valueStyle := m.theme.TextBody()
 
-	dimStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666"))
+	dimStyle := m.theme.TextDim()
 
 	var b strings.Builder
 
@@ -366,12 +343,8 @@ func (m Model) computeFaqScrollMax() int {
 		detailContentWidth = m.widthContent - 2
 	}
 
-	questionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#4682B4")).
-		Bold(true)
-	contentStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#AAAAAA")).
-		Width(detailContentWidth)
+	questionStyle := m.theme.TextHighlight().Bold(true)
+	contentStyle := m.theme.TextBody().Width(detailContentWidth)
 
 	faqContent := ""
 	for i, faq := range m.FAQs {
@@ -382,10 +355,7 @@ func (m Model) computeFaqScrollMax() int {
 		}
 	}
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#FFFFFF")).
-		MarginBottom(2)
+	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
 	detailView := titleStyle.Render("FAQ") + "\n\n" + faqContent
 
 	totalLines := len(strings.Split(detailView, "\n"))

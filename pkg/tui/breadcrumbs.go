@@ -10,15 +10,9 @@ func (m Model) BuildBreadcrumbs() string {
 		return ""
 	}
 
-	activeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true)
-
-	inactiveStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666"))
-
-	sepStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666"))
+	activeStyle := m.theme.TextAccent().Bold(true)
+	inactiveStyle := m.theme.TextDim()
+	sepStyle := m.theme.TextDim()
 
 	sep := sepStyle.Render(" / ")
 

@@ -6,9 +6,9 @@ import (
 )
 
 func (m Model) BuildHelpView() string {
-	bold := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
-	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA"))
-	header := lipgloss.NewStyle().Foreground(lipgloss.Color("#4682B4")).Bold(true)
+	bold := m.theme.TextAccent().Bold(true)
+	base := m.theme.TextBody()
+	header := m.theme.TextHighlight().Bold(true)
 	rowStyle := lipgloss.NewStyle().Padding(0, 1)
 
 	sections := []struct {
@@ -76,12 +76,12 @@ func (m Model) BuildHelpView() string {
 		}
 	}
 
-	logoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
+	logoStyle := m.theme.TextAccent().Bold(true)
 	logo := logoStyle.Render("keybindings")
 
 	modal := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("#666666")).
+		BorderForeground(m.theme.Border()).
 		Padding(1, 2).
 		Render(content)
 

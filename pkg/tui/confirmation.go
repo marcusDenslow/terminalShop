@@ -3,8 +3,6 @@ package tui
 import (
 	"fmt"
 
-	"terminalShop/pkg/models"
-
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -12,52 +10,42 @@ import (
 
 // RenderConfirmation renders the order confirmation view
 func (m Model) RenderConfirmation() string {
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF")).
-		Bold(true).
-		Padding(0, 0, 1, 0)
+	titleStyle := m.theme.TextAccent().Bold(true).Padding(0, 0, 1, 0)
 
-	sectionStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#CCCCCC")).
-		Padding(0, 0, 1, 2)
+	sectionStyle := m.theme.TextBody().Padding(0, 0, 1, 2)
 
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666"))
+	labelStyle := m.theme.TextDim()
 
-	valueStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FFFFFF"))
+	valueStyle := m.theme.TextAccent()
 
-	successStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#00FF00")).
-		Bold(true).
-		Padding(1, 0)
+	successStyle := m.theme.TextSuccess().Bold(true).Padding(1, 0)
 
 	title := titleStyle.Render("Order Confirmation")
 
 	// Shipping summary
 	shippingSection := ""
-	if m.ShippingInfo != nil {
+	if m.ConfirmShipping != nil {
 		shippingSection = sectionStyle.Render(
 			labelStyle.Render("Ship to: ") +
-				valueStyle.Render(m.ShippingInfo.Name) + "\n" +
+				valueStyle.Render(m.ConfirmShipping.Name) + "\n" +
 				labelStyle.Render("         ") +
-				valueStyle.Render(m.ShippingInfo.Street) + "\n" +
+				valueStyle.Render(m.ConfirmShipping.Street) + "\n" +
 				labelStyle.Render("         ") +
-				valueStyle.Render(fmt.Sprintf("%s, %s %s, %s", m.ShippingInfo.City, m.ShippingInfo.State, m.ShippingInfo.Zip, m.ShippingInfo.Country)),
+				valueStyle.Render(fmt.Sprintf("%s, %s %s, %s", m.ConfirmShipping.City, m.ConfirmShipping.State, m.ConfirmShipping.Zip, m.ConfirmShipping.Country)),
 		)
 	}
 
-	// Cart summary
+	// Items summary
 	cartSection := ""
-	total := 0
-	items := m.GetCartItemsSlice()
-	for _, item := range items {
-		line := fmt.Sprintf("  %s x%d  $%.2f", item.Coffee.Name, item.Quantity, float64(item.Coffee.Price * item.Quantity)/100) 
+	for _, item := range m.ConfirmItems {
+		line := fmt.Sprintf("  %s x%d  $%.2f", item.Coffee.Name, item.Quantity, float64(item.Coffee.Price*item.Quantity)/100)
 		cartSection += sectionStyle.Render(line) + "\n"
-		total += item.Coffee.Price * item.Quantity
 	}
 	cartSection += sectionStyle.Render(
-		labelStyle.Render("Total: ") + valueStyle.Render(fmt.Sprintf("$%.2f", float64(total)/100)),
+		labelStyle.Render("Shipping: ") + valueStyle.Render("$0.00"),
+	) + "\n"
+	cartSection += sectionStyle.Render(
+		labelStyle.Render("Total:    ") + valueStyle.Render(fmt.Sprintf("$%.2f", float64(m.ConfirmTotal)/100)),
 	)
 
 	success := successStyle.Render("Order placed successfully!")
@@ -122,10 +110,10 @@ func (m Model) ConfirmUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	m = m.SwitchPage(shopPage)
-	m.ShippingInfo = nil
 	m.CheckingOut = false
-	m.Cart = make(map[uint]*models.CartItem)
-	m.CartCursor = 0
+	m.ConfirmTotal = 0
+	m.ConfirmItems = nil
+	m.ConfirmShipping = nil
 	m = m.resetPageState()
 	return m, func() tea.Msg {
 		if m.APIClient != nil {

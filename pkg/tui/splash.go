@@ -45,11 +45,11 @@ func (m Model) splashViewInitCmd() tea.Msg {
 }
 
 func (m Model) SplashView() string {
-	accent := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")).Bold(true)
+	accent := m.theme.TextBody().Bold(true)
 
 	var cursor string
 	if m.splashCursor {
-		cursor = lipgloss.NewStyle().Background(lipgloss.Color("#4682B4")).Render(" ")
+		cursor = lipgloss.NewStyle().Background(m.theme.Highlight()).Render(" ")
 	} else {
 		cursor = " "
 	}

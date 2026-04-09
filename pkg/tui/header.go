@@ -16,9 +16,9 @@ func (m Model) BuildHeader() string {
 	}
 
 	// Define colors
-	grayStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA"))
-	boldWhiteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
-	boldGrayStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#AAAAAA")).Bold(true)
+	grayStyle := m.theme.TextBody()
+	boldWhiteStyle := m.theme.TextAccent().Bold(true)
+	boldGrayStyle := m.theme.TextBody().Bold(true)
 
 	// Build cart tab (used in all sizes)
 	itemCountText := grayStyle.Render(fmt.Sprintf("[%d]", itemCount))
@@ -51,10 +51,10 @@ func (m Model) BuildHeader() string {
 	case medium:
 		menuTab := boldGrayStyle.Render("m") + " " + grayStyle.Render("menu")
 		logo := boldWhiteStyle.Render("terminal coffee")
-		separator := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Render("|")
+		separator := m.theme.TextAccent().Render("|")
 		tabsContent = menuTab + " " + separator + " " + logo + " " + separator + " " + cartTab
 	default:
-		separator := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF")).Render("|")
+		separator := m.theme.TextAccent().Render("|")
 
 		var shopKeybind, shopName string
 		if m.currentPage == shopPage {
