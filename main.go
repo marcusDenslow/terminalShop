@@ -22,9 +22,22 @@ import (
 )
 
 const (
-	host = "localhost"
 	port = "23456"
 )
+
+func listenHost() string {
+	if h := os.Getenv("SSH_HOST"); h != "" {
+		return h
+	}
+	return "localhost"
+}
+
+func listenPort() string {
+	if p := os.Getenv("SSH_PORT"); p != "" {
+		return p
+	}
+	return port
+}
 
 var (
 	apiURL             string
@@ -63,8 +76,10 @@ func main() {
 	log.Printf("TUI will connect to API at: %s", apiURL)
 
 	// Create SSH server
+	host := listenHost()
+	p := listenPort()
 	s, err := wish.NewServer(
-		wish.WithAddress(fmt.Sprintf("%s:%s", host, port)),
+		wish.WithAddress(fmt.Sprintf("%s:%s", host, p)),
 		wish.WithHostKeyPath(".ssh/term_info_ed25519"),
 		wish.WithPublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
 			// Allow all public keys (we handle auth in the tea handler)
@@ -82,8 +97,8 @@ func main() {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	log.Printf("Starting SSH server on %s:%s", host, port)
-	log.Printf("Connect with: ssh %s -p %s", host, port)
+	log.Printf("Starting SSH server on %s:%s", host, p)
+	log.Printf("Connect with: ssh %s -p %s", host, p)
 
 	go func() {
 		if err = s.ListenAndServe(); err != nil {
