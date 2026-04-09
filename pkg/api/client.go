@@ -61,6 +61,7 @@ func (c *Client) GetOrCreateToken(fingerprint, pubKeyStr, clientSecret string) (
 
 	reqBody := TokenRequest{
 		Fingerprint:  fingerprint,
+		SSHPublicKey: pubKeyStr,
 		ClientSecret: clientSecret,
 	}
 
