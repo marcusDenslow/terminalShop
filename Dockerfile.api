@@ -4,10 +4,10 @@ RUN apk add --no-cache gcc musl-dev
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -o api ./api/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -o /tmp/api ./api/main.go
 
 FROM alpine:3.21
 RUN apk add --no-cache libc6-compat
 WORKDIR /root/
-COPY --from=builder /app/api ./api
+COPY --from=builder /tmp/api ./api
 CMD ["./api"]
