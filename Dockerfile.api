@@ -9,5 +9,5 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o api ./api/main.go
 FROM alpine:3.21
 RUN apk add --no-cache libc6-compat
 WORKDIR /root/
-COPY --from=builder /app/api .
+COPY --from=builder /app/api ./api
 CMD ["./api"]
