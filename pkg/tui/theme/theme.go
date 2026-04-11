@@ -45,6 +45,26 @@ func BasicTheme(renderer *lipgloss.Renderer) Theme {
 	return t
 }
 
+// this should resemble something like catppuccin
+func Catppuccin(renderer *lipgloss.Renderer) Theme {
+	t := Theme{renderer: renderer}
+
+	t.background = lipgloss.AdaptiveColor{Dark: "#1e1e2e", Light: "#eff1f5"}
+	t.border = lipgloss.AdaptiveColor{Dark: "#45475A", Light: "#BCC0CC"}
+	t.body = lipgloss.Color("#AAAAAA")
+	t.dim = lipgloss.Color("#6C7086")
+	t.accent = lipgloss.Color("#CBA6F7")
+	t.highlight = lipgloss.Color("#CBA6F7")
+	t.brand = lipgloss.Color("#CBA6F7")
+	t.label = lipgloss.Color("#A6ADC8")
+	t.success = lipgloss.Color("#A6E3A1")
+	t.error = lipgloss.Color("#F38BA8")
+
+	t.base = renderer.NewStyle().Foreground(t.body)
+	t.form = HuhTheme(t)
+	return t
+}
+
 // Color accessors — use in .Foreground() / .Background() calls.
 func (t Theme) Background() lipgloss.TerminalColor { return t.background }
 func (t Theme) Border() lipgloss.TerminalColor     { return t.border }

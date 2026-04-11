@@ -137,9 +137,9 @@ type Model struct {
 	splashCursor    bool // toggles for blinking cursor animation
 
 	// Confirmation screen — snapshot populated on checkout, cleared when leaving confirm page
-	ConfirmTotal    int              // server-confirmed order total in cents
+	ConfirmTotal    int               // server-confirmed order total in cents
 	ConfirmItems    []models.CartItem // cart items at time of purchase
-	ConfirmShipping *models.Address  // shipping address at time of purchase
+	ConfirmShipping *models.Address   // shipping address at time of purchase
 
 }
 
@@ -632,7 +632,7 @@ func newModelWithRenderer(username string, renderer *lipgloss.Renderer) Model {
 		Username:    username,
 		currentPage: splashPage,
 		renderer:    renderer,
-		theme:       theme.BasicTheme(renderer),
+		theme:       theme.Catppuccin(renderer),
 		Coffees: []models.Coffee{
 			{
 				Name:        "Espresso",
