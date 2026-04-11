@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"strings"
+	"terminalShop/pkg/models"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,7 +44,7 @@ func (m Model) RenderConfirmation() string {
 		cartSection += sectionStyle.Render(line) + "\n"
 	}
 	cartSection += sectionStyle.Render(
-		labelStyle.Render("Shipping: ") + valueStyle.Render("$0.00"),
+		labelStyle.Render("Shipping: ")+valueStyle.Render("$0.00"),
 	) + "\n"
 	cartSection += sectionStyle.Render(
 		labelStyle.Render("Total:    ") + valueStyle.Render(fmt.Sprintf("$%.2f", float64(m.ConfirmTotal)/100)),
@@ -121,4 +123,91 @@ func (m Model) ConfirmUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return nil
 	}
+}
+
+func formatUSD(cents int) string {
+	return fmt.Sprintf("$%d.%02d", cents/100, cents%100)
+}
+
+func (m Model) generateReviewContent() string {
+	view := strings.Builder{}
+
+	if m.ShippingInfo != nil {
+		view.WriteString(m.ShippingInfo.Name + "\n")
+		view.WriteString(m.ShippingInfo.Street + "\n")
+		if m.ShippingInfo.Street2 != "" {
+			view.WriteString(m.ShippingInfo.Street2 + "\n")
+		}
+		view.WriteString(fmt.Sprintf("%s,  %s %s,  %s\n", m.ShippingInfo.City, m.ShippingInfo.State, m.ShippingInfo.Zip, m.ShippingInfo.Country))
+	}
+	view.WriteString("\n")
+
+	if m.SelectedCard != nil {
+		view.WriteString(fmt.Sprintf("cc: **** **** **** %s\n", m.SelectedCard.Last4))
+	}
+	view.WriteString("\n")
+
+	subtotal := 0
+	for _, item := range m.GetCartItemsSlice() {
+		subtotal += item.Coffee.Price * item.Quantity
+	}
+	view.WriteString(fmt.Sprintf("subtotal: %\n", formatUSD(subtotal)))
+	view.WriteString(m.theme.TextAccent().Render(fmt.Sprintf("total:    %s", formatUSD(subtotal))) + "\n")
+	view.WriteString("\n")
+	view.WriteString(m.theme.TextDim().Render("press enter to confirm") + "\n")
+
+	return m.theme.Base().Padding(0, 1).Render(view.String())
+}
+
+func (m Model) ReviewView() string {
+	if m.CheckingOut {
+		return m.theme.TextAccent().Bold(true).Padding(1).Render("  submitting order...")
+	}
+	content := m.generateReviewContent()
+	return lipgloss.Place(
+		m.widthContainer,
+		lipgloss.Height(content),
+		lipgloss.Center, lipgloss.Center,
+		content,
+	)
+}
+
+func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case CheckoutResultMsg:
+		m.CheckingOut = false
+		if msg.Err != nil {
+			m.ErrorMsg = fmt.Sprintf("checkout failed: %v", msg.Err)
+			m = m.SwitchPage(paymentPage)
+			m.PaymentView = 0
+			m.PaymentForm = nil
+			return m, nil
+		}
+		m.ConfirmTotal = msg.Total
+		for _, item := range m.GetCartItemsSlice() {
+			m.ConfirmItems = append(m.ConfirmItems, *item)
+		}
+		m.ConfirmShipping = m.ShippingInfo
+		m.Cart = make(map[uint]*models.CartItem)
+		m.CartCursor = 0
+		m.ShippingInfo = nil
+		m.OrdersLoaded = false
+		m = m.SwitchPage(confirmPage)
+		return m, nil
+
+	case tea.KeyMsg:
+		if m.CheckingOut {
+			return m, nil
+		}
+		switch msg.String() {
+		case "esc":
+			m = m.SwitchPage(paymentPage)
+			return m, nil
+
+		case "enter":
+			m.CheckingOut = true
+			return m, m.checkoutWithSavedCard()
+		}
+	}
+	return m, nil
 }

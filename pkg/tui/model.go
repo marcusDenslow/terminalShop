@@ -36,6 +36,7 @@ const (
 	cartPage
 	shippingPage
 	paymentPage
+	reviewPage
 	confirmPage
 	accountPage
 	splashPage
@@ -169,7 +170,7 @@ func (m Model) inCartFlow() bool {
 	return m.currentPage == cartPage ||
 		m.currentPage == shippingPage ||
 		m.currentPage == paymentPage ||
-		m.currentPage == confirmPage
+		m.currentPage == reviewPage
 }
 
 func (m Model) checkoutStep() int {
@@ -178,7 +179,7 @@ func (m Model) checkoutStep() int {
 		return 1
 	case paymentPage:
 		return 2
-	case confirmPage:
+	case reviewPage:
 		return 3
 	default:
 		return 0
@@ -574,6 +575,37 @@ func (m Model) saveCardAndConvert(form PaymentFormCompleteMsg) tea.Cmd {
 		}
 	}
 }
+
+func (m Model) saveCardOnlyCmd(form PaymentFormCompleteMsg) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil {
+			return CardSavedForReviewMsg{Err: fmt.Errorf("API client not available")}
+		}
+		stripe.Key = m.StripePublicKey
+		tok, err := stripetoken.New(&stripe.TokenParams{
+			Card: &stripe.CardParams{
+				Name:       stripe.String(form.CardName),
+				Number:     stripe.String(form.CardNumber),
+				ExpMonth:   stripe.String(form.ExpiryMonth),
+				ExpYear:    stripe.String(form.ExpiryYear),
+				CVC:        stripe.String(form.CVC),
+				AddressZip: stripe.String(form.BillingZip),
+			},
+		})
+		if err != nil {
+			if stripeErr, ok := err.(*stripe.Error); ok {
+				return CardSavedForReviewMsg{Err: fmt.Errorf("%s", stripeErr.Msg)}
+			}
+			return CardSavedForReviewMsg{Err: fmt.Errorf("failed to tokenize card: %w", err)}
+		}
+		card, err := m.APIClient.SaveCard(api.SaveCardRequest{Token: tok.ID})
+		if err != nil {
+			return CardSavedForReviewMsg{Err: fmt.Errorf("failed to save card: %w", err)}
+		}
+		return CardSavedForReviewMsg{Card: *card}
+	}
+}
+
 
 // loadCartFromAPI populates the in-memory cart map from an API CartData response
 // It matches cart items to local Coffees by ID so the Coffee struct is populated

@@ -160,6 +160,8 @@ func (m Model) buildPageContent(height int) string {
 		return m.ShippingPageView()
 	case paymentPage:
 		return m.PaymentPageView()
+	case reviewPage:
+		return m.ReviewView()
 	case confirmPage:
 		return m.ConfirmView()
 	case cartPage:

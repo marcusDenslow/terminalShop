@@ -39,6 +39,13 @@ type PaymentFormCompleteMsg struct {
 	BillingZip  string
 }
 
+// CardSavedForReviewMsg is sent after a new card is tokenized and saved
+// The user is taken to the review page to confirm before checkout
+type CardSavedForReviewMsg struct {
+	Card models.Card
+	Err  error
+}
+
 // PaymentFormErrorMsg is sent when payment form validation fails
 type PaymentFormErrorMsg struct {
 	Message string
@@ -411,42 +418,29 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case PaymentFormCompleteMsg:
 		if m.PaymentForm != nil {
 			m.PaymentForm.submitting = true
-			m.CheckingOut = true
-			return m, m.saveCardAndConvert(msg)
+			return m, m.saveCardOnlyCmd(msg)
 		}
-		return m, nil
-
-	case CheckoutResultMsg:
-		m.CheckingOut = false
-		if msg.Err != nil {
-			m.ErrorMsg = fmt.Sprintf("checkout failed: %v", msg.Err)
-			if len(m.SavedCards) > 0 {
-				m.PaymentView = 0
-				m.PaymentForm = nil
-				return m, nil
-			}
-			// Re-open the form so the user can retry with corrected details.
-			m.PaymentView = 1
-			m.PaymentForm = m.InitPaymentForm()
-			return m, m.PaymentForm.form.Init()
-		}
-		// Snapshot order details before clearing cart/shipping
-		m.ConfirmTotal = msg.Total
-		for _, item := range m.GetCartItemsSlice() {
-			m.ConfirmItems = append(m.ConfirmItems, *item)
-		}
-		m.ConfirmShipping = m.ShippingInfo
-
-		// Clear cart and shipping immediately so they don't appear stale elsewhere
-		m.Cart = make(map[uint]*models.CartItem)
-		m.CartCursor = 0
-		m.ShippingInfo = nil
-		m.OrdersLoaded = false
-		m = m.SwitchPage(confirmPage)
 		return m, nil
 
 	case PaymentFormErrorMsg:
 		m.ErrorMsg = msg.Message
+		return m, nil
+
+	case CardSavedForReviewMsg:
+		if m.PaymentForm != nil {
+			m.PaymentForm.submitting = false
+		}
+		if msg.Err != nil {
+			m.ErrorMsg = fmt.Sprintf("failed to save card: %w", msg.Err)
+			m.PaymentView = 1
+			m.PaymentForm = m.InitPaymentForm()
+			return m, m.PaymentForm.form.Init()
+		}
+		m.SavedCards = append(m.SavedCards, msg.Card)
+		selected := msg.Card
+		m.SelectedCard = &selected
+		m.PaymentForm = nil
+		m = m.SwitchPage(reviewPage)
 		return m, nil
 
 	case PollPaymentInitMsg:
@@ -469,8 +463,8 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.CollectURL = nil
 		selected := m.SavedCards[len(m.SavedCards)-1]
 		m.SelectedCard = &selected
-		m.CheckingOut = true
-		return m, m.checkoutWithSavedCard()
+		m = m.SwitchPage(reviewPage)
+		return m, nil
 	}
 
 	// Card list navigation
@@ -497,8 +491,8 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if m.CardCursor < len(m.SavedCards) {
 				selected := m.SavedCards[m.CardCursor]
 				m.SelectedCard = &selected
-				m.CheckingOut = true
-				return m, m.checkoutWithSavedCard()
+				m = m.SwitchPage(reviewPage)
+				return m, nil
 			}
 			if m.CardCursor == len(m.SavedCards) {
 				m.PaymentView = 1

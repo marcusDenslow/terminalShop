@@ -25,6 +25,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m = m.updatePaymentViewport()
 			case confirmPage:
 				m = m.updateConfirmViewport()
+			case reviewPage:
+				// no viewport on review page
 			}
 			if m.ShippingForm != nil {
 				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
@@ -187,6 +189,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.ShippingUpdate(msg)
 	case paymentPage:
 		return m.PaymentUpdate(msg)
+	case reviewPage:
+		return m.ReviewUpdate(msg)
 	case confirmPage:
 		return m.ConfirmUpdate(msg)
 	case accountPage:
