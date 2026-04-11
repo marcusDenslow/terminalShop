@@ -48,7 +48,10 @@ func (h *WebhookHandler) HandleStripe(w http.ResponseWriter, r *http.Request) {
 		log.Println("WARNING: STRIPE_WEBHOOK_SECRET is not set; skipping signature verification")
 	} else {
 		sig := r.Header.Get("Stripe-Signature")
-		if _, err := webhook.ConstructEvent(body, sig, h.webhookSecret); err != nil {
+		if _, err := webhook.ConstructEventWithOptions(body, sig, h.webhookSecret, webhook.ConstructEventOptions{
+			IgnoreAPIVersionMismatch: true,
+		}); err != nil {
+			log.Printf("[webhook] signature verification failed: %v", err)
 			utils.RespondError(w, http.StatusUnauthorized, "INVALID_SIGNATURE", "webhook signature verification failed", nil)
 			return
 		}
