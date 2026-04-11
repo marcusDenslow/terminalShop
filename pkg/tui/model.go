@@ -632,7 +632,7 @@ func newModelWithRenderer(username string, renderer *lipgloss.Renderer) Model {
 		Username:    username,
 		currentPage: splashPage,
 		renderer:    renderer,
-		theme:       theme.Catppuccin(renderer),
+		theme:       theme.BasicTheme(renderer),
 		Coffees: []models.Coffee{
 			{
 				Name:        "Espresso",
