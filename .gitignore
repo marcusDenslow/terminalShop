@@ -3,6 +3,7 @@
 .env.local
 .env.production
 .env.example
+.env.prod
 
 # Build artifacts
 *.exe
