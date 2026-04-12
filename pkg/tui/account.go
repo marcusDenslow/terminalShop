@@ -18,24 +18,15 @@ func (m Model) BuildAccountView(availableHeight int) string {
 	leftPanel := ""
 	for i, item := range models.AccountMenuItems {
 		if m.AccountCursor == i {
-			style := lipgloss.NewStyle().
-				Background(m.theme.Highlight()).
-				Foreground(m.theme.Accent()).
-				Padding(0, 1).
-				Width(leftWidth - 2).
-				Align(lipgloss.Left)
+			style := m.theme.Base().Background(m.theme.Highlight()).Foreground(m.theme.Accent()).Padding(0, 1).Width(leftWidth - 2).Align(lipgloss.Left)
 			leftPanel += style.Render(item) + "\n"
 		} else {
-			style := lipgloss.NewStyle().
-				Foreground(m.theme.Body()).
-				Padding(0, 1).
-				Width(leftWidth - 2).
-				Align(lipgloss.Left)
+			style := m.theme.TextBody().Padding(0, 1).Width(leftWidth - 2).Align(lipgloss.Left)
 			leftPanel += style.Render(item) + "\n"
 		}
 	}
 
-	leftContainer := lipgloss.NewStyle().
+	leftContainer := m.theme.Base().
 		Width(leftWidth)
 
 	// Build the detail view (right panel) based on cursor position

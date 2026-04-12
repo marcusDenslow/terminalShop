@@ -416,7 +416,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case PaymentFormCompleteMsg:
-		if m.PaymentForm != nil {
+		if m.PaymentForm != nil && !m.PaymentForm.submitting {
 			m.PaymentForm.submitting = true
 			return m, m.saveCardOnlyCmd(msg)
 		}
