@@ -132,6 +132,10 @@ func formatUSD(cents int) string {
 func (m Model) generateReviewContent() string {
 	view := strings.Builder{}
 
+	if m.CardJustAdded {
+		view.WriteString(m.theme.TextSuccess().Bold(true).Render("card added successfully") + "\n\n")
+	}
+
 	if m.ShippingInfo != nil {
 		view.WriteString(m.ShippingInfo.Name + "\n")
 		view.WriteString(m.ShippingInfo.Street + "\n")
@@ -151,7 +155,7 @@ func (m Model) generateReviewContent() string {
 	for _, item := range m.GetCartItemsSlice() {
 		subtotal += item.Coffee.Price * item.Quantity
 	}
-	view.WriteString(fmt.Sprintf("subtotal: %\n", formatUSD(subtotal)))
+	view.WriteString(fmt.Sprintf("subtotal: %s\n", formatUSD(subtotal)))
 	view.WriteString(m.theme.TextAccent().Render(fmt.Sprintf("total:    %s", formatUSD(subtotal))) + "\n")
 	view.WriteString("\n")
 	view.WriteString(m.theme.TextDim().Render("press enter to confirm") + "\n")
@@ -162,6 +166,15 @@ func (m Model) generateReviewContent() string {
 func (m Model) ReviewView() string {
 	if m.CheckingOut {
 		return m.theme.TextAccent().Bold(true).Padding(1).Render("  submitting order...")
+	}
+	if m.ReviewSuccess {
+		content := m.theme.TextSuccess().Bold(true).Padding(1).Render("order placed successfully!")
+		return lipgloss.Place(
+			m.widthContainer,
+			lipgloss.Height(content),
+			lipgloss.Center, lipgloss.Center,
+			content,
+		)
 	}
 	content := m.generateReviewContent()
 	return lipgloss.Place(
@@ -183,21 +196,28 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.PaymentForm = nil
 			return m, nil
 		}
-		m.ConfirmTotal = msg.Total
-		for _, item := range m.GetCartItemsSlice() {
-			m.ConfirmItems = append(m.ConfirmItems, *item)
-		}
-		m.ConfirmShipping = m.ShippingInfo
 		m.Cart = make(map[uint]*models.CartItem)
 		m.CartCursor = 0
 		m.ShippingInfo = nil
 		m.OrdersLoaded = false
-		m = m.SwitchPage(confirmPage)
+		m.ReviewSuccess = true
 		return m, nil
 
 	case tea.KeyMsg:
 		if m.CheckingOut {
 			return m, nil
+		}
+		if m.ReviewSuccess {
+			m = m.SwitchPage(shopPage)
+			m.ReviewSuccess = false
+			m.CardJustAdded = false
+			m = m.resetPageState()
+			return m, func() tea.Msg {
+				if m.APIClient != nil {
+					_ = m.APIClient.ClearCart()
+				}
+				return nil
+			}
 		}
 		switch msg.String() {
 		case "esc":

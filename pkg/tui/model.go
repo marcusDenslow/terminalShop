@@ -132,12 +132,22 @@ type Model struct {
 	FAQs       []FAQ // loaded from embedded faq.json
 	FaqFocused bool  // true when FAQ detail is focused
 
+	// Account manegement state
+	AddressListFocused     bool // true when browsing addresses in account
+	CardListFocused        bool // true when browsing cards in account
+	AccountAddressCursor   int  // cursor within address list in AccountAddressCursor
+	AccountCardCursor      int  // cursor within card list in account
+	AccountAddressDeleting *int // index of address pending deletion
+	AccountCardDeleting    *int // index of card pending deletion
+
 	// Splash screen
 	splashDataReady bool // true when products have loaded
 	splashDelayDone bool // true when minimum display time has elapsed
 	splashCursor    bool // toggles for blinking cursor animation
 
-	// Confirmation screen — snapshot populated on checkout, cleared when leaving confirm page
+	// Review / confirmation state
+	CardJustAdded   bool              // true when arriving at review page after adding a new card
+	ReviewSuccess   bool              // true after a successful order, shows success msg on review page
 	ConfirmTotal    int               // server-confirmed order total in cents
 	ConfirmItems    []models.CartItem // cart items at time of purchase
 	ConfirmShipping *models.Address   // shipping address at time of purchase
@@ -271,6 +281,10 @@ func (m Model) resetPageState() Model {
 	m.ScrollOffset = 0
 	m.OrderViewState = 0
 	m.FaqFocused = false
+	m.AddressListFocused = false
+	m.CardListFocused = false
+	m.AccountAddressDeleting = nil
+	m.AccountCardDeleting = nil
 	return m
 }
 
@@ -605,7 +619,6 @@ func (m Model) saveCardOnlyCmd(form PaymentFormCompleteMsg) tea.Cmd {
 		return CardSavedForReviewMsg{Card: *card}
 	}
 }
-
 
 // loadCartFromAPI populates the in-memory cart map from an API CartData response
 // It matches cart items to local Coffees by ID so the Coffee struct is populated

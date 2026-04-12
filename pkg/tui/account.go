@@ -84,6 +84,58 @@ func (m Model) BuildAccountView(availableHeight int) string {
 				}
 				detailView = lines
 			}
+
+		case "addresses":
+			lines := titleStyle.Render("Address") + "\n\n"
+			if len(m.SavedAddresses) == 0 {
+				lines += contentStyle.Render("No saved addresses")
+			} else {
+				for i, addr := range m.SavedAddresses {
+					isSelected := m.AddressListFocused && i == m.AccountAddressCursor
+					label := addr.Name + "  " + addr.Street + ", " + addr.City
+					if len(label) > detailContentWidth-4 {
+						label = label[:detailContentWidth-4]
+					}
+					if m.AccountAddressDeleting != nil && *m.AccountAddressDeleting == i {
+						lines += m.theme.TextError().Bold(true).Render("  deletes? (y/n)") + "\n"
+					} else if isSelected {
+						lines += m.theme.TextAccent().Bold(true).Render("> "+label) + "\n"
+					} else {
+						lines += contentStyle.Render(" "+label) + "\n"
+					}
+				}
+			}
+			if m.AddressListFocused {
+				lines += "\n" + m.theme.TextDim().Render("x: delete  esc: back")
+			} else {
+				lines += "\n" + m.theme.TextDim().Render("enter: manage")
+			}
+			detailView = lines
+
+		case "cards":
+			lines := titleStyle.Render("Cards") + "\n\n"
+			if len(m.SavedCards) == 0 {
+				lines += contentStyle.Render("No saved cards.")
+			} else {
+				for i, card := range m.SavedCards {
+					isSelected := m.CardListFocused && i == m.AccountCardCursor
+					label := fmt.Sprintf("**** **** **** %s  %s  exp %02d/%02d",
+						card.Last4, card.Brand, card.ExpMonth, card.ExpYear%100)
+					if m.AccountCardDeleting != nil && *m.AccountCardDeleting == i {
+						lines += m.theme.TextError().Bold(true).Render("  delete? (y/n)") + "\n"
+					} else if isSelected {
+						lines += m.theme.TextAccent().Bold(true).Render("> "+label) + "\n"
+					} else {
+						lines += contentStyle.Render(" "+label) + "\n"
+					}
+				}
+			}
+			if m.CardListFocused {
+				lines += "\n" + m.theme.TextDim().Render("x: delete  esc: back")
+			} else {
+				lines += "\n" + m.theme.TextDim().Render("enter: manage")
+			}
+			detailView = lines
 		case "faq":
 			questionStyle := m.theme.TextHighlight().Bold(true)
 
@@ -380,9 +432,23 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+
+	selectedItem := ""
+	if m.AccountCursor < len(models.AccountMenuItems) {
+		selectedItem = models.AccountMenuItems[m.AccountCursor]
+	}
+
 	switch keyMsg.String() {
 	case "up", "k":
-		if m.FaqFocused {
+		if m.AddressListFocused && m.AccountAddressDeleting == nil {
+			if m.AccountAddressCursor > 0 {
+				m.AccountAddressCursor--
+			}
+		} else if m.CardListFocused && m.AccountCardDeleting == nil {
+			if m.AccountCardCursor > 0 {
+				m.AccountCardCursor--
+			}
+		} else if m.FaqFocused {
 			m.ScrollOffset -= 3
 			if m.ScrollOffset < 0 {
 				m.ScrollOffset = 0
@@ -401,42 +467,45 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.AccountCursor--
 			m.ScrollOffset = 0
 		}
+
 	case "down", "j":
-		if m.FaqFocused {
-			m.ScrollOffset += 3
-			maxScroll := m.computeFaqScrollMax()
-			if m.ScrollOffset > maxScroll {
-				m.ScrollOffset = maxScroll
+		if m.AddressListFocused && m.AccountAddressDeleting == nil {
+			if m.AccountAddressCursor < len(m.SavedAddresses)-1 {
+				m.AccountAddressCursor++
 			}
-		} else if m.OrderViewState == 1 && m.OrderCursor < len(m.Orders)-1 {
-			m.OrderCursor++
+		} else if m.CardListFocused && m.AccountCardDeleting == nil {
+			if m.AccountCardCursor < len(m.SavedCards)-1 {
+				m.AccountCardCursor++
+			}
+		} else if m.FaqFocused {
+			m.ScrollOffset -= 3
+			if m.ScrollOffset < 0 {
+				m.ScrollOffset = 0
+			}
+		} else if m.OrderViewState == 1 && m.OrderCursor > 0 {
+			m.OrderCursor--
 			cardHeight := 5
 			if m.heightContainer >= 25 {
 				cardHeight = 7
 			}
-			viewportHeight := m.heightContainer - 7
-			if m.size < large {
-				viewportHeight -= len(models.AccountMenuItems) + 1
+			targetTop := 3 + m.OrderCursor*cardHeight
+			if targetTop < m.ScrollOffset {
+				m.ScrollOffset = targetTop
 			}
-			if viewportHeight < 5 {
-				viewportHeight = 5
-			}
-			targetBottom := 3 + (m.OrderCursor+1)*cardHeight
-			if targetBottom > m.ScrollOffset+viewportHeight {
-				m.ScrollOffset = targetBottom - viewportHeight
-			}
-		} else if m.OrderViewState == 0 && m.AccountCursor < len(models.AccountMenuItems)-1 {
-			m.AccountCursor++
+		} else if m.OrderViewState == 0 && m.AccountCursor > 0 {
+			m.AccountCursor--
 			m.ScrollOffset = 0
 		}
-	case "pgup", "ctrl+u":
+
+	case "pgup", "ctrl-u":
 		if m.FaqFocused || m.OrderViewState >= 2 {
 			m.ScrollOffset -= 3
 			if m.ScrollOffset < 0 {
 				m.ScrollOffset = 0
 			}
 		}
-	case "pgdown", "ctrl+d":
+
+	case "pgdown", "ctrl-d":
 		if m.FaqFocused || m.OrderViewState >= 2 {
 			m.ScrollOffset += 3
 			maxScroll := m.computeFaqScrollMax()
@@ -444,22 +513,81 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.ScrollOffset = maxScroll
 			}
 		}
+
+	case "x", "d":
+		if m.AddressListFocused && m.AccountAddressDeleting == nil && m.AccountAddressCursor < len(m.SavedAddresses) {
+			m.AccountAddressDeleting = &m.AccountAddressCursor
+		} else if m.CardListFocused && m.AccountCardDeleting == nil && m.AccountCardCursor < len(m.SavedCards) {
+			m.AccountCardDeleting = &m.AccountCardCursor
+		}
+
+	case "y":
+		if m.AccountAddressDeleting != nil {
+			cursor := *m.AccountAddressDeleting
+			addr := m.SavedAddresses[cursor]
+			m.AccountAddressDeleting = nil
+			m.SavedAddresses = append(m.SavedAddresses[:cursor], m.SavedAddresses[cursor+1:]...)
+			if m.AccountAddressCursor >= len(m.SavedAddresses) && m.AccountAddressCursor > 0 {
+				m.AccountAddressCursor--
+			}
+			return m, m.deleteAddressCmd(addr.ID)
+		} else if m.AccountCardDeleting != nil {
+			cursor := *m.AccountCardDeleting
+			card := m.SavedCards[cursor]
+			m.AccountCardDeleting = nil
+			m.SavedCards = append(m.SavedCards[:cursor], m.SavedCards[cursor+1:]...)
+			if m.AccountCardCursor >= len(m.SavedCards) && m.AccountCardCursor > 0 {
+				m.AccountCardCursor--
+			}
+			return m, m.deleteAddressCmd(card.ID)
+		}
+
+	case "n":
+		m.AccountAddressDeleting = nil
+		m.AccountCardDeleting = nil
+
 	case "p", "enter":
-		if m.AccountCursor == 0 && len(m.Orders) > 0 {
-			if m.OrderViewState == 0 {
-				m.OrderViewState = 1
-				m.OrderCursor = 0
-				m.ScrollOffset = 0
-			} else if m.OrderViewState == 1 {
-				m.OrderViewState = 2
+		switch selectedItem {
+		case "order history":
+			if len(m.Orders) > 0 {
+				if m.OrderViewState == 0 {
+					m.OrderViewState = 1
+					m.OrderCursor = 0
+					m.ScrollOffset = 0
+				} else if m.OrderViewState == 1 {
+					m.OrderViewState = 2
+					m.ScrollOffset = 0
+				}
+			}
+		case "addresses":
+			if !m.AddressListFocused {
+				m.AddressListFocused = true
+				m.AccountAddressCursor = 0
+			}
+		case "cards":
+			if !m.CardListFocused {
+				m.CardListFocused = true
+				m.AccountCardCursor = 0
+			}
+		case "faq":
+			if !m.FaqFocused {
+				m.FaqFocused = true
 				m.ScrollOffset = 0
 			}
-		} else if m.AccountCursor == 1 && !m.FaqFocused {
-			m.FaqFocused = true
-			m.ScrollOffset = 0
 		}
+
 	case "esc":
-		if m.FaqFocused {
+		if m.AccountAddressDeleting != nil {
+			m.AccountAddressDeleting = nil
+		} else if m.AddressListFocused {
+			m.AddressListFocused = false
+			m.AccountAddressCursor = 0
+		} else if m.AccountCardDeleting != nil {
+			m.AccountCardDeleting = nil
+		} else if m.CardListFocused {
+			m.CardListFocused = false
+			m.AccountCardCursor = 0
+		} else if m.FaqFocused {
 			m.FaqFocused = false
 			m.ScrollOffset = 0
 		} else if m.OrderViewState > 0 {

@@ -431,7 +431,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.PaymentForm.submitting = false
 		}
 		if msg.Err != nil {
-			m.ErrorMsg = fmt.Sprintf("failed to save card: %w", msg.Err)
+			m.ErrorMsg = fmt.Sprintf("failed to save card: %v", msg.Err)
 			m.PaymentView = 1
 			m.PaymentForm = m.InitPaymentForm()
 			return m, m.PaymentForm.form.Init()
@@ -440,6 +440,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		selected := msg.Card
 		m.SelectedCard = &selected
 		m.PaymentForm = nil
+		m.CardJustAdded = true
 		m = m.SwitchPage(reviewPage)
 		return m, nil
 
@@ -463,6 +464,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.CollectURL = nil
 		selected := m.SavedCards[len(m.SavedCards)-1]
 		m.SelectedCard = &selected
+		m.CardJustAdded = true
 		m = m.SwitchPage(reviewPage)
 		return m, nil
 	}
