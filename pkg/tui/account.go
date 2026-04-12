@@ -478,26 +478,34 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.AccountCardCursor++
 			}
 		} else if m.FaqFocused {
-			m.ScrollOffset -= 3
-			if m.ScrollOffset < 0 {
-				m.ScrollOffset = 0
+			m.ScrollOffset += 3
+			maxScroll := m.computeFaqScrollMax()
+			if m.ScrollOffset > maxScroll {
+				m.ScrollOffset = maxScroll
 			}
-		} else if m.OrderViewState == 1 && m.OrderCursor > 0 {
-			m.OrderCursor--
+		} else if m.OrderViewState == 1 && m.OrderCursor < len(m.Orders)-1 {
+			m.OrderCursor++
 			cardHeight := 5
 			if m.heightContainer >= 25 {
 				cardHeight = 7
 			}
-			targetTop := 3 + m.OrderCursor*cardHeight
-			if targetTop < m.ScrollOffset {
-				m.ScrollOffset = targetTop
+			viewportHeight := m.heightContainer - 7
+			if m.size < large {
+				viewportHeight -= len(models.AccountMenuItems) + 1
 			}
-		} else if m.OrderViewState == 0 && m.AccountCursor > 0 {
-			m.AccountCursor--
+			if viewportHeight < 5 {
+				viewportHeight = 5
+			}
+			targetBottom := 3 + (m.OrderCursor+1)*cardHeight
+			if targetBottom > m.ScrollOffset+viewportHeight {
+				m.ScrollOffset = targetBottom - viewportHeight
+			}
+		} else if m.OrderViewState == 0 && !m.AddressListFocused && !m.CardListFocused && m.AccountCursor < len(models.AccountMenuItems)-1 {
+			m.AccountCursor++
 			m.ScrollOffset = 0
 		}
 
-	case "pgup", "ctrl-u":
+	case "pgup", "ctrl+u":
 		if m.FaqFocused || m.OrderViewState >= 2 {
 			m.ScrollOffset -= 3
 			if m.ScrollOffset < 0 {
@@ -505,7 +513,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 
-	case "pgdown", "ctrl-d":
+	case "pgdown", "ctrl+d":
 		if m.FaqFocused || m.OrderViewState >= 2 {
 			m.ScrollOffset += 3
 			maxScroll := m.computeFaqScrollMax()
@@ -539,7 +547,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if m.AccountCardCursor >= len(m.SavedCards) && m.AccountCardCursor > 0 {
 				m.AccountCardCursor--
 			}
-			return m, m.deleteAddressCmd(card.ID)
+			return m, m.deleteCardCmd(card.ID)
 		}
 
 	case "n":
