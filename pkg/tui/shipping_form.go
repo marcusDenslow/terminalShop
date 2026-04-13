@@ -18,21 +18,21 @@ var countries = []struct {
 	Code     string
 	DialCode string
 }{
-	{Name: "Denmark", Code: "DK", DialCode: "+45"},
-	{Name: "Finland", Code: "FI", DialCode: "+358"},
-	{Name: "Iceland", Code: "IS", DialCode: "+354"},
+	// {Name: "Denmark", Code: "DK", DialCode: "+45"},
+	// {Name: "Finland", Code: "FI", DialCode: "+358"},
+	// {Name: "Iceland", Code: "IS", DialCode: "+354"},
 	{Name: "Norway", Code: "NO", DialCode: "+47"},
-	{Name: "Sweden", Code: "SE", DialCode: "+46"},
+	// {Name: "Sweden", Code: "SE", DialCode: "+46"},
 	{Name: "USA", Code: "US", DialCode: "+1"},
 }
 
 // countryDialCodes maps country ISO codes to their dialing prefixes.
 var countryDialCodes = map[string]string{
-	"DK": "+45",
-	"FI": "+358",
-	"IS": "+354",
+	// "DK": "+45",
+	// "FI": "+358",
+	// "IS": "+354",
 	"NO": "+47",
-	"SE": "+46",
+	// "SE": "+46",
 	"US": "+1",
 }
 
@@ -112,8 +112,7 @@ func (m Model) buildShippingForm(state *ShippingFormState) *huh.Form {
 				Key("country").
 				Options(countryOptions...).
 				Value(&state.Country).
-				Height(5).
-				Filtering(true),
+				Height(3),
 			huh.NewInput().
 				Title("Phone").
 				Key("phone").
@@ -138,7 +137,7 @@ func (m Model) buildShippingForm(state *ShippingFormState) *huh.Form {
 // so that huh's Value() bindings point to stable memory.
 func (m Model) InitShippingForm() *ShippingFormState {
 	state := &ShippingFormState{
-		Country: "SE",
+		Country: "NO",
 	}
 
 	if m.User != nil && m.User.Name != "" {
