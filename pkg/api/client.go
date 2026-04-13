@@ -628,6 +628,64 @@ func (c *Client) DeleteCard(id uint) error {
 	return nil
 }
 
+type SSHKeyResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		SSHKeys []models.SSHKey `json:"ssh_keys"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+func (c *Client) GetSSHKeys() ([]models.SSHKey, error) {
+	url := fmt.Sprintf("%s/api/v1/ssh-keys", c.BaseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch ssh keys: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var keysResp SSHKeyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&keysResp); err != nil {
+		return nil, fmt.Errorf("failed to decode ssh keys response: %w", err)
+	}
+
+	if !keysResp.Success {
+		if keysResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", keysResp.Error.Code, keysResp.Error.Message)
+		}
+		return nil, fmt.Errorf("failed to fetch ssh keys")
+	}
+	return keysResp.Data.SSHKeys, nil
+
+}
+
+func (c *Client) DeleteSSHKey(id uint) error {
+	url := fmt.Sprintf("%s/api/v1/ssh-keys/%d", c.BaseURL, id)
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete request: %w", err)
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete ssh key: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("delete ssh key failed with status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 type OrderResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
@@ -784,6 +842,7 @@ type ViewInitData struct {
 	Cart      []CartItemData    `json:"cart"`
 	Addresses []models.Address  `json:"addresses"`
 	Cards     []models.Card     `json:"cards"`
+	SSHKeys   []models.SSHKey   `json:"ssh_keys"`
 	Orders    []models.Order    `json:"orders"`
 }
 

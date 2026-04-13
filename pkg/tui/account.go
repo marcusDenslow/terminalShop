@@ -127,6 +127,39 @@ func (m Model) BuildAccountView(availableHeight int) string {
 				lines += "\n" + m.theme.TextDim().Render("enter: manage")
 			}
 			detailView = lines
+
+		case "ssh keys":
+			lines := titleStyle.Render("SSH keys") + "\n\n"
+			if !m.SSHKeysLoaded {
+				lines += contentStyle.Render("Loading ssh keys...")
+			} else if len(m.SSHKeys) == 0 {
+				lines += contentStyle.Render("No saved ssh keys.")
+			} else {
+				for i, key := range m.SSHKeys {
+					isSelected := m.SSHKeyListFocused && i == m.AccountSSHKeyCursor
+					label := key.Fingerprint
+					if key.Comment != "" {
+						label += "  " + key.Comment
+					}
+					if len(label) > detailContentWidth-4 {
+						label = label[:detailContentWidth-4]
+					}
+					if m.AccountSSHKeyDeleting != nil && *m.AccountSSHKeyDeleting == i {
+						lines += m.theme.TextError().Bold(true).Render("  delete? (y/n)") + "\n"
+					} else if isSelected {
+						lines += m.theme.TextAccent().Bold(true).Render("> "+label) + "\n"
+					} else {
+						lines += contentStyle.Render(" "+label) + "\n"
+					}
+				}
+			}
+			if m.SSHKeyListFocused {
+				lines += "\n" + m.theme.TextDim().Render("x: delete  esc: back")
+			} else {
+				lines += "\n" + m.theme.TextDim().Render("enter: manage")
+			}
+			detailView = lines
+
 		case "faq":
 			questionStyle := m.theme.TextHighlight().Bold(true)
 
@@ -439,6 +472,10 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if m.AccountCardCursor > 0 {
 				m.AccountCardCursor--
 			}
+		} else if m.SSHKeyListFocused && m.AccountSSHKeyDeleting == nil {
+			if m.AccountSSHKeyCursor > 0 {
+				m.AccountSSHKeyCursor--
+			}
 		} else if m.FaqFocused {
 			m.ScrollOffset -= 3
 			if m.ScrollOffset < 0 {
@@ -468,6 +505,10 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if m.AccountCardCursor < len(m.SavedCards)-1 {
 				m.AccountCardCursor++
 			}
+		} else if m.SSHKeyListFocused && m.AccountSSHKeyDeleting == nil {
+			if m.AccountSSHKeyCursor < len(m.SSHKeys)-1 {
+				m.AccountSSHKeyCursor++
+			}
 		} else if m.FaqFocused {
 			m.ScrollOffset += 3
 			maxScroll := m.computeFaqScrollMax()
@@ -491,7 +532,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if targetBottom > m.ScrollOffset+viewportHeight {
 				m.ScrollOffset = targetBottom - viewportHeight
 			}
-		} else if m.OrderViewState == 0 && !m.AddressListFocused && !m.CardListFocused && m.AccountCursor < len(models.AccountMenuItems)-1 {
+		} else if m.OrderViewState == 0 && !m.AddressListFocused && !m.CardListFocused && !m.SSHKeyListFocused && m.AccountCursor < len(models.AccountMenuItems)-1 {
 			m.AccountCursor++
 			m.ScrollOffset = 0
 		}
@@ -518,6 +559,8 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.AccountAddressDeleting = &m.AccountAddressCursor
 		} else if m.CardListFocused && m.AccountCardDeleting == nil && m.AccountCardCursor < len(m.SavedCards) {
 			m.AccountCardDeleting = &m.AccountCardCursor
+		} else if m.SSHKeyListFocused && m.AccountSSHKeyDeleting == nil && m.AccountSSHKeyCursor < len(m.SSHKeys) {
+			m.AccountSSHKeyDeleting = &m.AccountSSHKeyCursor
 		}
 
 	case "y":
@@ -539,11 +582,21 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.AccountCardCursor--
 			}
 			return m, m.deleteCardCmd(card.ID)
+		} else if m.AccountSSHKeyDeleting != nil {
+			cursor := *m.AccountSSHKeyDeleting
+			key := m.SSHKeys[cursor]
+			m.AccountSSHKeyDeleting = nil
+			m.SSHKeys = append(m.SSHKeys[:cursor], m.SSHKeys[cursor+1:]...)
+			if m.AccountSSHKeyCursor >= len(m.SSHKeys) && m.AccountSSHKeyCursor > 0 {
+				m.AccountSSHKeyCursor--
+			}
+			return m, m.deleteSSHKeyCmd(key.ID)
 		}
 
 	case "n":
 		m.AccountAddressDeleting = nil
 		m.AccountCardDeleting = nil
+		m.AccountSSHKeyDeleting = nil
 
 	case "p", "enter":
 		switch selectedItem {
@@ -557,6 +610,11 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 					m.OrderViewState = 2
 					m.ScrollOffset = 0
 				}
+			}
+		case "ssh keys":
+			if !m.SSHKeyListFocused {
+				m.SSHKeyListFocused = true
+				m.AccountSSHKeyCursor = 0
 			}
 		case "addresses":
 			if !m.AddressListFocused {
@@ -586,6 +644,11 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		} else if m.CardListFocused {
 			m.CardListFocused = false
 			m.AccountCardCursor = 0
+		} else if m.AccountSSHKeyDeleting != nil {
+			m.AccountSSHKeyDeleting = nil
+		} else if m.SSHKeyListFocused {
+			m.SSHKeyListFocused = false
+			m.AccountSSHKeyCursor = 0
 		} else if m.FaqFocused {
 			m.FaqFocused = false
 			m.ScrollOffset = 0

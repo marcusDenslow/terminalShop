@@ -23,6 +23,7 @@ func Migrate(db *gorm.DB) error {
 		&models.Order{},     // Completed purchases
 		&models.OrderItem{}, // Line items within orders
 		&models.Address{},   // Saved addresses
+		&models.SSHKey{},    // One of the users ssh keys
 	); err != nil {
 		return fmt.Errorf("migration failed: %w", err)
 	}

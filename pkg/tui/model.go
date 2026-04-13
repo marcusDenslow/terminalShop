@@ -140,6 +140,13 @@ type Model struct {
 	AccountAddressDeleting *int // index of address pending deletion
 	AccountCardDeleting    *int // index of card pending deletion
 
+	// Account SSH key state
+	SSHKeys               []models.SSHKey // list of keys
+	SSHKeysLoaded         bool            // true when ssh keys are loaded
+	SSHKeyListFocused     bool            // true when browsing ssh keys in account
+	AccountSSHKeyCursor   int             // cursor within ssh key list in account
+	AccountSSHKeyDeleting *int            // index of ssh key pending deletion
+
 	// Splash screen
 	splashDataReady bool // true when products have loaded
 	splashDelayDone bool // true when minimum display time has elapsed
@@ -285,6 +292,8 @@ func (m Model) resetPageState() Model {
 	m.CardListFocused = false
 	m.AccountAddressDeleting = nil
 	m.AccountCardDeleting = nil
+	m.SSHKeyListFocused = false
+	m.AccountSSHKeyDeleting = nil
 	return m
 }
 
@@ -390,6 +399,17 @@ type CardDeletedMsg struct {
 	Err error
 }
 
+// SSHKeysMsg is sent when ssh keys are fetched from the API
+type SSHKeysMsg struct {
+	Keys []models.SSHKey
+	Err  error
+}
+
+// SSHKeyDeletedMsg is sent when an ssh key is deleted
+type SSHKeyDeletedMsg struct {
+	Err error
+}
+
 func (m Model) fetchAddressesCmd() tea.Cmd {
 	return func() tea.Msg {
 		if m.APIClient == nil || m.User == nil {
@@ -449,6 +469,26 @@ func (m Model) deleteCardCmd(id uint) tea.Cmd {
 		}
 		err := m.APIClient.DeleteCard(id)
 		return CardDeletedMsg{Err: err}
+	}
+}
+
+func (m Model) fetchSSHKeysCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return SSHKeysMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		keys, err := m.APIClient.GetSSHKeys()
+		return SSHKeysMsg{Keys: keys, Err: err}
+	}
+}
+
+func (m Model) deleteSSHKeyCmd(id uint) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return SSHKeyDeletedMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		err := m.APIClient.DeleteSSHKey(id)
+		return SSHKeyDeletedMsg{Err: err}
 	}
 }
 

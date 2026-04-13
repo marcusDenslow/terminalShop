@@ -43,6 +43,7 @@ func SetupRoutes(
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)
 	viewHandler := handlers.NewViewHandler()
 	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, stripeSecretKey)
+	sshKeyHandler := handlers.NewSSHKeyHandler()
 
 	// Short payment redirect and success page — no auth required.
 	r.Get("/pay/{token}", handlers.PayRedirect)
@@ -113,6 +114,14 @@ func SetupRoutes(
 				r.Post("/", addressHandler.CreateAddress)
 				r.Delete("/{id}", addressHandler.DeleteAddress)
 				r.Put("/{id}/default", addressHandler.SetDefaultAddress)
+			})
+
+			// SSH Keys
+			r.Route("/ssh-keys", func(r chi.Router){
+				// GET doesnt need id because it gets every ssh key
+				r.Get("/", sshKeyHandler.GetSSHKeys)
+				// Delete needs an id to delete only one key
+				r.Delete("/{id}", sshKeyHandler.DeleteSSHKeys)
 			})
 		})
 	})

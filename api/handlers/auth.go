@@ -72,7 +72,7 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 		}
 		user = models.User{
 			SSHKeyFingerprint: req.Fingerprint,
-			SSHPublicKey: req.SSHPublicKey,
+			SSHPublicKey:      req.SSHPublicKey,
 		}
 		if err := db.Create(&user).Error; err != nil {
 			utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to create user", nil)
@@ -81,6 +81,15 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	} else if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "database error", nil)
 		return
+	}
+
+	if req.SSHPublicKey != "" {
+		sshKey := models.SSHKey{
+			UserID:      user.ID,
+			Fingerprint: req.Fingerprint,
+			PublicKey:   req.SSHPublicKey,
+		}
+		db.Where(models.SSHKey{Fingerprint: req.Fingerprint}).FirstOrCreate(&sshKey)
 	}
 
 	token, err := h.jwtManager.GenerateToken(user.ID, user.Email, user.Name)
@@ -93,7 +102,7 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 		"access_token": token,
 		"token_type":   "Bearer",
 		"expires_in":   1800, // 30 minutes in seconds
-		"user": user.ToPublic(),
+		"user":         user.ToPublic(),
 	})
 }
 

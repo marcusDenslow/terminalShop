@@ -26,11 +26,12 @@ func (Coffee) TableName() string {
 	return "coffees"
 }
 
-// AccountMenuItems 
+// AccountMenuItems
 var AccountMenuItems = []string{
 	"order history",
 	"addresses",
 	"cards",
+	"ssh keys",
 	"faq",
 	"about",
 }
