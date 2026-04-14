@@ -119,10 +119,16 @@ func (h *CardHandler) SetDefaultCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Model(&models.Card{}).Where("user_id = ?", userID).Update("is_default", false)
+	if err := db.Model(&models.Card{}).Where("user_id = ?", userID).Update("is_default", false).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update card", nil)
+		return
+	}
 
 	card.IsDefault = true
-	db.Save(&card)
+	if err := db.Save(&card).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to save card", nil)
+		return
+	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"card": card,
@@ -285,7 +291,10 @@ func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 
 	// Clear the card from any cart that references it.
 	cardID := uint(id)
-	db.Model(&models.Cart{}).Where("card_id = ? AND user_id = ?", cardID, userID).Update("card_id", nil)
+	if err := db.Model(&models.Cart{}).Where("card_id = ? AND user_id = ?", cardID, userID).Update("card_id", nil).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to clear card from cart", nil)
+		return
+	}
 
 	// Detach from Stripe (best-effort; don't block deletion on Stripe errors).
 	if len(card.StripePaymentID) >= 3 && card.StripePaymentID[:3] == "pm_" {
@@ -294,7 +303,10 @@ func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Soft-delete the local record.
-	db.Delete(&card)
+	if err := db.Delete(&card).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to delete card", nil)
+		return
+	}
 
 	audit.CardDeleted(userID, card.ID)
 
@@ -325,6 +337,8 @@ func ensureStripeCustomer(gdb *gorm.DB, user *models.User) error {
 		return err
 	}
 	user.StripeCustomerID = cust.ID
-	gdb.Save(user)
+	if err := gdb.Save(user).Error; err != nil {
+		return fmt.Errorf("Failed to save stripe customer: %w", err)
+	}
 	return nil
 }

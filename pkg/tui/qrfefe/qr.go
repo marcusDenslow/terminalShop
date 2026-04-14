@@ -20,7 +20,7 @@ func generate(level qr.Level, text string) (string, int, error) {
 
 	qrRunes := make([]rune, 0)
 
-	for y := 0; y < code.Size-1; y+= 2 {
+	for y := 0; y < code.Size-1; y += 2 {
 		qrRunes = append(qrRunes, []rune(sgr.FgWhite+sgr.BgBlack)...)
 
 		for x := 0; x < code.Size; x += 1 {

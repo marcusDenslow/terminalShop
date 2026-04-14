@@ -83,9 +83,9 @@ func (m Model) getShopMenuContent() string {
 			Background(selectedColor).Bold(true)
 	} else {
 		normal = m.theme.TextBody().
-			Width(menuWidth + 2).Padding(0, 1)
+			Width(menuWidth+2).Padding(0, 1)
 		highlighted = m.theme.TextAccent().
-			Width(menuWidth + 2).Padding(0, 1).
+			Width(menuWidth+2).Padding(0, 1).
 			Background(selectedColor).Bold(true)
 	}
 

@@ -2,17 +2,16 @@ package tui
 
 import (
 	"fmt"
-	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
-
 
 func (m Model) BuildMenuView() string {
 	bold := m.theme.TextAccent().Bold(true)
 
 	base := m.theme.TextBody()
 
-	rowStyle := lipgloss.NewStyle().Padding(0,1)
+	rowStyle := lipgloss.NewStyle().Padding(0, 1)
 	rows := []string{
 		rowStyle.Render(bold.Render("s") + " " + base.Render("shop")),
 		rowStyle.Render(bold.Render("a") + " " + base.Render("account")),
@@ -21,12 +20,10 @@ func (m Model) BuildMenuView() string {
 		rowStyle.Render(bold.Render("q") + " " + base.Render("quit")),
 	}
 
-
 	menuContent := ""
 	for _, row := range rows {
 		menuContent += row + "\n"
 	}
-
 
 	logoStyle := m.theme.TextAccent().Bold(true)
 	logo := logoStyle.Render("terminal coffee")
@@ -52,7 +49,7 @@ func (m Model) BuildMenuView() string {
 		"",
 		hint,
 		cartHint,
-		)
+	)
 
 	return lipgloss.Place(
 		m.viewportWidth,
@@ -60,8 +57,8 @@ func (m Model) BuildMenuView() string {
 		lipgloss.Center,
 		lipgloss.Center,
 		assembled,
-		)
-	
+	)
+
 }
 
 func (m Model) MenuUpdate(msg tea.Msg) (Model, tea.Cmd) {

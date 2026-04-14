@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -128,7 +129,9 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(event stripe.Event) {
 		if err := tx.Where("user_id = ?", order.UserID).First(&cart).Error; err != nil {
 			return nil // Cart already gone.
 		}
-		tx.Where("cart_id = ?", cart.ID).Delete(&models.CartItem{})
+		if err := tx.Where("cart_id = ?", cart.ID).Delete(&models.CartItem{}).Error; err != nil {
+			return fmt.Errorf("failed to delete cart item: %w", err)
+		}
 		return tx.Model(&cart).Updates(map[string]interface{}{
 			"address_id": nil,
 			"card_id":    nil,
@@ -156,8 +159,10 @@ func (h *WebhookHandler) handlePaymentIntentFailed(event stripe.Event) {
 	}
 
 	db := database.GetDB()
-	db.Model(&models.Order{}).Where("id = ? AND status = ?", orderIDStr, models.OrderStatusPending).
-		Update("status", models.OrderStatusFailed)
+	if err := db.Model(&models.Order{}).Where("id = ? AND status = ?", orderIDStr, models.OrderStatusPending).
+		Update("status", models.OrderStatusFailed).Error; err != nil {
+		log.Printf("[webhook] failed to mark order %s as failed: %v", orderIDStr, err)
+	}
 
 	errMsg := "unknown"
 	if pi.LastPaymentError != nil {

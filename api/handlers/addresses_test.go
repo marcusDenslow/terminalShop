@@ -158,4 +158,3 @@ func TestGetAddressesWithData(t *testing.T) {
 		t.Errorf("expected 2 addresses, got: %d", len(resp.Data.Addresses))
 	}
 }
-

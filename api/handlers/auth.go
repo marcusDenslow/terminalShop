@@ -79,7 +79,7 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if err != nil {
-		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "database error", nil)
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to look up user", nil)
 		return
 	}
 
@@ -89,7 +89,13 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 			Fingerprint: req.Fingerprint,
 			PublicKey:   req.SSHPublicKey,
 		}
-		db.Where(models.SSHKey{Fingerprint: req.Fingerprint}).FirstOrCreate(&sshKey)
+		if err := db.Where(models.SSHKey{Fingerprint: req.Fingerprint}).FirstOrCreate(&sshKey).Error; err != nil {
+			// we specifically want to block users whos ssh key failed to save. this is to prevent downstream errors which i dont want to deal with now
+			// !TODO add a way to just log the errror and app continue without trying to save carts, cards and addresses. this way the users wouldnt
+			// just be kicked, they would shop normally but on their next login they would need to add all their data again.
+			utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to save ssh key", nil)
+			return
+		}
 	}
 
 	token, err := h.jwtManager.GenerateToken(user.ID, user.Email, user.Name)

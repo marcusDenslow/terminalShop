@@ -117,7 +117,7 @@ func SetupRoutes(
 			})
 
 			// SSH Keys
-			r.Route("/ssh-keys", func(r chi.Router){
+			r.Route("/ssh-keys", func(r chi.Router) {
 				// GET doesnt need id because it gets every ssh key
 				r.Get("/", sshKeyHandler.GetSSHKeys)
 				// Delete needs an id to delete only one key

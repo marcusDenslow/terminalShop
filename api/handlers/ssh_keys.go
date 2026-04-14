@@ -23,10 +23,7 @@ func (h *SSHKeyHandler) GetSSHKeys(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var keys []models.SSHKey
-	if err := db.Where("user_id = ?", userID).Order("created_at ASC").Find(&keys).Error; err != nil {
-		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to fetch ssh keys", nil)
-		return
-	}
+	db.Where("user_id = ?", userID).Order("created_at ASC").Find(&keys)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"ssh_keys": keys,
@@ -36,7 +33,7 @@ func (h *SSHKeyHandler) GetSSHKeys(w http.ResponseWriter, r *http.Request) {
 // DeleteSSHKeys removes one of the users ssh keys by ID
 func (h *SSHKeyHandler) DeleteSSHKeys(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
-	userId := middleware.UserIDFromContext(r.Context())
+	userID := middleware.UserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(idStr, 10, 32)
@@ -46,11 +43,14 @@ func (h *SSHKeyHandler) DeleteSSHKeys(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var key models.SSHKey
-	if err := db.Where("id = ? AND user_id = ?", id, userId).First(&key).Error; err != nil {
+	if err := db.Where("id = ? AND user_id = ?", id, userID).First(&key).Error; err != nil {
 		utils.RespondError(w, http.StatusNotFound, "SSH_KEY_NOT_FOUND", "ssh key not found", nil)
 		return
 	}
-	db.Delete(&key)
+	if err := db.Delete(&key).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to delete ssh key", nil)
+		return
+	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"message": "ssh key deleted",

@@ -57,4 +57,3 @@ func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		"product": product,
 	})
 }
- 

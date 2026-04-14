@@ -76,7 +76,7 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 	switch req.Country {
 	case "US":
 		if h.shippoKey == "" {
-			utils.RespondError(w, http.StatusBadRequest, "CONFIG_ERROR", "shippo not configured for US address validation", nil)
+			utils.RespondError(w, http.StatusInternalServerError, "CONFIG_ERROR", "shippo not configured for US address validation", nil)
 			return
 		}
 		client := shippo.NewClient(h.shippoKey)
@@ -166,12 +166,14 @@ func (h *AddressHandler) DeleteAddress(w http.ResponseWriter, r *http.Request) {
 	var address models.Address
 
 	if err := db.Where("id = ? AND user_id = ?", id, userID).First(&address).Error; err != nil {
-		utils.RespondError(w, http.StatusNotFound, "ADDRESS NOT FOUND", "address not found", nil)
+		utils.RespondError(w, http.StatusNotFound, "ADDRESS_NOT_FOUND", "address not found", nil)
 		return
 	}
 
-	// ownership is guaranteed by the WHERE clause above
-	db.Delete(&address)
+	if err := db.Delete(&address).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to delete address", nil)
+		return
+	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"message": "address successfully deleted",
@@ -197,10 +199,16 @@ func (h *AddressHandler) SetDefaultAddress(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	db.Model(&models.Address{}).Where("user_id = ?", userID).Update("is_default", false)
+	if err := db.Model(&models.Address{}).Where("user_id = ?", userID).Update("is_default", false).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update address", nil)
+		return
+	}
 
 	address.IsDefault = true
-	db.Save(&address)
+	if err := db.Save(&address).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to save address", nil)
+		return
+	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"address": address,

@@ -12,20 +12,20 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	APIPort              string
-	APIURL               string
-	AppURL               string
-	SSHPort              string
-	Environment          string
-	DatabaseURL          string
-	JWTSecret            string
-	StripeSecretKey      string
-	StripePublicKey      string
-	StripeWebhookSecret  string
-	ShippoAPIKey         string
-	AuthFingerprintKey   string
-	BringAPIUID          string
-	BringAPIKey          string
+	APIPort             string
+	APIURL              string
+	AppURL              string
+	SSHPort             string
+	Environment         string
+	DatabaseURL         string
+	JWTSecret           string
+	StripeSecretKey     string
+	StripePublicKey     string
+	StripeWebhookSecret string
+	ShippoAPIKey        string
+	AuthFingerprintKey  string
+	BringAPIUID         string
+	BringAPIKey         string
 }
 
 // Load reads configuration from environment variables and validates required secrets.

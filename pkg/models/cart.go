@@ -11,7 +11,7 @@ type Cart struct {
 	CardID          *uint     `json:"card_id,omitempty"`
 	ShippingCost    int       `gorm:"default:0" json:"shipping_cost"`
 	ShippingService string    `gorm:"size:255" json:"shipping_service,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
+	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 
 	User    User       `gorm:"foreignKey:UserID" json:"-"`

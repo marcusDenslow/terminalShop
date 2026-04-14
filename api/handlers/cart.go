@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"gorm.io/gorm"
 	"github.com/stripe/stripe-go/v78"
 	"github.com/stripe/stripe-go/v78/paymentintent"
 	"github.com/stripe/stripe-go/v78/paymentmethod"
+	"gorm.io/gorm"
 
 	"terminalShop/api/middleware"
 	"terminalShop/pkg/audit"
@@ -117,7 +117,10 @@ func (h *CartHandler) SetItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Quantity <= 0 {
-		db.Where("cart_id = ? AND coffee_id = ?", cart.ID, req.CoffeeID).Delete(&models.CartItem{})
+		if err := db.Where("cart_id = ? AND coffee_id = ?", cart.ID, req.CoffeeID).Delete(&models.CartItem{}).Error; err != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to delete cart item", nil)
+			return
+		}
 	} else {
 		var item models.CartItem
 		result := db.Where("cart_id = ? AND coffee_id = ?", cart.ID, req.CoffeeID).First(&item)
@@ -127,9 +130,15 @@ func (h *CartHandler) SetItem(w http.ResponseWriter, r *http.Request) {
 				CoffeeID: req.CoffeeID,
 				Quantity: req.Quantity,
 			}
-			db.Create(&item)
+			if err := db.Create(&item).Error; err != nil {
+				utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create item", nil)
+				return
+			}
 		} else {
-			db.Model(&item).Update("quantity", req.Quantity)
+			if err := db.Model(&item).Update("quantity", req.Quantity).Error; err != nil {
+				utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update quantity", nil)
+				return
+			}
 		}
 	}
 
@@ -164,7 +173,10 @@ func (h *CartHandler) SetAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Model(cart).Update("address_id", req.AddressID)
+	if err := db.Model(cart).Update("address_id", req.AddressID).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to set address", nil)
+		return
+	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"message": "address set",
@@ -197,7 +209,10 @@ func (h *CartHandler) SetCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Model(cart).Update("card_id", req.CardID)
+	if err := db.Model(cart).Update("card_id", req.CardID).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to set card", nil)
+		return
+	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"message": "card set",
@@ -214,7 +229,10 @@ func (h *CartHandler) ClearCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Where("cart_id = ?", cart.ID).Delete(&models.CartItem{})
+	if err := db.Where("cart_id = ?", cart.ID).Delete(&models.CartItem{}).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to delete cart item", nil)
+		return
+	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"message": "cart cleared",
@@ -297,7 +315,10 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		}
 		paymentMethodID = pm.ID
 		card.StripePaymentID = pm.ID
-		db.Save(&card)
+		if err := db.Save(&card).Error; err != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to save card", nil)
+			return
+		}
 	}
 
 	var subtotal int
@@ -427,10 +448,12 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	audit.OrderPaid(userID, order.ID, total, pi.ID)
 
-	db.Preload("Items").First(&order, order.ID)
+	if err := db.Preload("Items").First(&order, order.ID).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to preload items", nil)
+		return
+	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"order": order,
 	})
 }
-
