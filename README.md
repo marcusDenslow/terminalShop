@@ -4,12 +4,10 @@
 ssh sshops.uk
 ```
 
-A coffee shop that lives entirely in your terminal. You connect over SSH, browse the menu, add things to your cart, enter your shipping address and card details — all without leaving the command line. Your account is tied to your SSH key, so there's no signup, it just knows who you are.
+it's a coffee shop but in your terminal. you ssh in, browse the menu, chuck stuff in your cart, put in your address and card, and buy coffee without ever touching a browser. your ssh key is your account so there's no login or signup or any of that.
 
-Built mostly as a way to explore what a real e-commerce flow looks like when you strip away the browser. Inspired by [terminal.shop](https://terminal.shop).
+made it because i thought it would be fun to see if you could build a real e-commerce flow that lives entirely in a terminal. turns out you can. heavily inspired by [terminal.shop](https://terminal.shop).
 
-Hosted on Hetzner, behind Cloudflare.
+running on Hetzner, behind Cloudflare.
 
-## Tech
-
-Go, Bubbletea, Wish, Chi, PostgreSQL, Stripe, Shippo, Bring (for Norwegian addresses).
+**tech:** Go, Bubbletea, Wish, Chi, PostgreSQL, Stripe, Shippo, Bring
