@@ -12,8 +12,13 @@
 *.so
 *.dylib
 terminalshop
+terminalShop
 server_bin
 terminalshop_*
+server.go.old
+main
+api/main
+api/api-server
 
 # Go test/coverage files
 *.test

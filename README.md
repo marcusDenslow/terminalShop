@@ -1,6 +1,6 @@
 # Terminal Coffee Shop
 
-A terminal-based coffee shop, accessible over SSH. Built with Go, Bubbletea, Wish, Chi, PostgreSQL, Stripe, and Shippo.
+A coffee shop you access over SSH. Built with Go, Bubbletea, Wish, Chi, PostgreSQL, Stripe, and Shippo.
 
 ```bash
 ssh localhost -p 23456
@@ -9,7 +9,7 @@ ssh localhost -p 23456
 ## Running locally
 
 ```bash
-# Copy and fill in env vars
+# Copy and fill in your env vars
 cp .env.example .env
 
 # Start the API server
@@ -32,31 +32,27 @@ go run main.go
 
 ## What's working
 
-- SSH server — key-based auth, auto user creation
-- Shop page — browse products with live detail panel
-- Cart — add/remove items, synced to API
+- SSH server — key-based auth, auto user creation on first connect
+- Splash screen with animated blinking cursor while auth + data loads
+- Shop page — browse products with a live detail panel on the right
+- Cart — add/remove items, synced to the API
 - Checkout flow — shipping address → payment → confirmation
-- Saved addresses and cards
-- Order history in account view
+- Save/delete shipping addresses and payment cards
+- Order history in the account view
 - FAQ page
-- Responsive layout (small/medium/large terminal sizes)
+- Help page
+- Responsive layout across small, medium, and large terminals
+- Centralized theme system (no more scattered hex values)
 - Token refresh
+
+## Known bugs
+
+- Address delete has an off-by-one slice bug in `shipping_form.go:386`
+- Account page has a leftover placeholder menu item somewhere in the models
 
 ## TODO
 
-**Features missing vs reference (terminal.shop):**
-- [ ] Splash/loading screen on connect
-- [ ] Animated logo with blinking cursor
-- [ ] API token management page
-- [ ] OAuth app management page
-- [ ] About page
-- [ ] Theme system — currently 40+ hardcoded hex colors scattered across files
-- [ ] Viewport-based scrolling — currently manual scroll math with hardcoded heights
-
-**Known bugs:**
-- [ ] Address delete slice bug in `shipping_form.go:386` — `[m.AddressCursor+1:]...` missing
-- [ ] Account page has a placeholder "something" menu item in `models/coffee.go`
-
-**Code quality:**
-- [ ] Nested state structs (reference uses `state.shop`, `state.cart`, etc. vs flat Model)
-- [ ] Centralized styles file
+- Viewport-based scrolling (currently manual scroll math with hardcoded heights)
+- API token management page
+- OAuth app management page
+- About page
