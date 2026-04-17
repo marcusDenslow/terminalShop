@@ -61,6 +61,9 @@ temp/
 Thumbs.db
 .DS_Store
 
+CONTRIBUTING.md
+
+
 
 # random stuff like ai and shit
 CLAUDE.md 
@@ -68,6 +71,9 @@ AGENTS.md
 MODELS.md 
 REFACTORING.md 
 TODO.md
+NEXT.md
+test_stripe.go
+
 
 codebase_graph.html
 
@@ -76,6 +82,7 @@ codebase_graph.html
 
 # API documentation (auto-generated)
 api/docs/
+docs/
 
 # Migration state (if using a migration tool that creates state files)
 migrations/*.state
