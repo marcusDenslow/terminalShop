@@ -1,58 +1,49 @@
 # Terminal Coffee Shop
 
-A coffee shop you access over SSH. Built with Go, Bubbletea, Wish, Chi, PostgreSQL, Stripe, and Shippo.
+A coffee shop that runs in your terminal over SSH.
 
 ```bash
-ssh localhost -p 23456
+ssh sshops.uk
 ```
+
+Hosted on Hetzner, behind Cloudflare.
+
+## Stack
+
+- **TUI** — Bubbletea + Wish
+- **API** — Go + Chi
+- **Database** — PostgreSQL + GORM
+- **Auth** — SSH key fingerprint + JWT
+- **Payments** — Stripe
+- **Shipping** — Shippo
+
+## What's in it
+
+- SSH key auth, creates your account automatically on first connect
+- Splash screen while it loads
+- Shop, cart, full checkout flow (shipping → payment → confirmation)
+- Save addresses and cards to your account
+- Order history
+- FAQ and help pages
 
 ## Running locally
 
 ```bash
-# Copy and fill in your env vars
 cp .env.example .env
+# fill in the env vars
 
-# Start the API server
-go run api/main.go
-
-# Start the SSH server
-go run main.go
+go run api/main.go   # API server
+go run main.go       # SSH server — connects on localhost:23456
 ```
 
-## Stack
+## Known issues
 
-| Layer | Tech |
-|-------|------|
-| TUI | Bubbletea + Wish (SSH) |
-| HTTP API | Chi router |
-| Database | PostgreSQL + GORM |
-| Auth | SSH key fingerprint + JWT |
-| Payments | Stripe |
-| Shipping | Shippo |
-
-## What's working
-
-- SSH server — key-based auth, auto user creation on first connect
-- Splash screen with animated blinking cursor while auth + data loads
-- Shop page — browse products with a live detail panel on the right
-- Cart — add/remove items, synced to the API
-- Checkout flow — shipping address → payment → confirmation
-- Save/delete shipping addresses and payment cards
-- Order history in the account view
-- FAQ page
-- Help page
-- Responsive layout across small, medium, and large terminals
-- Centralized theme system (no more scattered hex values)
-- Token refresh
-
-## Known bugs
-
-- Address delete has an off-by-one slice bug in `shipping_form.go:386`
-- Account page has a leftover placeholder menu item somewhere in the models
+- Address delete has an off-by-one bug in `shipping_form.go:386`
+- Leftover placeholder menu item in the account page
 
 ## TODO
 
-- Viewport-based scrolling (currently manual scroll math with hardcoded heights)
+- Viewport-based scrolling (currently hardcoded heights)
 - API token management page
 - OAuth app management page
 - About page
