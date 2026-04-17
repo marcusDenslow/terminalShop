@@ -1,49 +1,15 @@
 # Terminal Coffee Shop
 
-A coffee shop that runs in your terminal over SSH.
-
 ```bash
 ssh sshops.uk
 ```
 
+A coffee shop that lives entirely in your terminal. You connect over SSH, browse the menu, add things to your cart, enter your shipping address and card details — all without leaving the command line. Your account is tied to your SSH key, so there's no signup, it just knows who you are.
+
+Built mostly as a way to explore what a real e-commerce flow looks like when you strip away the browser. Inspired by [terminal.shop](https://terminal.shop).
+
 Hosted on Hetzner, behind Cloudflare.
 
-## Stack
+## Tech
 
-- **TUI** — Bubbletea + Wish
-- **API** — Go + Chi
-- **Database** — PostgreSQL + GORM
-- **Auth** — SSH key fingerprint + JWT
-- **Payments** — Stripe
-- **Shipping** — Shippo
-
-## What's in it
-
-- SSH key auth, creates your account automatically on first connect
-- Splash screen while it loads
-- Shop, cart, full checkout flow (shipping → payment → confirmation)
-- Save addresses and cards to your account
-- Order history
-- FAQ and help pages
-
-## Running locally
-
-```bash
-cp .env.example .env
-# fill in the env vars
-
-go run api/main.go   # API server
-go run main.go       # SSH server — connects on localhost:23456
-```
-
-## Known issues
-
-- Address delete has an off-by-one bug in `shipping_form.go:386`
-- Leftover placeholder menu item in the account page
-
-## TODO
-
-- Viewport-based scrolling (currently hardcoded heights)
-- API token management page
-- OAuth app management page
-- About page
+Go, Bubbletea, Wish, Chi, PostgreSQL, Stripe, Shippo, Bring (for Norwegian addresses).
