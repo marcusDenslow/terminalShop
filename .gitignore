@@ -82,8 +82,7 @@ test_stripe.go
 
 codebase_graph.html
 
-# Don't commit the cloned reference repo (optional - you might want to keep it)
-# terminal-shop-source/
+terminal-shop-source/
 
 # API documentation (auto-generated)
 api/docs/
