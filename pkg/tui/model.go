@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -690,13 +691,7 @@ func (m Model) GetCartItemsSlice() []*models.CartItem {
 	}
 
 	// Sort keys to ensure consistent order
-	for i := 0; i < len(keys); i++ {
-		for j := i + 1; j < len(keys); j++ {
-			if keys[i] > keys[j] {
-				keys[i], keys[j] = keys[j], keys[i]
-			}
-		}
-	}
+	sort.Slice(keys, func(i, j int) bool { return  keys[i] < keys[j] })
 
 	// Build items slice in sorted order
 	items := make([]*models.CartItem, 0, len(m.Cart))
