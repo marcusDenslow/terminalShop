@@ -180,9 +180,7 @@ func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	case "p", "enter":
 		if len(m.Cart) > 0 {
-			m = m.SwitchPage(shippingPage)
-			m = m.updateShippingViewport()
-			return m, m.fetchAddressesCmd()
+			return m.ShippingSwitch()
 		}
 	}
 	return m, nil

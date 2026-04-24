@@ -379,11 +379,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.ErrorMsg = "Invalid address. Currently only US and Norwegian addresses are supported."
 			return m, m.shipping.form.form.Init()
 		}
-		m.ShippingInfo = &msg.Address
-		m.shipping.form = nil
-		m = m.SwitchPage(paymentPage)
-		m.SelectedCard = nil
-		return m, m.fetchCardsCmd()
+		return m.PaymentSwitch()
 
 	case ShippingFormErrorMsg:
 		m.ErrorMsg = msg.Message
@@ -399,8 +395,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.ErrorMsg = ""
 		switch keyMsg.String() {
 		case "esc":
-			m = m.SwitchPage(cartPage)
-			return m, nil
+			return m.CartSwitch()
 		case "up", "k":
 			if m.shipping.addressCursor > 0 {
 				m.shipping.addressCursor--
@@ -413,9 +408,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if m.shipping.addressCursor < len(m.SavedAddresses) {
 				selected := m.SavedAddresses[m.shipping.addressCursor]
 				m.ShippingInfo = &selected
-				m = m.SwitchPage(paymentPage)
-				m.SelectedCard = nil
-				return m, m.fetchCardsCmd()
+				return m.PaymentSwitch()
 			}
 			m.shipping.view = 1
 			m.shipping.form = m.InitShippingForm()
@@ -449,8 +442,8 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 					return m, nil
 				}
 				m.shipping.form = nil
-				m = m.SwitchPage(cartPage)
-				return m, nil
+				m, cmd := m.CartSwitch()
+				return m, cmd
 			}
 			// Clear error only when user starts typing, not on internal huh messages
 			m.ErrorMsg = ""

@@ -111,12 +111,11 @@ func (m Model) ConfirmUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	m = m.SwitchPage(shopPage)
 	m.CheckingOut = false
 	m.confirm.total = 0
 	m.confirm.items = nil
 	m.confirm.shipping = nil
-	m = m.resetPageState()
+	m, _ = m.ShopSwitch()
 	return m, func() tea.Msg {
 		if m.APIClient != nil {
 			_ = m.APIClient.ClearCart()
@@ -208,10 +207,9 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.review.success {
-			m = m.SwitchPage(shopPage)
 			m.review.success = false
 			m.review.cardJustAdded = false
-			m = m.resetPageState()
+			m, _ = m.ShopSwitch()
 			return m, func() tea.Msg {
 				if m.APIClient != nil {
 					_ = m.APIClient.ClearCart()

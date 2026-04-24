@@ -68,9 +68,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.splashViewInitCmd, m.scheduleTokenRefreshCmd())
 	case ViewInitMsg:
 		if msg.Err != nil {
-			m.ErrorMsg = fmt.Sprintf("failed to load: %v", msg.Err)
-			m.Loading = false
-			return m, nil
+			return m.ShopSwitch()
 		}
 		m.Loading = false
 		if len(msg.Data.Products) > 0 {
@@ -149,9 +147,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case DelayCompleteMsg:
 		m.splash.delayDone = true
 		if m.currentPage == splashPage && m.splash.dataReady {
-			m = m.SwitchPage(shopPage)
-			m = m.updateShopViewports()
-			return m, nil
+			return m.ShopSwitch()
 		}
 		return m, nil
 	case splashCursorTickMsg:
@@ -176,19 +172,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.menuLastPage = m.currentPage
 			return m, nil
 		case "s":
-			m = m.SwitchPage(shopPage).resetPageState()
-			m = m.updateShopViewports()
-			return m, nil
+			return m.ShopSwitch()
 		case "c":
-			m = m.SwitchPage(cartPage).resetPageState()
-			m = m.updateCartViewport()
-			return m, nil
+			return m.CartSwitch()
 		case "a":
-			m = m.SwitchPage(accountPage).resetPageState()
-			if !m.OrdersLoaded {
-				return m, m.fetchOrdersCmd()
-			}
-			return m, nil
+			return m.AccountSwitch()
 		}
 		// non-globals. fall through to page dispatch below
 	}

@@ -441,8 +441,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.SelectedCard = &selected
 		m.payment.form = nil
 		m.review.cardJustAdded = true
-		m = m.SwitchPage(reviewPage)
-		return m, nil
+		return m.ReviewSwitch()
 
 	case PollPaymentInitMsg:
 		url := msg.URL
@@ -465,8 +464,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		selected := m.SavedCards[len(m.SavedCards)-1]
 		m.SelectedCard = &selected
 		m.review.cardJustAdded = true
-		m = m.SwitchPage(reviewPage)
-		return m, nil
+		return m.ReviewSwitch()
 	}
 
 	// Card list navigation
@@ -478,8 +476,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.ErrorMsg = ""
 		switch keyMsg.String() {
 		case "esc":
-			m = m.SwitchPage(shippingPage)
-			return m, m.fetchAddressesCmd()
+			return m.ShippingSwitch()
 		case "up", "k":
 			if m.payment.cardCursor > 0 {
 				m.payment.cardCursor--
@@ -493,8 +490,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if m.payment.cardCursor < len(m.SavedCards) {
 				selected := m.SavedCards[m.payment.cardCursor]
 				m.SelectedCard = &selected
-				m = m.SwitchPage(reviewPage)
-				return m, nil
+				return m.ReviewSwitch()
 			}
 			if m.payment.cardCursor == len(m.SavedCards) {
 				m.payment.view = 1

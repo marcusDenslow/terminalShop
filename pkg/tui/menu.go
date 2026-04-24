@@ -69,17 +69,15 @@ func (m Model) MenuUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	switch keyMsg.String() {
 	case "s":
 		m.ShowingMenu = false
-		return m.SwitchPage(shopPage).resetPageState(), nil
+		m, cmd := m.ShopSwitch()
+		return m, cmd
 	case "a":
 		m.ShowingMenu = false
-		m = m.SwitchPage(accountPage).resetPageState()
-		if !m.OrdersLoaded {
-			return m, m.fetchOrdersCmd()
-		}
-		return m, nil
+		return m.AccountSwitch()
 	case "c":
 		m.ShowingMenu = false
-		return m.SwitchPage(cartPage).resetPageState(), nil
+		m, cmd := m.CartSwitch()
+		return m, cmd
 	case "esc":
 		m.ShowingMenu = false
 	case "?":

@@ -202,6 +202,53 @@ func (m Model) SwitchPage(p page) Model {
 	return m
 }
 
+func (m Model) ShopSwitch() (Model, tea.Cmd) {
+	m = m.SwitchPage(shopPage)
+	m = m.updateShopViewports()
+	return m, nil
+}
+
+func (m Model) CartSwitch() (Model, tea.Cmd) {
+	m = m.SwitchPage(cartPage)
+	m = m.updateCartViewport()
+	return m, nil
+}
+
+func (m Model) AccountSwitch() (Model, tea.Cmd) {
+	m = m.SwitchPage(accountPage)
+	m.account = accountState{}
+	if !m.OrdersLoaded {
+		return m, m.fetchOrdersCmd()
+	}
+	return m, nil
+}
+
+func (m Model) ShippingSwitch() (Model, tea.Cmd) {
+	m = m.SwitchPage(shippingPage)
+	m.shipping = shippingState{}
+	m = m.updateShippingViewport()
+	return m, m.fetchAddressesCmd()
+}
+
+func (m Model) PaymentSwitch() (Model, tea.Cmd) {
+	m = m.SwitchPage(paymentPage)
+	m.payment = paymentState{}
+	m.SelectedCard = nil
+	return m, m.fetchCardsCmd()
+}
+
+func (m Model) ReviewSwitch() (Model, tea.Cmd) {
+	m = m.SwitchPage(reviewPage)
+	return m, nil
+}
+
+func (m Model) ConfirmSwitch() (Model, tea.Cmd) {
+	m = m.SwitchPage(confirmPage)
+	m.confirm = confirmState{}
+	m = m.updateConfirmViewport()
+	return m, nil
+}
+
 // inCartFlow returns true when the user is anywhere in the cart or checkout flow
 func (m Model) inCartFlow() bool {
 	return m.currentPage == cartPage ||
@@ -300,14 +347,6 @@ func (m Model) Init() tea.Cmd {
 			return splashCursorTickMsg{}
 		}),
 	)
-}
-
-func (m Model) resetPageState() Model {
-	m.shipping = shippingState{}
-	m.payment = paymentState{}
-	m.account = accountState{}
-	m.review = reviewState{}
-	return m
 }
 
 type CheckoutResultMsg struct {
@@ -781,10 +820,10 @@ func newModelWithRenderer(username string, renderer *lipgloss.Renderer) Model {
 				Description: "Espresso 'marked' with a dollop of foamed milk. Small but mighty, like a tiny caffeinated warrior.",
 			},
 		},
-		Cart:    make(map[uint]*models.CartItem),
-		Loading: true,
-		APIClient:      api.NewClient("http://localhost:8080", ""),
-		FAQs:           LoadFaqs(),
+		Cart:      make(map[uint]*models.CartItem),
+		Loading:   true,
+		APIClient: api.NewClient("http://localhost:8080", ""),
+		FAQs:      LoadFaqs(),
 	}
 	m.updateLayout(120, 30)
 	return m
