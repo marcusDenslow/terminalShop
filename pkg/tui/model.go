@@ -755,6 +755,29 @@ func (m Model) GetCartItemsSlice() []*models.CartItem {
 	return items
 }
 
+// IsCartEmpty returns true when the cart has no items
+func (m Model) IsCartEmpty() bool {
+	return len(m.Cart) == 0
+}
+
+// CartItemCount returns the total number of items (sum of quanities) in the cart
+func (m Model) CartItemCount() int {
+	count := 0
+	for _, item := range m.Cart {
+		count += item.Quantity
+	}
+	return count
+}
+
+// CalculateSubtotal returns the cart subtotal in cents
+func (m Model) CalculateSubtotal() int {
+	subtotal := 0
+	for _, item := range m.Cart {
+		subtotal += item.Coffee.Price * item.Quantity
+	}
+	return subtotal
+}
+
 // NewModel creates a new model using the default renderer.
 func NewModel(username string) Model {
 	return newModelWithRenderer(username, lipgloss.DefaultRenderer())

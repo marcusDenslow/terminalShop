@@ -8,12 +8,8 @@ import (
 
 func (m Model) BuildHeader() string {
 	// Calculate cart total and item count
-	total := 0
-	itemCount := 0
-	for _, item := range m.Cart {
-		total += item.Quantity * item.Coffee.Price
-		itemCount += item.Quantity
-	}
+	total := m.CalculateSubtotal()
+	itemCount := m.CartItemCount()
 
 	// Define colors
 	grayStyle := m.theme.TextBody()

@@ -150,10 +150,8 @@ func (m Model) generateReviewContent() string {
 	}
 	view.WriteString("\n")
 
-	subtotal := 0
-	for _, item := range m.GetCartItemsSlice() {
-		subtotal += item.Coffee.Price * item.Quantity
-	}
+	subtotal := m.CalculateSubtotal()
+
 	view.WriteString(fmt.Sprintf("subtotal: %s\n", formatUSD(subtotal)))
 	view.WriteString(m.theme.TextAccent().Render(fmt.Sprintf("total:    %s", formatUSD(subtotal))) + "\n")
 	view.WriteString("\n")

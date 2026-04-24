@@ -28,7 +28,7 @@ func (m Model) updateCartViewport() Model {
 }
 
 func (m Model) generateCartContent() string {
-	if len(m.Cart) == 0 {
+	if m.IsCartEmpty() {
 		emptyStyle := m.theme.TextDim().
 			Align(lipgloss.Center).
 			Width(m.widthContent).
@@ -179,7 +179,7 @@ func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.syncCartItemCmd(coffeeID, newQty)
 		}
 	case "p", "enter":
-		if len(m.Cart) > 0 {
+		if !m.IsCartEmpty() {
 			return m.ShippingSwitch()
 		}
 	}

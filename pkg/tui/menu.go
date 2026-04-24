@@ -32,12 +32,8 @@ func (m Model) BuildMenuView() string {
 
 	hint := base.Render("press esc to close")
 
-	itemCount := 0
-	total := 0
-	for _, item := range m.Cart {
-		total += item.Quantity * item.Coffee.Price
-		itemCount += item.Quantity
-	}
+	total := m.CalculateSubtotal()
+	itemCount := m.CartItemCount()
 
 	cartHint := base.Render(fmt.Sprintf("cart $%.2f [%d]", float64(total)/100, itemCount))
 

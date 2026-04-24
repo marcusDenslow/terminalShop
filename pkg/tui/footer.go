@@ -135,7 +135,7 @@ func (m Model) BuildFooter() string {
 		}
 	} else if m.currentPage == cartPage {
 		// In cart view, show proceed option
-		if len(m.Cart) > 0 {
+		if !m.IsCartEmpty() {
 			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s    %s %s    %s %s    %s %s",
 				keybindStyle.Render("j/k"),
 				descStyle.Render("items"),
