@@ -24,18 +24,6 @@ type ViewInitMsg struct {
 	Err  error
 }
 
-func (m Model) splashAuthCmd() tea.Msg {
-	token, user, err := m.APIClient.GetOrCreateToken(
-		m.Fingerprint,
-		m.SSHPublicKeyStr,
-		m.AuthFingerprintKey,
-	)
-	if err != nil {
-		return SplashAuthMsg{Err: fmt.Errorf("auth failed: %w", err)}
-	}
-	return SplashAuthMsg{Token: token, User: user}
-}
-
 func (m Model) splashViewInitCmd() tea.Msg {
 	data, err := m.APIClient.GetViewInit()
 	if err != nil {

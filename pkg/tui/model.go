@@ -57,10 +57,12 @@ type Model struct {
 	// User authentication
 	User               *models.User
 	Fingerprint        string
-	SSHPublicKeyStr    string
 	AccessToken        string
 	AuthFingerprintKey string // shared secret for /auth/token refresh
 	StripePublicKey    string
+
+	// One-shop auth command - capture pubKeyStr in closure, not stored on Model
+	autchCmd tea.Cmd
 
 	// Shared data
 	Username       string
@@ -339,7 +341,7 @@ func (m Model) fetchProductsCmd() tea.Msg {
 
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
-		m.splashAuthCmd,
+		m.autchCmd,
 		tea.Tick(1500*time.Millisecond, func(t time.Time) tea.Msg {
 			return DelayCompleteMsg{}
 		}),
@@ -833,7 +835,6 @@ func newModelWithRenderer(username string, renderer *lipgloss.Renderer) Model {
 func NewModelWithAuth(renderer *lipgloss.Renderer, fingerprint string, pubKeyStr string, apiURL string, clientSecret string, stripePublicKey string) Model {
 	m := newModelWithRenderer("", renderer)
 	m.Fingerprint = fingerprint
-	m.SSHPublicKeyStr = pubKeyStr
 	m.AuthFingerprintKey = clientSecret
 	m.StripePublicKey = stripePublicKey
 	m.currentPage = splashPage
@@ -841,6 +842,18 @@ func NewModelWithAuth(renderer *lipgloss.Renderer, fingerprint string, pubKeyStr
 		m.APIClient = api.NewClient(apiURL, "")
 	} else {
 		m.APIClient = api.NewClient("http://localhost:8000", "")
+	}
+
+	m.autchCmd = func() tea.Msg {
+		token, user, err := m.APIClient.GetOrCreateToken(
+			fingerprint,
+			pubKeyStr,
+			clientSecret,
+		)
+		if err != nil {
+			return SplashAuthMsg{Err: fmt.Errorf("auth failed: %w", err)}
+		}
+		return SplashAuthMsg{Token: token, User: user}
 	}
 	return m
 }
