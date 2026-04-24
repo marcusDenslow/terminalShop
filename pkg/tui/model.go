@@ -29,7 +29,7 @@ const (
 	large                      // viewportWidth >= 80
 )
 
-// page represetnts the currently active TUI screen
+// page represents the currently active TUI screen
 type page int
 
 const (
@@ -62,7 +62,7 @@ type Model struct {
 	StripePublicKey    string
 
 	// One-shop auth command - capture pubKeyStr in closure, not stored on Model
-	autchCmd tea.Cmd
+	authCmd tea.Cmd
 
 	// Shared data
 	Username       string
@@ -342,7 +342,7 @@ func (m Model) fetchProductsCmd() tea.Msg {
 
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
-		m.autchCmd,
+		m.authCmd,
 		tea.Tick(1500*time.Millisecond, func(t time.Time) tea.Msg {
 			return DelayCompleteMsg{}
 		}),
@@ -845,7 +845,7 @@ func NewModelWithAuth(renderer *lipgloss.Renderer, fingerprint string, pubKeyStr
 		m.APIClient = api.NewClient("http://localhost:8000", "")
 	}
 
-	m.autchCmd = func() tea.Msg {
+	m.authCmd = func() tea.Msg {
 		token, user, err := m.APIClient.GetOrCreateToken(
 			fingerprint,
 			pubKeyStr,

@@ -31,7 +31,7 @@ var (
 )
 
 func storeRedirect(stripeURL string) string {
-	b := make([]byte, 4)
+	b := make([]byte, 16)
 	rand.Read(b)
 	token := hex.EncodeToString(b)
 	payRedirectsMu.Lock()

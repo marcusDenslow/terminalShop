@@ -594,7 +594,7 @@ func (c *Client) CollectCard() (string, error) {
 
 	var collectResp CollectCardResponse
 	if err := json.NewDecoder(resp.Body).Decode(&collectResp); err != nil {
-		return "", fmt.Errorf("failed to devode collect response: %w", err)
+		return "", fmt.Errorf("failed to decode collect response: %w", err)
 	}
 
 	if !collectResp.Success {

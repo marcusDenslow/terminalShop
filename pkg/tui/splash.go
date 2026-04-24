@@ -42,7 +42,7 @@ func (m Model) SplashView() string {
 		cursor = " "
 	}
 
-	logo := accent.Render("terminal coffe") + cursor
+	logo := accent.Render("terminal coffee") + cursor
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Center,

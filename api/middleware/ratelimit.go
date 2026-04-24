@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"strconv"
+
 	"github.com/go-chi/httprate"
 	"terminalShop/pkg/utils"
 )
@@ -29,7 +31,7 @@ func RateLimitByUser(limit int, window time.Duration) func(http.Handler) http.Ha
 				// Fall back to IP if no user context (shouldn't happen on protected routes).
 				return httprate.KeyByIP(r)
 			}
-			return http.CanonicalHeaderKey("user") + ":" + string(rune(userID)), nil
+			return "user:" + strconv.FormatUint(uint64(userID), 10), nil
 		}),
 		httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
 			utils.RespondError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests", nil)

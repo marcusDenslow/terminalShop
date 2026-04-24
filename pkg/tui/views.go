@@ -129,11 +129,11 @@ func (m Model) View() string {
 			child = lipgloss.JoinVertical(lipgloss.Left, header, content, footer)
 		}
 	} else if breadcrumbs != "" {
-		ccontentWithPadding := lipgloss.NewStyle().MarginTop(marginTop).MarginBottom(marginBottom).Height(availableContentHeight).Render(content)
-		child = lipgloss.JoinVertical(lipgloss.Left, header, breadcrumbs, ccontentWithPadding, footer)
+		contentWithPadding := lipgloss.NewStyle().MarginTop(marginTop).MarginBottom(marginBottom).Height(availableContentHeight).Render(content)
+		child = lipgloss.JoinVertical(lipgloss.Left, header, breadcrumbs, contentWithPadding, footer)
 	} else {
-		ccontentWithPadding := lipgloss.NewStyle().MarginTop(marginTop).MarginBottom(marginBottom).Height(availableContentHeight).Render(content)
-		child = lipgloss.JoinVertical(lipgloss.Left, header, ccontentWithPadding, footer)
+		contentWithPadding := lipgloss.NewStyle().MarginTop(marginTop).MarginBottom(marginBottom).Height(availableContentHeight).Render(content)
+		child = lipgloss.JoinVertical(lipgloss.Left, header, contentWithPadding, footer)
 	}
 
 	// Constrain the assembled layout to the container dimensions
