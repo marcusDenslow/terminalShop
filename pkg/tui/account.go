@@ -17,7 +17,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 	// Build the left panel (menu items)
 	leftPanel := ""
 	for i, item := range models.AccountMenuItems {
-		if m.AccountCursor == i {
+		if m.account.cursor == i {
 			style := m.theme.Base().Background(m.theme.Highlight()).Foreground(m.theme.Accent()).Padding(0, 1).Width(leftWidth - 2).Align(lipgloss.Left)
 			leftPanel += style.Render(item) + "\n"
 		} else {
@@ -31,7 +31,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 
 	// Build the detail view (right panel) based on cursor position
 	detailView := ""
-	if m.AccountCursor >= 0 && m.AccountCursor < len(models.AccountMenuItems) {
+	if m.account.cursor >= 0 && m.account.cursor < len(models.AccountMenuItems) {
 		titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
 
 		// On small terminals, use full content width
@@ -42,16 +42,16 @@ func (m Model) BuildAccountView(availableHeight int) string {
 
 		contentStyle := m.theme.TextBody().Width(detailContentWidth)
 
-		selectedItem := models.AccountMenuItems[m.AccountCursor]
+		selectedItem := models.AccountMenuItems[m.account.cursor]
 		switch selectedItem {
 		case "order history":
 			if !m.OrdersLoaded {
 				detailView = titleStyle.Render("Order History") + "\n\n" + contentStyle.Render("Loading orders...")
 			} else if len(m.Orders) == 0 {
 				detailView = titleStyle.Render("Order History") + "\n\n" + contentStyle.Render("No orders yet.")
-			} else if m.OrderViewState == 2 {
+			} else if m.account.orderViewState == 2 {
 				// State 2: full detail for the selected order
-				detailView = m.buildOrderDetailView(m.Orders[m.OrderCursor], detailContentWidth)
+				detailView = m.buildOrderDetailView(m.Orders[m.account.orderCursor], detailContentWidth)
 			} else {
 				// State 0 (preview) or State 1 (browsing with cursor)
 				boxWidth := detailContentWidth - 4
@@ -62,14 +62,14 @@ func (m Model) BuildAccountView(availableHeight int) string {
 
 				lines := titleStyle.Render("Order History") + "\n\n"
 				for i, order := range m.Orders {
-					isSelected := m.OrderViewState == 1 && i == m.OrderCursor
+					isSelected := m.account.orderViewState == 1 && i == m.account.orderCursor
 					lines += m.buildOrderCard(order, boxWidth, isSelected, boxPadding, detailContentWidth)
 					if i < len(m.Orders)-1 {
 						lines += "\n"
 					}
 				}
 
-				if m.OrderViewState == 0 {
+				if m.account.orderViewState == 0 {
 					hintStyle := m.theme.TextDim()
 					lines += "\n" + hintStyle.Render("enter: browse orders")
 				}
@@ -82,12 +82,12 @@ func (m Model) BuildAccountView(availableHeight int) string {
 				lines += contentStyle.Render("No saved addresses")
 			} else {
 				for i, addr := range m.SavedAddresses {
-					isSelected := m.AddressListFocused && i == m.AccountAddressCursor
+					isSelected := m.account.addressListFocused && i == m.account.addressCursor
 					label := addr.Name + "  " + addr.Street + ", " + addr.City
 					if len(label) > detailContentWidth-4 {
 						label = label[:detailContentWidth-4]
 					}
-					if m.AccountAddressDeleting != nil && *m.AccountAddressDeleting == i {
+					if m.account.addressDeleting != nil && *m.account.addressDeleting == i {
 						lines += m.theme.TextError().Bold(true).Render("  deletes? (y/n)") + "\n"
 					} else if isSelected {
 						lines += m.theme.TextAccent().Bold(true).Render("> "+label) + "\n"
@@ -96,7 +96,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 					}
 				}
 			}
-			if m.AddressListFocused {
+			if m.account.addressListFocused {
 				lines += "\n" + m.theme.TextDim().Render("x: delete  esc: back")
 			} else {
 				lines += "\n" + m.theme.TextDim().Render("enter: manage")
@@ -109,10 +109,10 @@ func (m Model) BuildAccountView(availableHeight int) string {
 				lines += contentStyle.Render("No saved cards.")
 			} else {
 				for i, card := range m.SavedCards {
-					isSelected := m.CardListFocused && i == m.AccountCardCursor
+					isSelected := m.account.cardListFocused && i == m.account.cardCursor
 					label := fmt.Sprintf("**** **** **** %s  %s  exp %02d/%02d",
 						card.Last4, card.Brand, card.ExpMonth, card.ExpYear%100)
-					if m.AccountCardDeleting != nil && *m.AccountCardDeleting == i {
+					if m.account.cardDeleting != nil && *m.account.cardDeleting == i {
 						lines += m.theme.TextError().Bold(true).Render("  delete? (y/n)") + "\n"
 					} else if isSelected {
 						lines += m.theme.TextAccent().Bold(true).Render("> "+label) + "\n"
@@ -121,7 +121,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 					}
 				}
 			}
-			if m.CardListFocused {
+			if m.account.cardListFocused {
 				lines += "\n" + m.theme.TextDim().Render("x: delete  esc: back")
 			} else {
 				lines += "\n" + m.theme.TextDim().Render("enter: manage")
@@ -136,7 +136,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 				lines += contentStyle.Render("No saved ssh keys.")
 			} else {
 				for i, key := range m.SSHKeys {
-					isSelected := m.SSHKeyListFocused && i == m.AccountSSHKeyCursor
+					isSelected := m.account.sshKeyListFocused && i == m.account.sshKeyCursor
 					label := key.Fingerprint
 					if key.Comment != "" {
 						label += "  " + key.Comment
@@ -144,7 +144,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 					if len(label) > detailContentWidth-4 {
 						label = label[:detailContentWidth-4]
 					}
-					if m.AccountSSHKeyDeleting != nil && *m.AccountSSHKeyDeleting == i {
+					if m.account.sshKeyDeleting != nil && *m.account.sshKeyDeleting == i {
 						lines += m.theme.TextError().Bold(true).Render("  delete? (y/n)") + "\n"
 					} else if isSelected {
 						lines += m.theme.TextAccent().Bold(true).Render("> "+label) + "\n"
@@ -153,7 +153,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 					}
 				}
 			}
-			if m.SSHKeyListFocused {
+			if m.account.sshKeyListFocused {
 				lines += "\n" + m.theme.TextDim().Render("x: delete  esc: back")
 			} else {
 				lines += "\n" + m.theme.TextDim().Render("enter: manage")
@@ -172,7 +172,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 				}
 			}
 			detailView = titleStyle.Render("FAQ") + "\n\n" + faqContent
-			if !m.FaqFocused {
+			if !m.account.faqFocused {
 				hintStyle := m.theme.TextDim()
 				detailView += "\n\n" + hintStyle.Render("enter: scroll faq")
 			}
@@ -202,7 +202,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 
 	// Apply internal scrolling to just the detail view
 	// Scrolling is needed for: order detail/list and FAQ when focused
-	if m.OrderViewState >= 1 || m.FaqFocused {
+	if m.account.orderViewState >= 1 || m.account.faqFocused {
 		detailLines := strings.Split(detailView, "\n")
 		totalLines := len(detailLines)
 
@@ -217,7 +217,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 		}
 
 		// Clamp scroll offset locally (don't mutate m since value receiver)
-		offset := m.ScrollOffset
+		offset := m.account.scrollOffset
 		maxScroll := totalLines - scrollHeight
 		if maxScroll < 0 {
 			maxScroll = 0
@@ -458,65 +458,65 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	selectedItem := ""
-	if m.AccountCursor < len(models.AccountMenuItems) {
-		selectedItem = models.AccountMenuItems[m.AccountCursor]
+	if m.account.cursor < len(models.AccountMenuItems) {
+		selectedItem = models.AccountMenuItems[m.account.cursor]
 	}
 
 	switch keyMsg.String() {
 	case "up", "k":
-		if m.AddressListFocused && m.AccountAddressDeleting == nil {
-			if m.AccountAddressCursor > 0 {
-				m.AccountAddressCursor--
+		if m.account.addressListFocused && m.account.addressDeleting == nil {
+			if m.account.addressCursor > 0 {
+				m.account.addressCursor--
 			}
-		} else if m.CardListFocused && m.AccountCardDeleting == nil {
-			if m.AccountCardCursor > 0 {
-				m.AccountCardCursor--
+		} else if m.account.cardListFocused && m.account.cardDeleting == nil {
+			if m.account.cardCursor > 0 {
+				m.account.cardCursor--
 			}
-		} else if m.SSHKeyListFocused && m.AccountSSHKeyDeleting == nil {
-			if m.AccountSSHKeyCursor > 0 {
-				m.AccountSSHKeyCursor--
+		} else if m.account.sshKeyListFocused && m.account.sshKeyDeleting == nil {
+			if m.account.sshKeyCursor > 0 {
+				m.account.sshKeyCursor--
 			}
-		} else if m.FaqFocused {
-			m.ScrollOffset -= 3
-			if m.ScrollOffset < 0 {
-				m.ScrollOffset = 0
+		} else if m.account.faqFocused {
+			m.account.scrollOffset -= 3
+			if m.account.scrollOffset < 0 {
+				m.account.scrollOffset = 0
 			}
-		} else if m.OrderViewState == 1 && m.OrderCursor > 0 {
-			m.OrderCursor--
+		} else if m.account.orderViewState == 1 && m.account.orderCursor > 0 {
+			m.account.orderCursor--
 			cardHeight := 5
 			if m.heightContainer >= 25 {
 				cardHeight = 7
 			}
-			targetTop := 3 + m.OrderCursor*cardHeight
-			if targetTop < m.ScrollOffset {
-				m.ScrollOffset = targetTop
+			targetTop := 3 + m.account.orderCursor*cardHeight
+			if targetTop < m.account.scrollOffset {
+				m.account.scrollOffset = targetTop
 			}
-		} else if m.OrderViewState == 0 && m.AccountCursor > 0 {
-			m.AccountCursor--
-			m.ScrollOffset = 0
+		} else if m.account.orderViewState == 0 && m.account.cursor > 0 {
+			m.account.cursor--
+			m.account.scrollOffset = 0
 		}
 
 	case "down", "j":
-		if m.AddressListFocused && m.AccountAddressDeleting == nil {
-			if m.AccountAddressCursor < len(m.SavedAddresses)-1 {
-				m.AccountAddressCursor++
+		if m.account.addressListFocused && m.account.addressDeleting == nil {
+			if m.account.addressCursor < len(m.SavedAddresses)-1 {
+				m.account.addressCursor++
 			}
-		} else if m.CardListFocused && m.AccountCardDeleting == nil {
-			if m.AccountCardCursor < len(m.SavedCards)-1 {
-				m.AccountCardCursor++
+		} else if m.account.cardListFocused && m.account.cardDeleting == nil {
+			if m.account.cardCursor < len(m.SavedCards)-1 {
+				m.account.cardCursor++
 			}
-		} else if m.SSHKeyListFocused && m.AccountSSHKeyDeleting == nil {
-			if m.AccountSSHKeyCursor < len(m.SSHKeys)-1 {
-				m.AccountSSHKeyCursor++
+		} else if m.account.sshKeyListFocused && m.account.sshKeyDeleting == nil {
+			if m.account.sshKeyCursor < len(m.SSHKeys)-1 {
+				m.account.sshKeyCursor++
 			}
-		} else if m.FaqFocused {
-			m.ScrollOffset += 3
+		} else if m.account.faqFocused {
+			m.account.scrollOffset += 3
 			maxScroll := m.computeFaqScrollMax()
-			if m.ScrollOffset > maxScroll {
-				m.ScrollOffset = maxScroll
+			if m.account.scrollOffset > maxScroll {
+				m.account.scrollOffset = maxScroll
 			}
-		} else if m.OrderViewState == 1 && m.OrderCursor < len(m.Orders)-1 {
-			m.OrderCursor++
+		} else if m.account.orderViewState == 1 && m.account.orderCursor < len(m.Orders)-1 {
+			m.account.orderCursor++
 			cardHeight := 5
 			if m.heightContainer >= 25 {
 				cardHeight = 7
@@ -528,133 +528,133 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if viewportHeight < 5 {
 				viewportHeight = 5
 			}
-			targetBottom := 3 + (m.OrderCursor+1)*cardHeight
-			if targetBottom > m.ScrollOffset+viewportHeight {
-				m.ScrollOffset = targetBottom - viewportHeight
+			targetBottom := 3 + (m.account.orderCursor+1)*cardHeight
+			if targetBottom > m.account.scrollOffset+viewportHeight {
+				m.account.scrollOffset = targetBottom - viewportHeight
 			}
-		} else if m.OrderViewState == 0 && !m.AddressListFocused && !m.CardListFocused && !m.SSHKeyListFocused && m.AccountCursor < len(models.AccountMenuItems)-1 {
-			m.AccountCursor++
-			m.ScrollOffset = 0
+		} else if m.account.orderViewState == 0 && !m.account.addressListFocused && !m.account.cardListFocused && !m.account.sshKeyListFocused && m.account.cursor < len(models.AccountMenuItems)-1 {
+			m.account.cursor++
+			m.account.scrollOffset = 0
 		}
 
 	case "pgup", "ctrl+u":
-		if m.FaqFocused || m.OrderViewState >= 2 {
-			m.ScrollOffset -= 3
-			if m.ScrollOffset < 0 {
-				m.ScrollOffset = 0
+		if m.account.faqFocused || m.account.orderViewState >= 2 {
+			m.account.scrollOffset -= 3
+			if m.account.scrollOffset < 0 {
+				m.account.scrollOffset = 0
 			}
 		}
 
 	case "pgdown", "ctrl+d":
-		if m.FaqFocused || m.OrderViewState >= 2 {
-			m.ScrollOffset += 3
+		if m.account.faqFocused || m.account.orderViewState >= 2 {
+			m.account.scrollOffset += 3
 			maxScroll := m.computeFaqScrollMax()
-			if m.FaqFocused && maxScroll >= 0 && m.ScrollOffset > maxScroll {
-				m.ScrollOffset = maxScroll
+			if m.account.faqFocused && maxScroll >= 0 && m.account.scrollOffset > maxScroll {
+				m.account.scrollOffset = maxScroll
 			}
 		}
 
 	case "x", "d":
-		if m.AddressListFocused && m.AccountAddressDeleting == nil && m.AccountAddressCursor < len(m.SavedAddresses) {
-			m.AccountAddressDeleting = &m.AccountAddressCursor
-		} else if m.CardListFocused && m.AccountCardDeleting == nil && m.AccountCardCursor < len(m.SavedCards) {
-			m.AccountCardDeleting = &m.AccountCardCursor
-		} else if m.SSHKeyListFocused && m.AccountSSHKeyDeleting == nil && m.AccountSSHKeyCursor < len(m.SSHKeys) {
-			m.AccountSSHKeyDeleting = &m.AccountSSHKeyCursor
+		if m.account.addressListFocused && m.account.addressDeleting == nil && m.account.addressCursor < len(m.SavedAddresses) {
+			m.account.addressDeleting = &m.account.addressCursor
+		} else if m.account.cardListFocused && m.account.cardDeleting == nil && m.account.cardCursor < len(m.SavedCards) {
+			m.account.cardDeleting = &m.account.cardCursor
+		} else if m.account.sshKeyListFocused && m.account.sshKeyDeleting == nil && m.account.sshKeyCursor < len(m.SSHKeys) {
+			m.account.sshKeyDeleting = &m.account.sshKeyCursor
 		}
 
 	case "y":
-		if m.AccountAddressDeleting != nil {
-			cursor := *m.AccountAddressDeleting
+		if m.account.addressDeleting != nil {
+			cursor := *m.account.addressDeleting
 			addr := m.SavedAddresses[cursor]
-			m.AccountAddressDeleting = nil
+			m.account.addressDeleting = nil
 			m.SavedAddresses = append(m.SavedAddresses[:cursor], m.SavedAddresses[cursor+1:]...)
-			if m.AccountAddressCursor >= len(m.SavedAddresses) && m.AccountAddressCursor > 0 {
-				m.AccountAddressCursor--
+			if m.account.addressCursor >= len(m.SavedAddresses) && m.account.addressCursor > 0 {
+				m.account.addressCursor--
 			}
 			return m, m.deleteAddressCmd(addr.ID)
-		} else if m.AccountCardDeleting != nil {
-			cursor := *m.AccountCardDeleting
+		} else if m.account.cardDeleting != nil {
+			cursor := *m.account.cardDeleting
 			card := m.SavedCards[cursor]
-			m.AccountCardDeleting = nil
+			m.account.cardDeleting = nil
 			m.SavedCards = append(m.SavedCards[:cursor], m.SavedCards[cursor+1:]...)
-			if m.AccountCardCursor >= len(m.SavedCards) && m.AccountCardCursor > 0 {
-				m.AccountCardCursor--
+			if m.account.cardCursor >= len(m.SavedCards) && m.account.cardCursor > 0 {
+				m.account.cardCursor--
 			}
 			return m, m.deleteCardCmd(card.ID)
-		} else if m.AccountSSHKeyDeleting != nil {
-			cursor := *m.AccountSSHKeyDeleting
+		} else if m.account.sshKeyDeleting != nil {
+			cursor := *m.account.sshKeyDeleting
 			key := m.SSHKeys[cursor]
-			m.AccountSSHKeyDeleting = nil
+			m.account.sshKeyDeleting = nil
 			m.SSHKeys = append(m.SSHKeys[:cursor], m.SSHKeys[cursor+1:]...)
-			if m.AccountSSHKeyCursor >= len(m.SSHKeys) && m.AccountSSHKeyCursor > 0 {
-				m.AccountSSHKeyCursor--
+			if m.account.sshKeyCursor >= len(m.SSHKeys) && m.account.sshKeyCursor > 0 {
+				m.account.sshKeyCursor--
 			}
 			return m, m.deleteSSHKeyCmd(key.ID)
 		}
 
 	case "n":
-		m.AccountAddressDeleting = nil
-		m.AccountCardDeleting = nil
-		m.AccountSSHKeyDeleting = nil
+		m.account.addressDeleting = nil
+		m.account.cardDeleting = nil
+		m.account.sshKeyDeleting = nil
 
 	case "p", "enter":
 		switch selectedItem {
 		case "order history":
 			if len(m.Orders) > 0 {
-				if m.OrderViewState == 0 {
-					m.OrderViewState = 1
-					m.OrderCursor = 0
-					m.ScrollOffset = 0
-				} else if m.OrderViewState == 1 {
-					m.OrderViewState = 2
-					m.ScrollOffset = 0
+				if m.account.orderViewState == 0 {
+					m.account.orderViewState = 1
+					m.account.orderCursor = 0
+					m.account.scrollOffset = 0
+				} else if m.account.orderViewState == 1 {
+					m.account.orderViewState = 2
+					m.account.scrollOffset = 0
 				}
 			}
 		case "ssh keys":
-			if !m.SSHKeyListFocused {
-				m.SSHKeyListFocused = true
-				m.AccountSSHKeyCursor = 0
+			if !m.account.sshKeyListFocused {
+				m.account.sshKeyListFocused = true
+				m.account.sshKeyCursor = 0
 			}
 		case "addresses":
-			if !m.AddressListFocused {
-				m.AddressListFocused = true
-				m.AccountAddressCursor = 0
+			if !m.account.addressListFocused {
+				m.account.addressListFocused = true
+				m.account.addressCursor = 0
 			}
 		case "cards":
-			if !m.CardListFocused {
-				m.CardListFocused = true
-				m.AccountCardCursor = 0
+			if !m.account.cardListFocused {
+				m.account.cardListFocused = true
+				m.account.cardCursor = 0
 			}
 		case "faq":
-			if !m.FaqFocused {
-				m.FaqFocused = true
-				m.ScrollOffset = 0
+			if !m.account.faqFocused {
+				m.account.faqFocused = true
+				m.account.scrollOffset = 0
 			}
 		}
 
 	case "esc":
-		if m.AccountAddressDeleting != nil {
-			m.AccountAddressDeleting = nil
-		} else if m.AddressListFocused {
-			m.AddressListFocused = false
-			m.AccountAddressCursor = 0
-		} else if m.AccountCardDeleting != nil {
-			m.AccountCardDeleting = nil
-		} else if m.CardListFocused {
-			m.CardListFocused = false
-			m.AccountCardCursor = 0
-		} else if m.AccountSSHKeyDeleting != nil {
-			m.AccountSSHKeyDeleting = nil
-		} else if m.SSHKeyListFocused {
-			m.SSHKeyListFocused = false
-			m.AccountSSHKeyCursor = 0
-		} else if m.FaqFocused {
-			m.FaqFocused = false
-			m.ScrollOffset = 0
-		} else if m.OrderViewState > 0 {
-			m.OrderViewState--
-			m.ScrollOffset = 0
+		if m.account.addressDeleting != nil {
+			m.account.addressDeleting = nil
+		} else if m.account.addressListFocused {
+			m.account.addressListFocused = false
+			m.account.addressCursor = 0
+		} else if m.account.cardDeleting != nil {
+			m.account.cardDeleting = nil
+		} else if m.account.cardListFocused {
+			m.account.cardListFocused = false
+			m.account.cardCursor = 0
+		} else if m.account.sshKeyDeleting != nil {
+			m.account.sshKeyDeleting = nil
+		} else if m.account.sshKeyListFocused {
+			m.account.sshKeyListFocused = false
+			m.account.sshKeyCursor = 0
+		} else if m.account.faqFocused {
+			m.account.faqFocused = false
+			m.account.scrollOffset = 0
+		} else if m.account.orderViewState > 0 {
+			m.account.orderViewState--
+			m.account.scrollOffset = 0
 		}
 	}
 	return m, nil

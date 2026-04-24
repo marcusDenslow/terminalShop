@@ -26,20 +26,20 @@ func (m Model) RenderConfirmation() string {
 
 	// Shipping summary
 	shippingSection := ""
-	if m.ConfirmShipping != nil {
+	if m.confirm.shipping != nil {
 		shippingSection = sectionStyle.Render(
 			labelStyle.Render("Ship to: ") +
-				valueStyle.Render(m.ConfirmShipping.Name) + "\n" +
+				valueStyle.Render(m.confirm.shipping.Name) + "\n" +
 				labelStyle.Render("         ") +
-				valueStyle.Render(m.ConfirmShipping.Street) + "\n" +
+				valueStyle.Render(m.confirm.shipping.Street) + "\n" +
 				labelStyle.Render("         ") +
-				valueStyle.Render(fmt.Sprintf("%s, %s %s, %s", m.ConfirmShipping.City, m.ConfirmShipping.State, m.ConfirmShipping.Zip, m.ConfirmShipping.Country)),
+				valueStyle.Render(fmt.Sprintf("%s, %s %s, %s", m.confirm.shipping.City, m.confirm.shipping.State, m.confirm.shipping.Zip, m.confirm.shipping.Country)),
 		)
 	}
 
 	// Items summary
 	cartSection := ""
-	for _, item := range m.ConfirmItems {
+	for _, item := range m.confirm.items {
 		line := fmt.Sprintf("  %s x%d  $%.2f", item.Coffee.Name, item.Quantity, float64(item.Coffee.Price*item.Quantity)/100)
 		cartSection += sectionStyle.Render(line) + "\n"
 	}
@@ -47,7 +47,7 @@ func (m Model) RenderConfirmation() string {
 		labelStyle.Render("Shipping: ")+valueStyle.Render("$0.00"),
 	) + "\n"
 	cartSection += sectionStyle.Render(
-		labelStyle.Render("Total:    ") + valueStyle.Render(fmt.Sprintf("$%.2f", float64(m.ConfirmTotal)/100)),
+		labelStyle.Render("Total:    ") + valueStyle.Render(fmt.Sprintf("$%.2f", float64(m.confirm.total)/100)),
 	)
 
 	success := successStyle.Render("Order placed successfully!")
@@ -72,34 +72,34 @@ func (m Model) updateConfirmViewport() Model {
 	if availH < 1 {
 		availH = 1
 	}
-	if !m.confirmVPReady {
-		m.confirmVP = viewport.New(m.widthContent, availH)
-		m.confirmVP.KeyMap = viewport.DefaultKeyMap()
-		m.confirmVPReady = true
+	if !m.confirm.viewportReady {
+		m.confirm.viewport = viewport.New(m.widthContent, availH)
+		m.confirm.viewport.KeyMap = viewport.DefaultKeyMap()
+		m.confirm.viewportReady = true
 	} else {
-		m.confirmVP.Width = m.widthContent
-		m.confirmVP.Height = availH
+		m.confirm.viewport.Width = m.widthContent
+		m.confirm.viewport.Height = availH
 	}
 	return m
 }
 
 func (m Model) ConfirmView() string {
-	if !m.confirmVPReady {
+	if !m.confirm.viewportReady {
 		m = m.updateConfirmViewport()
 	}
-	m.confirmVP.SetContent(m.RenderConfirmation())
+	m.confirm.viewport.SetContent(m.RenderConfirmation())
 	return lipgloss.Place(
 		m.widthContainer,
-		lipgloss.Height(m.confirmVP.View()),
+		lipgloss.Height(m.confirm.viewport.View()),
 		lipgloss.Center, lipgloss.Center,
-		m.confirmVP.View(),
+		m.confirm.viewport.View(),
 	)
 }
 
 func (m Model) ConfirmUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
-	if m.confirmVPReady {
-		m.confirmVP, cmd = m.confirmVP.Update(msg)
+	if m.confirm.viewportReady {
+		m.confirm.viewport, cmd = m.confirm.viewport.Update(msg)
 	}
 
 	keyMsg, ok := msg.(tea.KeyMsg)
@@ -113,9 +113,9 @@ func (m Model) ConfirmUpdate(msg tea.Msg) (Model, tea.Cmd) {
 
 	m = m.SwitchPage(shopPage)
 	m.CheckingOut = false
-	m.ConfirmTotal = 0
-	m.ConfirmItems = nil
-	m.ConfirmShipping = nil
+	m.confirm.total = 0
+	m.confirm.items = nil
+	m.confirm.shipping = nil
 	m = m.resetPageState()
 	return m, func() tea.Msg {
 		if m.APIClient != nil {
@@ -132,7 +132,7 @@ func formatUSD(cents int) string {
 func (m Model) generateReviewContent() string {
 	view := strings.Builder{}
 
-	if m.CardJustAdded {
+	if m.review.cardJustAdded {
 		view.WriteString(m.theme.TextSuccess().Bold(true).Render("card added successfully") + "\n\n")
 	}
 
@@ -167,7 +167,7 @@ func (m Model) ReviewView() string {
 	if m.CheckingOut {
 		return m.theme.TextAccent().Bold(true).Padding(1).Render("  submitting order...")
 	}
-	if m.ReviewSuccess {
+	if m.review.success {
 		content := m.theme.TextSuccess().Bold(true).Padding(1).Render("order placed successfully!")
 		return lipgloss.Place(
 			m.widthContainer,
@@ -192,25 +192,25 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		if msg.Err != nil {
 			m.ErrorMsg = fmt.Sprintf("checkout failed: %v", msg.Err)
 			m = m.SwitchPage(paymentPage)
-			m.PaymentView = 0
-			m.PaymentForm = nil
+			m.payment.view = 0
+			m.payment.form = nil
 			return m, nil
 		}
 		m.Cart = make(map[uint]*models.CartItem)
-		m.CartCursor = 0
+		m.cart.cursor = 0
 		m.ShippingInfo = nil
 		m.OrdersLoaded = false
-		m.ReviewSuccess = true
+		m.review.success = true
 		return m, nil
 
 	case tea.KeyMsg:
 		if m.CheckingOut {
 			return m, nil
 		}
-		if m.ReviewSuccess {
+		if m.review.success {
 			m = m.SwitchPage(shopPage)
-			m.ReviewSuccess = false
-			m.CardJustAdded = false
+			m.review.success = false
+			m.review.cardJustAdded = false
 			m = m.resetPageState()
 			return m, func() tea.Msg {
 				if m.APIClient != nil {

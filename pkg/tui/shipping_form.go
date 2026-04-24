@@ -262,43 +262,43 @@ func (m Model) updateShippingViewport() Model {
 	if availH < 1 {
 		availH = 1
 	}
-	if !m.shippingVPReady {
-		m.shippingVP = viewport.New(m.widthContent, availH)
-		m.shippingVP.KeyMap = viewport.KeyMap{}
-		m.shippingVPReady = true
+	if !m.shipping.viewportReady {
+		m.shipping.viewport = viewport.New(m.widthContent, availH)
+		m.shipping.viewport.KeyMap = viewport.KeyMap{}
+		m.shipping.viewportReady = true
 	} else {
-		m.shippingVP.Width = m.widthContent
-		m.shippingVP.Height = availH
+		m.shipping.viewport.Width = m.widthContent
+		m.shipping.viewport.Height = availH
 	}
 	return m
 }
 
 func (m Model) ShippingPageView() string {
-	if !m.shippingVPReady {
+	if !m.shipping.viewportReady {
 		m = m.updateShippingViewport()
 	}
-	if m.ShippingView == 0 && m.ShippingForm == nil {
+	if m.shipping.view == 0 && m.shipping.form == nil {
 		content := m.RenderAddressList()
-		m.shippingVP.SetContent(content)
+		m.shipping.viewport.SetContent(content)
 		itemHeight := 4
-		targetY := m.AddressCursor * itemHeight
-		if targetY < m.shippingVP.YOffset {
-			m.shippingVP.SetYOffset(targetY)
+		targetY := m.shipping.addressCursor * itemHeight
+		if targetY < m.shipping.viewport.YOffset {
+			m.shipping.viewport.SetYOffset(targetY)
 		}
-		if targetY+itemHeight > m.shippingVP.YOffset+m.shippingVP.Height {
-			m.shippingVP.SetYOffset(targetY - m.shippingVP.Height + itemHeight + 1)
+		if targetY+itemHeight > m.shipping.viewport.YOffset+m.shipping.viewport.Height {
+			m.shipping.viewport.SetYOffset(targetY - m.shipping.viewport.Height + itemHeight + 1)
 		}
-		if m.AddressCursor == len(m.SavedAddresses) {
-			m.shippingVP.GotoBottom()
+		if m.shipping.addressCursor == len(m.SavedAddresses) {
+			m.shipping.viewport.GotoBottom()
 		}
-	} else if m.ShippingForm != nil {
-		m.shippingVP.SetContent(m.RenderShippingForm(m.ShippingForm))
+	} else if m.shipping.form != nil {
+		m.shipping.viewport.SetContent(m.RenderShippingForm(m.shipping.form))
 	}
 	return lipgloss.Place(
 		m.widthContainer,
-		lipgloss.Height(m.shippingVP.View()),
+		lipgloss.Height(m.shipping.viewport.View()),
 		lipgloss.Center, lipgloss.Center,
-		m.shippingVP.View(),
+		m.shipping.viewport.View(),
 	)
 }
 
@@ -314,7 +314,7 @@ func (m Model) RenderAddressList() string {
 	for i, addr := range m.SavedAddresses {
 		cursor := "  "
 		style := inactiveStyle
-		if i == m.AddressCursor {
+		if i == m.shipping.addressCursor {
 			cursor = "> "
 			style = activeStyle
 		}
@@ -334,7 +334,7 @@ func (m Model) RenderAddressList() string {
 
 	addCursor := "  "
 	addStyle := inactiveStyle
-	if m.AddressCursor == len(m.SavedAddresses) {
+	if m.shipping.addressCursor == len(m.SavedAddresses) {
 		addCursor = "> "
 		addStyle = activeStyle
 	}
@@ -360,27 +360,27 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case AddressesMsg:
 		if msg.Err != nil || len(msg.Addresses) == 0 {
 			m.SavedAddresses = nil
-			m.ShippingView = 1
-			m.ShippingForm = m.InitShippingForm()
-			return m, m.ShippingForm.form.Init()
+			m.shipping.view = 1
+			m.shipping.form = m.InitShippingForm()
+			return m, m.shipping.form.form.Init()
 		}
 		m.SavedAddresses = msg.Addresses
-		m.ShippingView = 0
-		m.AddressCursor = 0
-		m.ShippingForm = nil
+		m.shipping.view = 0
+		m.shipping.addressCursor = 0
+		m.shipping.form = nil
 		return m, nil
 
 	case AddressSavedMsg:
 		if msg.Err != nil {
-			if m.ShippingForm != nil {
-				m.ShippingForm.submitting = false
-				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
+			if m.shipping.form != nil {
+				m.shipping.form.submitting = false
+				m.shipping.form.form = m.buildShippingForm(m.shipping.form)
 			}
 			m.ErrorMsg = "Invalid address. Currently only US and Norwegian addresses are supported."
-			return m, m.ShippingForm.form.Init()
+			return m, m.shipping.form.form.Init()
 		}
 		m.ShippingInfo = &msg.Address
-		m.ShippingForm = nil
+		m.shipping.form = nil
 		m = m.SwitchPage(paymentPage)
 		m.SelectedCard = nil
 		return m, m.fetchCardsCmd()
@@ -391,7 +391,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	// Address list navigation
-	if m.ShippingView == 0 && m.ShippingForm == nil {
+	if m.shipping.view == 0 && m.shipping.form == nil {
 		keyMsg, ok := msg.(tea.KeyMsg)
 		if !ok {
 			return m, nil
@@ -402,35 +402,35 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m = m.SwitchPage(cartPage)
 			return m, nil
 		case "up", "k":
-			if m.AddressCursor > 0 {
-				m.AddressCursor--
+			if m.shipping.addressCursor > 0 {
+				m.shipping.addressCursor--
 			}
 		case "down", "j":
-			if m.AddressCursor < len(m.SavedAddresses) {
-				m.AddressCursor++
+			if m.shipping.addressCursor < len(m.SavedAddresses) {
+				m.shipping.addressCursor++
 			}
 		case "enter":
-			if m.AddressCursor < len(m.SavedAddresses) {
-				selected := m.SavedAddresses[m.AddressCursor]
+			if m.shipping.addressCursor < len(m.SavedAddresses) {
+				selected := m.SavedAddresses[m.shipping.addressCursor]
 				m.ShippingInfo = &selected
 				m = m.SwitchPage(paymentPage)
 				m.SelectedCard = nil
 				return m, m.fetchCardsCmd()
 			}
-			m.ShippingView = 1
-			m.ShippingForm = m.InitShippingForm()
-			return m, m.ShippingForm.form.Init()
+			m.shipping.view = 1
+			m.shipping.form = m.InitShippingForm()
+			return m, m.shipping.form.form.Init()
 		case "d", "x":
-			if m.AddressCursor < len(m.SavedAddresses) {
-				addr := m.SavedAddresses[m.AddressCursor]
-				m.SavedAddresses = append(m.SavedAddresses[:m.AddressCursor], m.SavedAddresses[m.AddressCursor+1:]...)
-				if m.AddressCursor >= len(m.SavedAddresses) && m.AddressCursor > 0 {
-					m.AddressCursor--
+			if m.shipping.addressCursor < len(m.SavedAddresses) {
+				addr := m.SavedAddresses[m.shipping.addressCursor]
+				m.SavedAddresses = append(m.SavedAddresses[:m.shipping.addressCursor], m.SavedAddresses[m.shipping.addressCursor+1:]...)
+				if m.shipping.addressCursor >= len(m.SavedAddresses) && m.shipping.addressCursor > 0 {
+					m.shipping.addressCursor--
 				}
 				if len(m.SavedAddresses) == 0 {
-					m.ShippingView = 1
-					m.ShippingForm = m.InitShippingForm()
-					return m, tea.Batch(m.ShippingForm.form.Init(), m.deleteAddressCmd(addr.ID))
+					m.shipping.view = 1
+					m.shipping.form = m.InitShippingForm()
+					return m, tea.Batch(m.shipping.form.form.Init(), m.deleteAddressCmd(addr.ID))
 				}
 				return m, m.deleteAddressCmd(addr.ID)
 			}
@@ -439,23 +439,23 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	// Form navigation
-	if m.ShippingForm != nil {
+	if m.shipping.form != nil {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if keyMsg.String() == "esc" {
 				m.ErrorMsg = ""
 				if len(m.SavedAddresses) > 0 {
-					m.ShippingView = 0
-					m.ShippingForm = nil
+					m.shipping.view = 0
+					m.shipping.form = nil
 					return m, nil
 				}
-				m.ShippingForm = nil
+				m.shipping.form = nil
 				m = m.SwitchPage(cartPage)
 				return m, nil
 			}
 			// Clear error only when user starts typing, not on internal huh messages
 			m.ErrorMsg = ""
 		}
-		return m, m.UpdateShippingForm(msg, m.ShippingForm)
+		return m, m.UpdateShippingForm(msg, m.shipping.form)
 	}
 	return m, nil
 }

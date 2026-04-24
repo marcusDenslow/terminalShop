@@ -62,26 +62,21 @@ type Model struct {
 	AuthFingerprintKey string // shared secret for /auth/token refresh
 	StripePublicKey    string
 
-	// Shop state
-	Username         string
-	Coffees          []models.Coffee
-	shop             shopState
-	cartVP           viewport.Model
-	cartVPReady      bool
-	shippingVP       viewport.Model
-	shippingVPReady  bool
-	paymentVP        viewport.Model
-	paymentVPReady   bool
-	confirmVP        viewport.Model
-	confirmVPReady   bool
-	Cart             map[uint]*models.CartItem
-	CartCursor       int // cursor position in cart view
-	AccountCursor    int
-	currentPage      page  // currently active screen
-	switched         bool  // true when the page just changed (for state resets)
-	ScrollOffset     int   // scroll position for content
-	CheckingOut      bool  // true while saveCardAndConvert is running
-	lastCartUpdateID int64 // debounce ID for optimistic cart sync
+	// Shared data
+	Username       string
+	Coffees        []models.Coffee
+	Cart           map[uint]*models.CartItem
+	SavedAddresses []models.Address
+	SavedCards     []models.Card
+	Orders         []models.Order
+	OrdersLoaded   bool
+	SSHKeys        []models.SSHKey
+	SSHKeysLoaded  bool
+	FAQs           []FAQ
+
+	// Page navigation
+	currentPage page // currently active screen
+	switched    bool // true when the page just changed (for state resets)
 
 	// Menu modal state
 	ShowingMenu  bool // true when full-screen menu is showing
@@ -109,57 +104,21 @@ type Model struct {
 	renderer *lipgloss.Renderer
 	theme    theme.Theme
 
-	// Checkout state
-	ShippingForm     *ShippingFormState // Shipping form state (nil when not in shipping step)
-	PaymentForm      *PaymentFormState  // Payment form state (nil when not in payment step)
-	ShippingInfo     *models.Address    // Selected shipping address for current order
-	SavedAddresses   []models.Address   // Saved addresses from database
-	ShippingView     int
-	AddressCursor    int
-	SavedCards       []models.Card // Saved cards from database
-	SelectedCard     *models.Card  // Card selected from saved list (nil = new card)
-	CardCursor       int           // cursor position in the card list
-	PaymentView      int           // 0=card list, 1=new card form, 2 = browser payment
-	CollectURL       *string       // URL for browser-based card entry
-	CollectCardCount int           // card count when browser polling started
+	// Checkout flow state (spans multiple pages)
+	CheckingOut      bool
+	ShippingInfo     *models.Address
+	SelectedCard     *models.Card
+	lastCartUpdateID int64
 
-	// Order history
-	Orders         []models.Order
-	OrdersLoaded   bool
-	OrderCursor    int // which order is selected in the list
-	OrderViewState int // 0=preview, 1=browsing list, 2=viewing detail
-
-	// Static content
-	FAQs       []FAQ // loaded from embedded faq.json
-	FaqFocused bool  // true when FAQ detail is focused
-
-	// Account manegement state
-	AddressListFocused     bool // true when browsing addresses in account
-	CardListFocused        bool // true when browsing cards in account
-	AccountAddressCursor   int  // cursor within address list in AccountAddressCursor
-	AccountCardCursor      int  // cursor within card list in account
-	AccountAddressDeleting *int // index of address pending deletion
-	AccountCardDeleting    *int // index of card pending deletion
-
-	// Account SSH key state
-	SSHKeys               []models.SSHKey // list of keys
-	SSHKeysLoaded         bool            // true when ssh keys are loaded
-	SSHKeyListFocused     bool            // true when browsing ssh keys in account
-	AccountSSHKeyCursor   int             // cursor within ssh key list in account
-	AccountSSHKeyDeleting *int            // index of ssh key pending deletion
-
-	// Splash screen
-	splashDataReady bool // true when products have loaded
-	splashDelayDone bool // true when minimum display time has elapsed
-	splashCursor    bool // toggles for blinking cursor animation
-
-	// Review / confirmation state
-	CardJustAdded   bool              // true when arriving at review page after adding a new card
-	ReviewSuccess   bool              // true after a successful order, shows success msg on review page
-	ConfirmTotal    int               // server-confirmed order total in cents
-	ConfirmItems    []models.CartItem // cart items at time of purchase
-	ConfirmShipping *models.Address   // shipping address at time of purchase
-
+	// Per-page State
+	splash   splashState
+	shop     shopState
+	cart     cartState
+	shipping shippingState
+	payment  paymentState
+	account  accountState
+	review   reviewState
+	confirm  confirmState
 }
 
 type shopState struct {
@@ -167,6 +126,66 @@ type shopState struct {
 	menuViewport   viewport.Model
 	detailViewport viewport.Model
 	viewportsReady bool
+}
+
+type splashState struct {
+	dataReady bool
+	delayDone bool
+	cursor    bool
+}
+
+type cartState struct {
+	cursor        int
+	viewport      viewport.Model
+	viewportReady bool
+}
+
+type shippingState struct {
+	form          *ShippingFormState
+	view          int
+	addressCursor int
+	viewport      viewport.Model
+	viewportReady bool
+}
+
+type paymentState struct {
+	form             *PaymentFormState
+	view             int
+	cardCursor       int
+	collectURL       *string
+	collectCardCount int
+	viewport         viewport.Model
+	viewportReady    bool
+}
+
+type accountState struct {
+	cursor             int
+	scrollOffset       int
+	orderViewState     int
+	orderCursor        int
+	faqFocused         bool
+	addressListFocused bool
+	cardListFocused    bool
+	addressCursor      int
+	cardCursor         int
+	addressDeleting    *int
+	cardDeleting       *int
+	sshKeyListFocused  bool
+	sshKeyCursor       int
+	sshKeyDeleting     *int
+}
+
+type reviewState struct {
+	cardJustAdded bool
+	success       bool
+}
+
+type confirmState struct {
+	total         int
+	items         []models.CartItem
+	shipping      *models.Address
+	viewport      viewport.Model
+	viewportReady bool
 }
 
 var modifiedKeyMap = viewport.KeyMap{
@@ -284,17 +303,10 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) resetPageState() Model {
-	m.ShippingForm = nil
-	m.PaymentForm = nil
-	m.ScrollOffset = 0
-	m.OrderViewState = 0
-	m.FaqFocused = false
-	m.AddressListFocused = false
-	m.CardListFocused = false
-	m.AccountAddressDeleting = nil
-	m.AccountCardDeleting = nil
-	m.SSHKeyListFocused = false
-	m.AccountSSHKeyDeleting = nil
+	m.shipping = shippingState{}
+	m.payment = paymentState{}
+	m.account = accountState{}
+	m.review = reviewState{}
 	return m
 }
 
@@ -677,8 +689,8 @@ func (m *Model) loadCartFromAPI(cartData *api.CartData) {
 		}
 	}
 
-	if m.CartCursor >= len(m.Cart) {
-		m.CartCursor = 0
+	if m.cart.cursor >= len(m.Cart) {
+		m.cart.cursor = 0
 	}
 }
 
@@ -691,7 +703,7 @@ func (m Model) GetCartItemsSlice() []*models.CartItem {
 	}
 
 	// Sort keys to ensure consistent order
-	sort.Slice(keys, func(i, j int) bool { return  keys[i] < keys[j] })
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 
 	// Build items slice in sorted order
 	items := make([]*models.CartItem, 0, len(m.Cart))
@@ -769,12 +781,8 @@ func newModelWithRenderer(username string, renderer *lipgloss.Renderer) Model {
 				Description: "Espresso 'marked' with a dollop of foamed milk. Small but mighty, like a tiny caffeinated warrior.",
 			},
 		},
-		Cart:           make(map[uint]*models.CartItem),
-		CartCursor:     0,
-		AccountCursor:  0,
-		OrderCursor:    0,
-		OrderViewState: 0,
-		Loading:        true,
+		Cart:    make(map[uint]*models.CartItem),
+		Loading: true,
 		APIClient:      api.NewClient("http://localhost:8080", ""),
 		FAQs:           LoadFaqs(),
 	}

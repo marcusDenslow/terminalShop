@@ -20,7 +20,7 @@ func (m Model) BuildFooter() string {
 	}
 
 	var footerText string
-	if m.FaqFocused {
+	if m.account.faqFocused {
 		footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s    %s %s",
 			keybindStyle.Render("j/k"),
 			descStyle.Render("scroll"),
@@ -34,7 +34,7 @@ func (m Model) BuildFooter() string {
 			descStyle.Render("quit"),
 		)
 	} else if m.currentPage == accountPage {
-		switch m.OrderViewState {
+		switch m.account.orderViewState {
 		case 2:
 			// Viewing single order detail
 			footerText = fmt.Sprintf("%s %s    %s %s    %s %s",
@@ -83,7 +83,7 @@ func (m Model) BuildFooter() string {
 			descStyle.Render("quit"),
 		)
 	} else if m.currentPage == shippingPage {
-		if m.ShippingView == 0 && m.ShippingForm == nil {
+		if m.shipping.view == 0 && m.shipping.form == nil {
 			// Address list
 			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s",
 				keybindStyle.Render("j/k"),
@@ -107,7 +107,7 @@ func (m Model) BuildFooter() string {
 			)
 		}
 	} else if m.currentPage == paymentPage {
-		if m.PaymentView == 0 && m.PaymentForm == nil {
+		if m.payment.view == 0 && m.payment.form == nil {
 			// Card list
 			footerText = fmt.Sprintf("%s %s    %s %s    %s %s    %s %s",
 				keybindStyle.Render("j/k"),

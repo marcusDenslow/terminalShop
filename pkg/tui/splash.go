@@ -48,7 +48,7 @@ func (m Model) SplashView() string {
 	accent := m.theme.TextBody().Bold(true)
 
 	var cursor string
-	if m.splashCursor {
+	if m.splash.cursor {
 		cursor = lipgloss.NewStyle().Background(m.theme.Highlight()).Render(" ")
 	} else {
 		cursor = " "

@@ -16,13 +16,13 @@ func (m Model) updateCartViewport() Model {
 	if availH < 1 {
 		availH = 1
 	}
-	if !m.cartVPReady {
-		m.cartVP = viewport.New(m.widthContent, availH)
-		m.cartVP.KeyMap = viewport.KeyMap{}
-		m.cartVPReady = true
+	if !m.cart.viewportReady {
+		m.cart.viewport = viewport.New(m.widthContent, availH)
+		m.cart.viewport.KeyMap = viewport.KeyMap{}
+		m.cart.viewportReady = true
 	} else {
-		m.cartVP.Width = m.widthContent
-		m.cartVP.Height = availH
+		m.cart.viewport.Width = m.widthContent
+		m.cart.viewport.Height = availH
 	}
 	return m
 }
@@ -87,7 +87,7 @@ func (m Model) generateCartContent() string {
 		boxContent := contentLine1 + "\n" + contentLine2
 
 		var itemBox lipgloss.Style
-		if idx == m.CartCursor {
+		if idx == m.cart.cursor {
 			itemBox = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), true).
 				BorderForeground(m.theme.Accent()).
@@ -118,26 +118,26 @@ func (m Model) generateCartContent() string {
 }
 
 func (m Model) CartView() string {
-	if !m.cartVPReady {
+	if !m.cart.viewportReady {
 		m = m.updateCartViewport()
 	}
 	content := m.generateCartContent()
-	m.cartVP.SetContent(content)
+	m.cart.viewport.SetContent(content)
 	if len(m.Cart) > 0 {
 		itemHeight := 5
-		targetY := m.CartCursor * itemHeight
-		if targetY < m.cartVP.YOffset {
-			m.cartVP.SetYOffset(targetY)
+		targetY := m.cart.cursor * itemHeight
+		if targetY < m.cart.viewport.YOffset {
+			m.cart.viewport.SetYOffset(targetY)
 		}
-		if targetY+itemHeight > m.cartVP.YOffset+m.cartVP.Height {
-			m.cartVP.SetYOffset(targetY - m.cartVP.Height + itemHeight)
+		if targetY+itemHeight > m.cart.viewport.YOffset+m.cart.viewport.Height {
+			m.cart.viewport.SetYOffset(targetY - m.cart.viewport.Height + itemHeight)
 		}
 	}
 	return lipgloss.Place(
 		m.widthContainer,
-		lipgloss.Height(m.cartVP.View()),
+		lipgloss.Height(m.cart.viewport.View()),
 		lipgloss.Center, lipgloss.Center,
-		m.cartVP.View(),
+		m.cart.viewport.View(),
 	)
 }
 
@@ -148,31 +148,31 @@ func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	}
 	switch keyMsg.String() {
 	case "up", "k":
-		if m.CartCursor > 0 {
-			m.CartCursor--
+		if m.cart.cursor > 0 {
+			m.cart.cursor--
 		}
 	case "down", "j":
-		if m.CartCursor < len(m.Cart)-1 {
-			m.CartCursor++
+		if m.cart.cursor < len(m.Cart)-1 {
+			m.cart.cursor++
 		}
 	case "+", "=":
 		cartItems := m.GetCartItemsSlice()
-		if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
-			cartItems[m.CartCursor].Quantity++
-			return m, m.syncCartItemCmd(cartItems[m.CartCursor].CoffeeID, cartItems[m.CartCursor].Quantity)
+		if m.cart.cursor >= 0 && m.cart.cursor < len(cartItems) {
+			cartItems[m.cart.cursor].Quantity++
+			return m, m.syncCartItemCmd(cartItems[m.cart.cursor].CoffeeID, cartItems[m.cart.cursor].Quantity)
 		}
 	case "-", "_":
 		cartItems := m.GetCartItemsSlice()
-		if m.CartCursor >= 0 && m.CartCursor < len(cartItems) {
-			coffeeID := cartItems[m.CartCursor].CoffeeID
-			cartItems[m.CartCursor].Quantity--
-			newQty := cartItems[m.CartCursor].Quantity
-			if cartItems[m.CartCursor].Quantity <= 0 {
+		if m.cart.cursor >= 0 && m.cart.cursor < len(cartItems) {
+			coffeeID := cartItems[m.cart.cursor].CoffeeID
+			cartItems[m.cart.cursor].Quantity--
+			newQty := cartItems[m.cart.cursor].Quantity
+			if cartItems[m.cart.cursor].Quantity <= 0 {
 				delete(m.Cart, coffeeID)
 				if len(m.Cart) == 0 {
-					m.CartCursor = 0
-				} else if m.CartCursor >= len(m.Cart) {
-					m.CartCursor = len(m.Cart) - 1
+					m.cart.cursor = 0
+				} else if m.cart.cursor >= len(m.Cart) {
+					m.cart.cursor = len(m.Cart) - 1
 				}
 				newQty = 0
 			}

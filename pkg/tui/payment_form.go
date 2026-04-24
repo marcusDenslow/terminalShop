@@ -272,61 +272,61 @@ func (m Model) updatePaymentViewport() Model {
 	if availH < 1 {
 		availH = 1
 	}
-	if !m.paymentVPReady {
-		m.paymentVP = viewport.New(m.widthContent, availH)
-		m.paymentVP.KeyMap = viewport.KeyMap{}
-		m.paymentVPReady = true
+	if !m.payment.viewportReady {
+		m.payment.viewport = viewport.New(m.widthContent, availH)
+		m.payment.viewport.KeyMap = viewport.KeyMap{}
+		m.payment.viewportReady = true
 	} else {
-		m.paymentVP.Width = m.widthContent
-		m.paymentVP.Height = availH
+		m.payment.viewport.Width = m.widthContent
+		m.payment.viewport.Height = availH
 	}
 	return m
 }
 
 func (m Model) PaymentPageView() string {
-	if !m.paymentVPReady {
+	if !m.payment.viewportReady {
 		m = m.updatePaymentViewport()
 	}
 	var content string
 	if m.CheckingOut {
 		content = "  submitting order..."
-	} else if m.PaymentView == 2 {
+	} else if m.payment.view == 2 {
 		// Bypass viewport — it strips the raw ANSI codes qrfefe emits.
 		return lipgloss.Place(
 			m.widthContainer,
-			m.paymentVP.Height,
+			m.payment.viewport.Height,
 			lipgloss.Center, lipgloss.Center,
 			m.renderPaymentHttpsView(),
 		)
-	} else if m.PaymentView == 0 && m.PaymentForm == nil {
+	} else if m.payment.view == 0 && m.payment.form == nil {
 		content = m.RenderCardList()
-		m.paymentVP.SetContent(content)
+		m.payment.viewport.SetContent(content)
 		itemHeight := 3
-		targetY := m.CardCursor * itemHeight
-		if targetY < m.paymentVP.YOffset {
-			m.paymentVP.SetYOffset(targetY)
+		targetY := m.payment.cardCursor * itemHeight
+		if targetY < m.payment.viewport.YOffset {
+			m.payment.viewport.SetYOffset(targetY)
 		}
-		if targetY+itemHeight > m.paymentVP.YOffset+m.paymentVP.Height {
-			m.paymentVP.SetYOffset(targetY - m.paymentVP.Height + itemHeight + 1)
+		if targetY+itemHeight > m.payment.viewport.YOffset+m.payment.viewport.Height {
+			m.payment.viewport.SetYOffset(targetY - m.payment.viewport.Height + itemHeight + 1)
 		}
-		if m.CardCursor == len(m.SavedCards) {
-			m.paymentVP.GotoBottom()
+		if m.payment.cardCursor == len(m.SavedCards) {
+			m.payment.viewport.GotoBottom()
 		}
 		return lipgloss.Place(
 			m.widthContainer,
-			lipgloss.Height(m.paymentVP.View()),
+			lipgloss.Height(m.payment.viewport.View()),
 			lipgloss.Center, lipgloss.Center,
-			m.paymentVP.View(),
+			m.payment.viewport.View(),
 		)
-	} else if m.PaymentForm != nil {
-		content = m.RenderPaymentForm(m.PaymentForm)
+	} else if m.payment.form != nil {
+		content = m.RenderPaymentForm(m.payment.form)
 	}
-	m.paymentVP.SetContent(content)
+	m.payment.viewport.SetContent(content)
 	return lipgloss.Place(
 		m.widthContainer,
-		lipgloss.Height(m.paymentVP.View()),
+		lipgloss.Height(m.payment.viewport.View()),
 		lipgloss.Center, lipgloss.Center,
-		m.paymentVP.View(),
+		m.payment.viewport.View(),
 	)
 }
 
@@ -342,7 +342,7 @@ func (m Model) RenderCardList() string {
 	for i, card := range m.SavedCards {
 		cursor := "  "
 		style := inactiveStyle
-		if i == m.CardCursor {
+		if i == m.payment.cardCursor {
 			cursor = "> "
 			style = activeStyle
 		}
@@ -358,7 +358,7 @@ func (m Model) RenderCardList() string {
 
 	sshCursor := "  "
 	sshStyle := inactiveStyle
-	if m.CardCursor == len(m.SavedCards) {
+	if m.payment.cardCursor == len(m.SavedCards) {
 		sshCursor = "> "
 		sshStyle = activeStyle
 	}
@@ -366,7 +366,7 @@ func (m Model) RenderCardList() string {
 
 	httpsCursor := "  "
 	httpsStyle := inactiveStyle
-	if m.CardCursor == len(m.SavedCards)+1 {
+	if m.payment.cardCursor == len(m.SavedCards)+1 {
 		httpsCursor = "> "
 		httpsStyle = activeStyle
 	}
@@ -382,22 +382,22 @@ func (m Model) renderPaymentHttpsView() string {
 	baseStyle := m.theme.TextLabel()
 	accentStyle := m.theme.TextHighlight()
 
-	if m.CollectURL == nil {
+	if m.payment.collectURL == nil {
 		return baseStyle.Render("  generating payment link...")
 	}
 
-	qr, qrSize, err := qrfefe.Generate(0, *m.CollectURL)
+	qr, qrSize, err := qrfefe.Generate(0, *m.payment.collectURL)
 	if err != nil || qrSize > m.widthContent {
 		// QR too wide for the terminal — just show the URL.
 		return baseStyle.Render("open in browser to add payment information:") + "\n\n" +
-			accentStyle.Render(*m.CollectURL) + "\n"
+			accentStyle.Render(*m.payment.collectURL) + "\n"
 	}
 
 	// Concatenate manually — lipgloss layout functions (JoinVertical with Center)
 	// measure string widths and add padding that corrupts qrfefe's raw ANSI codes.
 	return qr +
 		baseStyle.Render("scan or visit to add payment information") + "\n" +
-		accentStyle.Render(*m.CollectURL) + "\n"
+		accentStyle.Render(*m.payment.collectURL) + "\n"
 }
 
 // PaymentUpdate handles all messages while on the payment page.
@@ -410,14 +410,14 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		} else {
 			m.SavedCards = msg.Cards
 		}
-		m.PaymentView = 0
-		m.CardCursor = 0
-		m.PaymentForm = nil
+		m.payment.view = 0
+		m.payment.cardCursor = 0
+		m.payment.form = nil
 		return m, nil
 
 	case PaymentFormCompleteMsg:
-		if m.PaymentForm != nil && !m.PaymentForm.submitting {
-			m.PaymentForm.submitting = true
+		if m.payment.form != nil && !m.payment.form.submitting {
+			m.payment.form.submitting = true
 			return m, m.saveCardOnlyCmd(msg)
 		}
 		return m, nil
@@ -427,50 +427,50 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case CardSavedForReviewMsg:
-		if m.PaymentForm != nil {
-			m.PaymentForm.submitting = false
+		if m.payment.form != nil {
+			m.payment.form.submitting = false
 		}
 		if msg.Err != nil {
 			m.ErrorMsg = fmt.Sprintf("failed to save card: %v", msg.Err)
-			m.PaymentView = 1
-			m.PaymentForm = m.InitPaymentForm()
-			return m, m.PaymentForm.form.Init()
+			m.payment.view = 1
+			m.payment.form = m.InitPaymentForm()
+			return m, m.payment.form.form.Init()
 		}
 		m.SavedCards = append(m.SavedCards, msg.Card)
 		selected := msg.Card
 		m.SelectedCard = &selected
-		m.PaymentForm = nil
-		m.CardJustAdded = true
+		m.payment.form = nil
+		m.review.cardJustAdded = true
 		m = m.SwitchPage(reviewPage)
 		return m, nil
 
 	case PollPaymentInitMsg:
 		url := msg.URL
-		m.CollectURL = &url
-		return m, m.pollCardsCmd(m.CollectCardCount)
+		m.payment.collectURL = &url
+		return m, m.pollCardsCmd(m.payment.collectCardCount)
 
 	case PollPaymentStatusMsg:
-		if m.PaymentView != 2 {
+		if m.payment.view != 2 {
 			return m, nil // user navigated away, stop polling
 		}
 		return m, m.pollCardsCmd(msg.CardCount)
 
 	case PollPaymentCompleteMsg:
-		if m.PaymentView != 2 {
+		if m.payment.view != 2 {
 			return m, nil
 		}
 		m.SavedCards = msg.Cards
-		m.PaymentView = 0
-		m.CollectURL = nil
+		m.payment.view = 0
+		m.payment.collectURL = nil
 		selected := m.SavedCards[len(m.SavedCards)-1]
 		m.SelectedCard = &selected
-		m.CardJustAdded = true
+		m.review.cardJustAdded = true
 		m = m.SwitchPage(reviewPage)
 		return m, nil
 	}
 
 	// Card list navigation
-	if m.PaymentView == 0 && m.PaymentForm == nil {
+	if m.payment.view == 0 && m.payment.form == nil {
 		keyMsg, ok := msg.(tea.KeyMsg)
 		if !ok || m.CheckingOut {
 			return m, nil
@@ -481,43 +481,43 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m = m.SwitchPage(shippingPage)
 			return m, m.fetchAddressesCmd()
 		case "up", "k":
-			if m.CardCursor > 0 {
-				m.CardCursor--
+			if m.payment.cardCursor > 0 {
+				m.payment.cardCursor--
 			}
 		case "down", "j":
-			if m.CardCursor < len(m.SavedCards)+1 {
-				m.CardCursor++
+			if m.payment.cardCursor < len(m.SavedCards)+1 {
+				m.payment.cardCursor++
 			}
 
 		case "enter":
-			if m.CardCursor < len(m.SavedCards) {
-				selected := m.SavedCards[m.CardCursor]
+			if m.payment.cardCursor < len(m.SavedCards) {
+				selected := m.SavedCards[m.payment.cardCursor]
 				m.SelectedCard = &selected
 				m = m.SwitchPage(reviewPage)
 				return m, nil
 			}
-			if m.CardCursor == len(m.SavedCards) {
-				m.PaymentView = 1
-				m.PaymentForm = m.InitPaymentForm()
-				return m, m.PaymentForm.form.Init()
+			if m.payment.cardCursor == len(m.SavedCards) {
+				m.payment.view = 1
+				m.payment.form = m.InitPaymentForm()
+				return m, m.payment.form.form.Init()
 			}
 			// Browser payment
-			m.PaymentView = 2
-			m.CollectURL = nil
-			m.CollectCardCount = len(m.SavedCards)
+			m.payment.view = 2
+			m.payment.collectURL = nil
+			m.payment.collectCardCount = len(m.SavedCards)
 			return m, m.collectCardCmd()
 
 		case "d", "x":
-			if m.CardCursor < len(m.SavedCards) {
-				card := m.SavedCards[m.CardCursor]
-				m.SavedCards = append(m.SavedCards[:m.CardCursor], m.SavedCards[m.CardCursor+1:]...)
-				if m.CardCursor >= len(m.SavedCards) && m.CardCursor > 0 {
-					m.CardCursor--
+			if m.payment.cardCursor < len(m.SavedCards) {
+				card := m.SavedCards[m.payment.cardCursor]
+				m.SavedCards = append(m.SavedCards[:m.payment.cardCursor], m.SavedCards[m.payment.cardCursor+1:]...)
+				if m.payment.cardCursor >= len(m.SavedCards) && m.payment.cardCursor > 0 {
+					m.payment.cardCursor--
 				}
 				if len(m.SavedCards) == 0 {
-					m.PaymentView = 1
-					m.PaymentForm = m.InitPaymentForm()
-					return m, tea.Batch(m.PaymentForm.form.Init(), m.deleteCardCmd(card.ID))
+					m.payment.view = 1
+					m.payment.form = m.InitPaymentForm()
+					return m, tea.Batch(m.payment.form.form.Init(), m.deleteCardCmd(card.ID))
 				}
 				return m, m.deleteCardCmd(card.ID)
 			}
@@ -526,33 +526,33 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	// HTTPS/browser view avigation
-	if m.PaymentView == 2 {
+	if m.payment.view == 2 {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "esc" {
-			m.PaymentView = 0
-			m.CollectURL = nil
+			m.payment.view = 0
+			m.payment.collectURL = nil
 			return m, nil
 		}
 		return m, nil
 	}
 
 	// Payment form navigation
-	if m.PaymentForm != nil {
+	if m.payment.form != nil {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if keyMsg.String() == "esc" {
 				m.ErrorMsg = ""
 				if len(m.SavedCards) > 0 {
-					m.PaymentView = 0
-					m.PaymentForm = nil
+					m.payment.view = 0
+					m.payment.form = nil
 					return m, nil
 				}
-				m.PaymentForm = nil
+				m.payment.form = nil
 				m = m.SwitchPage(shippingPage)
 				return m, m.fetchAddressesCmd()
 			}
 			// Clear error only when user starts typing, not on internal huh messages
 			m.ErrorMsg = ""
 		}
-		return m, m.UpdatePaymentForm(msg, m.PaymentForm)
+		return m, m.UpdatePaymentForm(msg, m.payment.form)
 	}
 	return m, nil
 }

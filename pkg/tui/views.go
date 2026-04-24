@@ -89,23 +89,23 @@ func (m Model) View() string {
 
 	// Skip global scroll when account view handles its own scrolling
 	// (order list/detail and FAQ focused use internal scrolling in BuildAccountView)
-	accountHandlesScroll := m.currentPage == accountPage && (m.OrderViewState >= 1 || m.FaqFocused)
+	accountHandlesScroll := m.currentPage == accountPage && (m.account.orderViewState >= 1 || m.account.faqFocused)
 	if !accountHandlesScroll {
 		// Ensure scroll offset is within bounds
-		if m.ScrollOffset < 0 {
-			m.ScrollOffset = 0
+		if m.account.scrollOffset < 0 {
+			m.account.scrollOffset = 0
 		}
 
 		maxScroll := totalLines - availableContentHeight
 		if maxScroll < 0 {
 			maxScroll = 0
 		}
-		if m.ScrollOffset > maxScroll {
-			m.ScrollOffset = maxScroll
+		if m.account.scrollOffset > maxScroll {
+			m.account.scrollOffset = maxScroll
 		}
 
 		if totalLines > availableContentHeight {
-			start := m.ScrollOffset
+			start := m.account.scrollOffset
 			end := start + availableContentHeight
 			if end > totalLines {
 				end = totalLines

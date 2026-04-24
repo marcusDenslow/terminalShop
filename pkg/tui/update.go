@@ -28,11 +28,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case reviewPage:
 				// no viewport on review page
 			}
-			if m.ShippingForm != nil {
-				m.ShippingForm.form = m.buildShippingForm(m.ShippingForm)
+			if m.shipping.form != nil {
+				m.shipping.form.form = m.buildShippingForm(m.shipping.form)
 			}
-			if m.PaymentForm != nil {
-				m.PaymentForm.form = m.buildPaymentForm(m.PaymentForm)
+			if m.payment.form != nil {
+				m.payment.form.form = m.buildPaymentForm(m.payment.form)
 			}
 		}
 		return m, nil
@@ -93,8 +93,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.SSHKeysLoaded = true
 		m.Orders = msg.Data.Orders
 		m.OrdersLoaded = true
-		m.splashDataReady = true
-		if m.splashDelayDone {
+		m.splash.dataReady = true
+		if m.splash.delayDone {
 			m = m.SwitchPage(shopPage)
 			m = m.updateShopViewports()
 			return m, nil
@@ -147,21 +147,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case DelayCompleteMsg:
-		m.splashDelayDone = true
-		if m.currentPage == splashPage && m.splashDataReady {
+		m.splash.delayDone = true
+		if m.currentPage == splashPage && m.splash.dataReady {
 			m = m.SwitchPage(shopPage)
 			m = m.updateShopViewports()
 			return m, nil
 		}
 		return m, nil
 	case splashCursorTickMsg:
-		m.splashCursor = !m.splashCursor
+		m.splash.cursor = !m.splash.cursor
 		return m, tea.Tick(700*time.Millisecond, func(t time.Time) tea.Msg {
 			return splashCursorTickMsg{}
 		})
 	case tea.KeyMsg:
 		// If a form is active, skip global keys — let the page handler own input
-		if m.ShippingForm != nil || m.PaymentForm != nil {
+		if m.shipping.form != nil || m.payment.form != nil {
 			break
 		}
 		// Global navigation
