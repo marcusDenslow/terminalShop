@@ -201,6 +201,7 @@ var modifiedKeyMap = viewport.KeyMap{
 func (m Model) SwitchPage(p page) Model {
 	m.currentPage = p
 	m.switched = true
+	m.ErrorMsg = ""
 	return m
 }
 
