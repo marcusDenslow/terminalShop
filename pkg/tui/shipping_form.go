@@ -362,6 +362,11 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.SavedAddresses = nil
 			m.shipping.view = 1
 			m.shipping.form = m.InitShippingForm()
+			m.footer = []footerCommand{
+				{key: "tab", value: "next"},
+				{key: "enter", value: "submit"},
+				{key: "esc", value: "back"},
+			}
 			return m, m.shipping.form.form.Init()
 		}
 		m.SavedAddresses = msg.Addresses
@@ -412,6 +417,11 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			m.shipping.view = 1
 			m.shipping.form = m.InitShippingForm()
+			m.footer = []footerCommand{
+				{key: "tab", value: "next"},
+				{key: "enter", value: "submit"},
+				{key: "esc", value: "back"},
+			}
 			return m, m.shipping.form.form.Init()
 		case "d", "x":
 			if m.shipping.addressCursor < len(m.SavedAddresses) {
@@ -423,6 +433,11 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				if len(m.SavedAddresses) == 0 {
 					m.shipping.view = 1
 					m.shipping.form = m.InitShippingForm()
+					m.footer = []footerCommand{
+						{key: "tab", value: "next"},
+						{key: "enter", value: "submit"},
+						{key: "esc", value: "back"},
+					}
 					return m, tea.Batch(m.shipping.form.form.Init(), m.deleteAddressCmd(addr.ID))
 				}
 				return m, m.deleteAddressCmd(addr.ID)
@@ -439,6 +454,12 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				if len(m.SavedAddresses) > 0 {
 					m.shipping.view = 0
 					m.shipping.form = nil
+					m.footer = []footerCommand{
+						{key: "j/k", value: "addresses"},
+						{key: "enter", value: "select"},
+						{key: "d/x", value: "delete"},
+						{key: "esc", value: "back"},
+					}
 					return m, nil
 				}
 				m.shipping.form = nil

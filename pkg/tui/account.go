@@ -356,55 +356,110 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 					m.account.orderViewState = 1
 					m.account.orderCursor = 0
 					m.account.scrollOffset = 0
+					m.footer = []footerCommand{
+						{key: "j/k", value: "orders"},
+						{key: "enter", value: "details"},
+						{key: "esc", value: "back"},
+						{key: "q", value: "quit"},
+					}
 				} else if m.account.orderViewState == 1 {
 					m.account.orderViewState = 2
 					m.account.scrollOffset = 0
+					m.footer = []footerCommand{
+						{key: "esc", value: "back"},
+						{key: "s", value: "shop"},
+						{key: "q", value: "quit"},
+					}
 				}
 			}
 		case "ssh keys":
 			if !m.account.sshKeyListFocused {
 				m.account.sshKeyListFocused = true
 				m.account.sshKeyCursor = 0
+				m.footer = []footerCommand{
+					{key: "j/k", value: "keys"},
+					{key: "x", value: "delete"},
+					{key: "esc", value: "back"},
+				}
 			}
 		case "addresses":
 			if !m.account.addressListFocused {
 				m.account.addressListFocused = true
 				m.account.addressCursor = 0
+				m.footer = []footerCommand{
+					{key: "j/k", value: "addresses"},
+					{key: "x", value: "delete"},
+					{key: "esc", value: "back"},
+				}
 			}
 		case "cards":
 			if !m.account.cardListFocused {
 				m.account.cardListFocused = true
 				m.account.cardCursor = 0
+				m.footer = []footerCommand{
+					{key: "j/k", value: "cards"},
+					{key: "x", value: "delete"},
+					{key: "esc", value: "back"},
+				}
 			}
 		case "faq":
 			if !m.account.faqFocused {
 				m.account.faqFocused = true
 				m.account.scrollOffset = 0
+				m.footer = []footerCommand{
+					{key: "j/k", value: "scroll"},
+					{key: "esc", value: "back"},
+					{key: "s", value: "shop"},
+					{key: "c", value: "cart"},
+					{key: "q", value: "quit"},
+				}
 			}
 		}
 
 	case "esc":
+		accountDefaultFooter := []footerCommand{
+			{key: "j/k", value: "navigate"},
+			{key: "enter", value: "select"},
+			{key: "s", value: "shop"},
+			{key: "c", value: "cart"},
+			{key: "?", value: "help"},
+			{key: "q", value: "quit"},
+		}
 		if m.account.addressDeleting != nil {
 			m.account.addressDeleting = nil
 		} else if m.account.addressListFocused {
 			m.account.addressListFocused = false
 			m.account.addressCursor = 0
+			m.footer = accountDefaultFooter
 		} else if m.account.cardDeleting != nil {
 			m.account.cardDeleting = nil
 		} else if m.account.cardListFocused {
 			m.account.cardListFocused = false
 			m.account.cardCursor = 0
+			m.footer = accountDefaultFooter
 		} else if m.account.sshKeyDeleting != nil {
 			m.account.sshKeyDeleting = nil
 		} else if m.account.sshKeyListFocused {
 			m.account.sshKeyListFocused = false
 			m.account.sshKeyCursor = 0
+			m.footer = accountDefaultFooter
 		} else if m.account.faqFocused {
 			m.account.faqFocused = false
 			m.account.scrollOffset = 0
+			m.footer = accountDefaultFooter
 		} else if m.account.orderViewState > 0 {
 			m.account.orderViewState--
 			m.account.scrollOffset = 0
+			if m.account.orderViewState == 1 {
+				m.footer = []footerCommand{
+					{key: "j/k", value: "orders"},
+					{key: "enter", value: "details"},
+					{key: "esc", value: "back"},
+					{key: "q", value: "quit"},
+				}
+			} else {
+				m.footer = accountDefaultFooter
+			}
 		}
 	}
 	return m, nil

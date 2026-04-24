@@ -434,6 +434,11 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.ErrorMsg = fmt.Sprintf("failed to save card: %v", msg.Err)
 			m.payment.view = 1
 			m.payment.form = m.InitPaymentForm()
+			m.footer = []footerCommand{
+				{key: "tab", value: "next"},
+				{key: "enter", value: "submit"},
+				{key: "esc", value: "back"},
+			}
 			return m, m.payment.form.form.Init()
 		}
 		m.SavedCards = append(m.SavedCards, msg.Card)
@@ -495,12 +500,20 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if m.payment.cardCursor == len(m.SavedCards) {
 				m.payment.view = 1
 				m.payment.form = m.InitPaymentForm()
+				m.footer = []footerCommand{
+					{key: "tab", value: "next"},
+					{key: "enter", value: "submit"},
+					{key: "esc", value: "back"},
+				}
 				return m, m.payment.form.form.Init()
 			}
 			// Browser payment
 			m.payment.view = 2
 			m.payment.collectURL = nil
 			m.payment.collectCardCount = len(m.SavedCards)
+			m.footer = []footerCommand{
+				{key: "esc", value: "back"},
+			}
 			return m, m.collectCardCmd()
 
 		case "d", "x":
@@ -513,6 +526,11 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				if len(m.SavedCards) == 0 {
 					m.payment.view = 1
 					m.payment.form = m.InitPaymentForm()
+					m.footer = []footerCommand{
+						{key: "tab", value: "next"},
+						{key: "enter", value: "submit"},
+						{key: "esc", value: "back"},
+					}
 					return m, tea.Batch(m.payment.form.form.Init(), m.deleteCardCmd(card.ID))
 				}
 				return m, m.deleteCardCmd(card.ID)
@@ -526,6 +544,12 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "esc" {
 			m.payment.view = 0
 			m.payment.collectURL = nil
+			m.footer = []footerCommand{
+				{key: "j/k", value: "cards"},
+				{key: "enter", value: "select"},
+				{key: "d/x", value: "delete"},
+				{key: "esc", value: "back"},
+			}
 			return m, nil
 		}
 		return m, nil
@@ -539,6 +563,12 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				if len(m.SavedCards) > 0 {
 					m.payment.view = 0
 					m.payment.form = nil
+					m.footer = []footerCommand{
+						{key: "j/k", value: "cards"},
+						{key: "enter", value: "select"},
+						{key: "d/x", value: "delete"},
+						{key: "esc", value: "back"},
+					}
 					return m, nil
 				}
 				m.payment.form = nil

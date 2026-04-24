@@ -53,6 +53,11 @@ type resizeTickMsg struct {
 // this prevents flickering when resizing the terminal
 const resizeDebounce = 50 * time.Millisecond
 
+type footerCommand struct {
+	key   string
+	value string
+}
+
 type Model struct {
 	// User authentication
 	User               *models.User
@@ -121,6 +126,9 @@ type Model struct {
 	account  accountState
 	review   reviewState
 	confirm  confirmState
+
+	// Footer
+	footer []footerCommand
 }
 
 type shopState struct {
@@ -208,18 +216,55 @@ func (m Model) SwitchPage(p page) Model {
 func (m Model) ShopSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(shopPage)
 	m = m.updateShopViewports()
+	m.footer = []footerCommand{
+		{key: "j/k", value: "products"},
+		{key: "+/-", value: "qty"},
+		{key: "c", value: "cart"},
+		{key: "a", value: "account"},
+		{key: "?", value: "help"},
+		{key: "q", value: "quit"},
+	}
 	return m, nil
 }
 
 func (m Model) CartSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(cartPage)
 	m = m.updateCartViewport()
+	if m.IsCartEmpty() {
+
+		m.footer = []footerCommand{
+			{key: "j/k", value: "items"},
+			{key: "+/-", value: "qty"},
+			{key: "s", value: "shop"},
+			{key: "a", value: "account"},
+			{key: "?", value: "help"},
+			{key: "q", value: "quit"},
+		}
+	} else {
+		m.footer = []footerCommand{
+			{key: "j/k", value: "items"},
+			{key: "+/-", value: "qty"},
+			{key: "p/enter", value: "checkout"},
+			{key: "s", value: "shop"},
+			{key: "a", value: "account"},
+			{key: "pgup/pgdn", value: "scroll"},
+			{key: "?", value: "help"},
+			{key: "q", value: "quit"},
+		}
+	}
 	return m, nil
 }
 
 func (m Model) AccountSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(accountPage)
 	m.account = accountState{}
+	m.footer = []footerCommand{
+		{key: "j/k", value: "navigate"},
+		{key: "enter", value: "select"},
+		{key: "s", value: "shop"},
+		{key: "?", value: "help"},
+		{key: "q", value: "quit"},
+	}
 	if !m.OrdersLoaded {
 		return m, m.fetchOrdersCmd()
 	}
@@ -230,6 +275,12 @@ func (m Model) ShippingSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(shippingPage)
 	m.shipping = shippingState{}
 	m = m.updateShippingViewport()
+	m.footer = []footerCommand{
+		{key: "j/k", value: "addresses"},
+		{key: "enter", value: "select"},
+		{key: "d/x", value: "delete"},
+		{key: "esc", value: "back"},
+	}
 	return m, m.fetchAddressesCmd()
 }
 
@@ -237,11 +288,21 @@ func (m Model) PaymentSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(paymentPage)
 	m.payment = paymentState{}
 	m.SelectedCard = nil
+	m.footer = []footerCommand{
+		{key: "j/k", value: "cards"},
+		{key: "enter", value: "select"},
+		{key: "d/x", value: "delete"},
+		{key: "esc", value: "back"},
+	}
 	return m, m.fetchCardsCmd()
 }
 
 func (m Model) ReviewSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(reviewPage)
+	m.footer = []footerCommand{
+		{key: "enter", value: "confirm"},
+		{key: "esc", value: "back"},
+	}
 	return m, nil
 }
 
@@ -249,6 +310,10 @@ func (m Model) ConfirmSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(confirmPage)
 	m.confirm = confirmState{}
 	m = m.updateConfirmViewport()
+	m.footer = []footerCommand{
+		{key: "esc", value: "back to shop"},
+		{key: "q", value: "quit"},
+	}
 	return m, nil
 }
 
