@@ -58,7 +58,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SplashAuthMsg:
 		if msg.Err != nil {
 			m.ErrorMsg = fmt.Sprintf("authentication failed: %v", msg.Err)
-			return m, nil
+			// Still attempt to load view data (products may not require auth)
+			// so the splash screen doesn't get permanently stuck.
+			return m, m.splashViewInitCmd
 		}
 		m.AccessToken = msg.Token
 		m.APIClient.Token = msg.Token
@@ -93,9 +95,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.OrdersLoaded = true
 		m.splash.dataReady = true
 		if m.splash.delayDone {
-			m = m.SwitchPage(shopPage)
-			m = m.updateShopViewports()
-			return m, nil
+			return m.ShopSwitch()
 		}
 		return m, nil
 	case CartSyncedMsg:

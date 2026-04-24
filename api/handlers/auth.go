@@ -84,17 +84,30 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.SSHPublicKey != "" {
-		sshKey := models.SSHKey{
-			UserID:      user.ID,
-			Fingerprint: req.Fingerprint,
-			PublicKey:   req.SSHPublicKey,
-		}
-		if err := db.Where(models.SSHKey{Fingerprint: req.Fingerprint}).FirstOrCreate(&sshKey).Error; err != nil {
-			// we specifically want to block users whos ssh key failed to save. this is to prevent downstream errors which i dont want to deal with now
-			// !TODO add a way to just log the errror and app continue without trying to save carts, cards and addresses. this way the users wouldnt
-			// just be kicked, they would shop normally but on their next login they would need to add all their data again.
-			utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to save ssh key", nil)
-			return
+		var sshKey models.SSHKey
+		// Use Unscoped to include soft-deleted rows, avoiding the
+		// UNIQUE constraint conflict when a key is re-registered.
+		err := db.Unscoped().Where("fingerprint = ?", req.Fingerprint).First(&sshKey).Error
+		if err != nil {
+			// Key doesn't exist at all — create it
+			sshKey = models.SSHKey{
+				UserID:      user.ID,
+				Fingerprint: req.Fingerprint,
+				PublicKey:   req.SSHPublicKey,
+			}
+			if err := db.Create(&sshKey).Error; err != nil {
+				utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to save ssh key", nil)
+				return
+			}
+		} else if sshKey.DeletedAt.Valid {
+			// Key was soft-deleted — restore it
+			sshKey.DeletedAt = gorm.DeletedAt{}
+			sshKey.PublicKey = req.SSHPublicKey
+			sshKey.UserID = user.ID
+			if err := db.Unscoped().Save(&sshKey).Error; err != nil {
+				utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to restore ssh key", nil)
+				return
+			}
 		}
 	}
 
