@@ -778,6 +778,14 @@ func (m Model) CalculateSubtotal() int {
 	return subtotal
 }
 
+func (m Model) SavedAddressesIsEmpty() bool {
+	return len(m.SavedAddresses) == 0
+}
+
+func (m Model) SavedCardsIsEmpty() bool {
+	return len(m.SavedCards) == 0
+}
+
 // NewModel creates a new model using the default renderer.
 func NewModel(username string) Model {
 	return newModelWithRenderer(username, lipgloss.DefaultRenderer())
