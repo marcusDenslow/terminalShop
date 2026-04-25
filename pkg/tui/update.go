@@ -89,8 +89,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadCartFromAPI(cart)
 		m.SavedAddresses = msg.Data.Addresses
 		m.SavedCards = msg.Data.Cards
-		m.SSHKeys = msg.Data.SSHKeys
-		m.SSHKeysLoaded = true
 		m.Orders = msg.Data.Orders
 		m.OrdersLoaded = true
 		m.splash.dataReady = true
@@ -131,17 +129,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CardDeletedMsg:
 		if msg.Err != nil {
 			m.ErrorMsg = fmt.Sprintf("failed to delete card: %v", msg.Err)
-		}
-		return m, nil
-	case SSHKeysMsg:
-		if msg.Err == nil {
-			m.SSHKeys = msg.Keys
-			m.SSHKeysLoaded = true
-		}
-		return m, nil
-	case SSHKeyDeletedMsg:
-		if msg.Err != nil {
-			m.ErrorMsg = fmt.Sprintf("failed to delete ssh key: %v", msg.Err)
 		}
 		return m, nil
 	case DelayCompleteMsg:

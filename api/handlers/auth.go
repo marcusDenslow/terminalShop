@@ -83,34 +83,6 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.SSHPublicKey != "" {
-		var sshKey models.SSHKey
-		// Use Unscoped to include soft-deleted rows, avoiding the
-		// UNIQUE constraint conflict when a key is re-registered.
-		err := db.Unscoped().Where("fingerprint = ?", req.Fingerprint).First(&sshKey).Error
-		if err != nil {
-			// Key doesn't exist at all — create it
-			sshKey = models.SSHKey{
-				UserID:      user.ID,
-				Fingerprint: req.Fingerprint,
-				PublicKey:   req.SSHPublicKey,
-			}
-			if err := db.Create(&sshKey).Error; err != nil {
-				utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to save ssh key", nil)
-				return
-			}
-		} else if sshKey.DeletedAt.Valid {
-			// Key was soft-deleted — restore it
-			sshKey.DeletedAt = gorm.DeletedAt{}
-			sshKey.PublicKey = req.SSHPublicKey
-			sshKey.UserID = user.ID
-			if err := db.Unscoped().Save(&sshKey).Error; err != nil {
-				utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to restore ssh key", nil)
-				return
-			}
-		}
-	}
-
 	token, err := h.jwtManager.GenerateToken(user.ID, user.Email, user.Name)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "failed to generate token", nil)

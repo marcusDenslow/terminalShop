@@ -49,8 +49,6 @@ func (m Model) BuildAccountView(availableHeight int) string {
 			detailView = m.AddressesView(detailContentWidth)
 		case "cards":
 			detailView = m.CardsView(detailContentWidth)
-		case "ssh keys":
-			detailView = m.SSHKeysView(detailContentWidth)
 		case "faq":
 			questionStyle := m.theme.TextHighlight().Bold(true)
 			faqContent := ""
@@ -222,10 +220,6 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if m.account.cardCursor > 0 {
 				m.account.cardCursor--
 			}
-		} else if m.account.sshKeyListFocused && m.account.sshKeyDeleting == nil {
-			if m.account.sshKeyCursor > 0 {
-				m.account.sshKeyCursor--
-			}
 		} else if m.account.faqFocused {
 			m.account.scrollOffset -= 3
 			if m.account.scrollOffset < 0 {
@@ -255,10 +249,6 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if m.account.cardCursor < len(m.SavedCards)-1 {
 				m.account.cardCursor++
 			}
-		} else if m.account.sshKeyListFocused && m.account.sshKeyDeleting == nil {
-			if m.account.sshKeyCursor < len(m.SSHKeys)-1 {
-				m.account.sshKeyCursor++
-			}
 		} else if m.account.faqFocused {
 			m.account.scrollOffset += 3
 			maxScroll := m.computeFaqScrollMax()
@@ -282,7 +272,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			if targetBottom > m.account.scrollOffset+viewportHeight {
 				m.account.scrollOffset = targetBottom - viewportHeight
 			}
-		} else if m.account.orderViewState == 0 && !m.account.addressListFocused && !m.account.cardListFocused && !m.account.sshKeyListFocused && m.account.cursor < len(models.AccountMenuItems)-1 {
+		} else if m.account.orderViewState == 0 && !m.account.addressListFocused && !m.account.cardListFocused && m.account.cursor < len(models.AccountMenuItems)-1 {
 			m.account.cursor++
 			m.account.scrollOffset = 0
 		}
@@ -309,8 +299,6 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.account.addressDeleting = &m.account.addressCursor
 		} else if m.account.cardListFocused && m.account.cardDeleting == nil && m.account.cardCursor < len(m.SavedCards) {
 			m.account.cardDeleting = &m.account.cardCursor
-		} else if m.account.sshKeyListFocused && m.account.sshKeyDeleting == nil && m.account.sshKeyCursor < len(m.SSHKeys) {
-			m.account.sshKeyDeleting = &m.account.sshKeyCursor
 		}
 
 	case "y":
@@ -332,21 +320,11 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.account.cardCursor--
 			}
 			return m, m.deleteCardCmd(card.ID)
-		} else if m.account.sshKeyDeleting != nil {
-			cursor := *m.account.sshKeyDeleting
-			key := m.SSHKeys[cursor]
-			m.account.sshKeyDeleting = nil
-			m.SSHKeys = append(m.SSHKeys[:cursor], m.SSHKeys[cursor+1:]...)
-			if m.account.sshKeyCursor >= len(m.SSHKeys) && m.account.sshKeyCursor > 0 {
-				m.account.sshKeyCursor--
-			}
-			return m, m.deleteSSHKeyCmd(key.ID)
 		}
 
 	case "n":
 		m.account.addressDeleting = nil
 		m.account.cardDeleting = nil
-		m.account.sshKeyDeleting = nil
 
 	case "p", "enter":
 		switch selectedItem {
@@ -370,16 +348,6 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 						{key: "s", value: "shop"},
 						{key: "q", value: "quit"},
 					}
-				}
-			}
-		case "ssh keys":
-			if !m.account.sshKeyListFocused {
-				m.account.sshKeyListFocused = true
-				m.account.sshKeyCursor = 0
-				m.footer = []footerCommand{
-					{key: "j/k", value: "keys"},
-					{key: "x", value: "delete"},
-					{key: "esc", value: "back"},
 				}
 			}
 		case "addresses":
@@ -437,11 +405,6 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.account.cardListFocused = false
 			m.account.cardCursor = 0
 			m.footer = accountDefaultFooter
-		} else if m.account.sshKeyDeleting != nil {
-			m.account.sshKeyDeleting = nil
-		} else if m.account.sshKeyListFocused {
-			m.account.sshKeyListFocused = false
-			m.account.sshKeyCursor = 0
 			m.footer = accountDefaultFooter
 		} else if m.account.faqFocused {
 			m.account.faqFocused = false

@@ -37,9 +37,6 @@ func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
 	var cards []models.Card
 	db.Where("user_id = ?", userID).Find(&cards)
 
-	var sshKeys []models.SSHKey
-	db.Where("user_id = ?", userID).Order("created_at ASC").Find(&sshKeys)
-
 	var orders []models.Order
 	db.Where("user_id = ?", userID).Preload("Items").Order("created_at desc").Find(&orders)
 	var cartItems []models.CartItem
@@ -53,7 +50,6 @@ func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
 		"cart":      cartItems,
 		"addresses": addresses,
 		"cards":     cards,
-		"ssh_keys":  sshKeys,
 		"orders":    orders,
 	})
 }

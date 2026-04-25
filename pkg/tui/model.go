@@ -77,8 +77,6 @@ type Model struct {
 	SavedCards     []models.Card
 	Orders         []models.Order
 	OrdersLoaded   bool
-	SSHKeys        []models.SSHKey
-	SSHKeysLoaded  bool
 	FAQs           []FAQ
 
 	// Page navigation
@@ -180,9 +178,6 @@ type accountState struct {
 	cardCursor         int
 	addressDeleting    *int
 	cardDeleting       *int
-	sshKeyListFocused  bool
-	sshKeyCursor       int
-	sshKeyDeleting     *int
 }
 
 type reviewState struct {
@@ -519,17 +514,6 @@ type CardDeletedMsg struct {
 	Err error
 }
 
-// SSHKeysMsg is sent when ssh keys are fetched from the API
-type SSHKeysMsg struct {
-	Keys []models.SSHKey
-	Err  error
-}
-
-// SSHKeyDeletedMsg is sent when an ssh key is deleted
-type SSHKeyDeletedMsg struct {
-	Err error
-}
-
 func (m Model) fetchAddressesCmd() tea.Cmd {
 	return func() tea.Msg {
 		if m.APIClient == nil || m.User == nil {
@@ -589,26 +573,6 @@ func (m Model) deleteCardCmd(id uint) tea.Cmd {
 		}
 		err := m.APIClient.DeleteCard(id)
 		return CardDeletedMsg{Err: err}
-	}
-}
-
-func (m Model) fetchSSHKeysCmd() tea.Cmd {
-	return func() tea.Msg {
-		if m.APIClient == nil || m.User == nil {
-			return SSHKeysMsg{Err: fmt.Errorf("not authenticated")}
-		}
-		keys, err := m.APIClient.GetSSHKeys()
-		return SSHKeysMsg{Keys: keys, Err: err}
-	}
-}
-
-func (m Model) deleteSSHKeyCmd(id uint) tea.Cmd {
-	return func() tea.Msg {
-		if m.APIClient == nil || m.User == nil {
-			return SSHKeyDeletedMsg{Err: fmt.Errorf("not authenticated")}
-		}
-		err := m.APIClient.DeleteSSHKey(id)
-		return SSHKeyDeletedMsg{Err: err}
 	}
 }
 

@@ -31,7 +31,6 @@ var AccountMenuItems = []string{
 	"order history",
 	"addresses",
 	"cards",
-	"ssh keys",
 	"faq",
 	"about",
 }
