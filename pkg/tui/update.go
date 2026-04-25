@@ -25,6 +25,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m = m.updatePaymentViewport()
 			case confirmPage:
 				m = m.updateConfirmViewport()
+			case accountPage:
+				m = m.updateAccountViewport()
 			case reviewPage:
 				// no viewport on review page
 			}

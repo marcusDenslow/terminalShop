@@ -32,7 +32,7 @@ func (m Model) OrdersView(width int) string {
 	lines := titleStyle.Render("Order History") + "\n\n"
 	for i, order := range m.Orders {
 		isSelected := m.account.orderViewState == 1 && i == m.account.orderCursor
-		lines += m.buildOrderCard(order, boxWidth, isSelected, boxPadding, width)
+		lines += m.buildOrderCard(order, boxWidth, isSelected, boxPadding)
 		if i < len(m.Orders)-1 {
 			lines += "\n"
 		}
@@ -47,7 +47,7 @@ func (m Model) OrdersView(width int) string {
 
 // buildOrderCard renders a single order as a bordered box for the order list.
 // Shows order number, date, status, total, and the first 2 items as a preview.
-func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool, boxPadding int, containerWidth int) string {
+func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool, boxPadding int) string {
 	// Order header line: "Order #123" left, "Jan 02 2026  PAID" right
 	nameStyle := m.theme.TextAccent().Bold(true)
 
@@ -94,33 +94,20 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool,
 
 	boxContent := strings.Join(lines, "\n")
 
-	// Create bordered box — highlight if selected
+	// Create bordered box — both use NormalBorder, differentiated by color only
+	base := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		Padding(boxPadding, 2).
+		Width(boxWidth)
+
 	var itemBox lipgloss.Style
 	if isSelected {
-		itemBox = lipgloss.NewStyle().
-			Border(lipgloss.ThickBorder()).
-			BorderForeground(m.theme.Accent()).
-			Padding(boxPadding, 2).
-			Width(boxWidth)
+		itemBox = base.BorderForeground(m.theme.Accent())
 	} else {
-		itemBox = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(m.theme.Border()).
-			Padding(boxPadding, 2).
-			Width(boxWidth)
+		itemBox = base.BorderForeground(m.theme.Border())
 	}
 
-	// Add cursor indicator for selected order
-	prefix := "  "
-	if isSelected {
-		prefix = "> "
-	}
-
-	centered := lipgloss.NewStyle().
-		Width(containerWidth).
-		Align(lipgloss.Center)
-
-	return centered.Render(prefix + itemBox.Render(boxContent))
+	return itemBox.Render(boxContent)
 }
 
 // buildOrderDetailView renders the full detail view for a single order

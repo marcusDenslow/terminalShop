@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -83,43 +81,11 @@ func (m Model) View() string {
 		content = m.buildPageContent(availableContentHeight)
 	}
 
-	// Split content into lines and handle scrolling
-	contentLines := strings.Split(content, "\n")
-	totalLines := len(contentLines)
-
-	// Skip global scroll when account view handles its own scrolling
-	// (order list/detail and FAQ focused use internal scrolling in BuildAccountView)
-	accountHandlesScroll := m.currentPage == accountPage && (m.account.orderViewState >= 1 || m.account.faqFocused)
-	if !accountHandlesScroll {
-		// Ensure scroll offset is within bounds
-		if m.account.scrollOffset < 0 {
-			m.account.scrollOffset = 0
-		}
-
-		maxScroll := totalLines - availableContentHeight
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
-		if m.account.scrollOffset > maxScroll {
-			m.account.scrollOffset = maxScroll
-		}
-
-		if totalLines > availableContentHeight {
-			start := m.account.scrollOffset
-			end := start + availableContentHeight
-			if end > totalLines {
-				end = totalLines
-			}
-			contentLines = contentLines[start:end]
-		}
-	}
-	content = strings.Join(contentLines, "\n")
-
 	footer := m.BuildFooter()
 
 	isViewportPage := m.currentPage == shopPage || m.currentPage == cartPage ||
 		m.currentPage == shippingPage || m.currentPage == paymentPage ||
-		m.currentPage == confirmPage
+		m.currentPage == confirmPage || m.currentPage == accountPage
 
 	var child string
 	if isViewportPage {

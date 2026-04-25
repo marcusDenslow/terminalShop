@@ -1,17 +1,140 @@
 package tui
 
 import (
-	"strings"
-
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"terminalShop/pkg/models"
 )
 
+// updateAccountViewport initializes or resizes the detail viewport for the account page.
+// Follows the reference pattern: each page owns its own viewport(s).
+func (m Model) updateAccountViewport() Model {
+	headerHeight := lipgloss.Height(m.BuildHeader())
+	footerHeight := 1
+	marginTop := 1
+	marginBottom := 1
+	bufferSpace := 1
+	verticalMarginHeight := headerHeight + footerHeight + marginTop + marginBottom + bufferSpace
+
+	availableHeight := m.heightContainer - verticalMarginHeight
+
+	leftWidth := 18
+	rightWidth := m.widthContent - leftWidth - 2
+	detailWidth := rightWidth
+	if m.size < large {
+		detailWidth = m.widthContent
+		// In stacked mode, reduce available height by the left panel
+		leftPanelHeight := len(models.AccountMenuItems) + 1
+		availableHeight -= leftPanelHeight
+	}
+	if availableHeight < 3 {
+		availableHeight = 3
+	}
+
+	if !m.account.viewportReady {
+		m.account.detailViewport = viewport.New(detailWidth, availableHeight)
+		m.account.detailViewport.KeyMap = modifiedKeyMap
+		m.account.viewportReady = true
+	} else {
+		m.account.detailViewport.Width = detailWidth
+		m.account.detailViewport.Height = availableHeight
+	}
+
+	return m
+}
+
+// getAccountDetailContent generates the content string for the current detail panel.
+func (m Model) getAccountDetailContent() string {
+	leftWidth := 18
+	rightWidth := m.widthContent - leftWidth - 2
+	detailContentWidth := rightWidth - 2
+	if m.size < large {
+		detailContentWidth = m.widthContent - 2
+	}
+
+	if m.account.cursor < 0 || m.account.cursor >= len(models.AccountMenuItems) {
+		return ""
+	}
+
+	selectedItem := models.AccountMenuItems[m.account.cursor]
+	switch selectedItem {
+	case "order history":
+		return m.OrdersView(detailContentWidth)
+	case "addresses":
+		return m.AddressesView(detailContentWidth)
+	case "cards":
+		return m.CardsView(detailContentWidth)
+	case "faq":
+		titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
+		questionStyle := m.theme.TextHighlight().Bold(true)
+		contentStyle := m.theme.TextBody().Width(detailContentWidth)
+		faqContent := ""
+		for i, faq := range m.FAQs {
+			faqContent += questionStyle.Render(wordWrap(faq.Question, detailContentWidth)) + "\n"
+			faqContent += contentStyle.Render(wordWrap(faq.Answer, detailContentWidth))
+			if i < len(m.FAQs)-1 {
+				faqContent += "\n\n"
+			}
+		}
+		detailView := titleStyle.Render("FAQ") + "\n\n" + faqContent
+		if !m.account.faqFocused {
+			hintStyle := m.theme.TextDim()
+			detailView += "\n\n" + hintStyle.Render("enter: scroll faq")
+		}
+		return detailView
+	case "about":
+		return m.AboutView(detailContentWidth)
+	}
+	return ""
+}
+
+// scrollToAccountDetailItem adjusts the viewport scroll to keep the selected item visible.
+// Follows the reference pattern: cursor moves immediately, viewport catches up.
+func (m Model) scrollToAccountDetailItem() Model {
+	var itemHeight, itemCount, selectedIndex int
+
+	switch {
+	case m.account.orderViewState == 1:
+		itemHeight = 7
+		if m.heightContainer < 25 {
+			itemHeight = 5
+		}
+		itemCount = len(m.Orders)
+		selectedIndex = m.account.orderCursor
+	case m.account.addressListFocused:
+		itemHeight = 5
+		itemCount = len(m.SavedAddresses)
+		selectedIndex = m.account.addressCursor
+	case m.account.cardListFocused:
+		itemHeight = 4
+		itemCount = len(m.SavedCards)
+		selectedIndex = m.account.cardCursor
+	default:
+		return m
+	}
+
+	if itemCount == 0 {
+		return m
+	}
+
+	targetY := (selectedIndex * itemHeight) + 2
+	vpH := m.account.detailViewport.Height
+	offset := m.account.detailViewport.YOffset
+
+	if targetY < offset {
+		m.account.detailViewport.SetYOffset(targetY - 2)
+	}
+	if targetY+itemHeight > offset+vpH {
+		m.account.detailViewport.SetYOffset(targetY - vpH + itemHeight)
+	}
+
+	return m
+}
+
 func (m Model) BuildAccountView(availableHeight int) string {
 	leftWidth := 18
-	rightWidth := m.widthContent - leftWidth - 2 // 2 for gap
 
 	// Build the left panel (menu items)
 	leftPanel := ""
@@ -28,96 +151,19 @@ func (m Model) BuildAccountView(availableHeight int) string {
 	leftContainer := m.theme.Base().
 		Width(leftWidth)
 
-	// Build the detail view (right panel) based on cursor position
-	detailView := ""
-	if m.account.cursor >= 0 && m.account.cursor < len(models.AccountMenuItems) {
-		titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
+	// Generate detail content and set it on the viewport
+	detailContent := m.getAccountDetailContent()
+	m.account.detailViewport.SetContent(detailContent)
 
-		// On small terminals, use full content width
-		detailContentWidth := rightWidth - 2
-		if m.size < large {
-			detailContentWidth = m.widthContent - 2
-		}
-
-		contentStyle := m.theme.TextBody().Width(detailContentWidth)
-
-		selectedItem := models.AccountMenuItems[m.account.cursor]
-		switch selectedItem {
-		case "order history":
-			detailView = m.OrdersView(detailContentWidth)
-		case "addresses":
-			detailView = m.AddressesView(detailContentWidth)
-		case "cards":
-			detailView = m.CardsView(detailContentWidth)
-		case "faq":
-			questionStyle := m.theme.TextHighlight().Bold(true)
-			faqContent := ""
-			for i, faq := range m.FAQs {
-				faqContent += questionStyle.Render(wordWrap(faq.Question, detailContentWidth)) + "\n"
-				faqContent += contentStyle.Render(wordWrap(faq.Answer, detailContentWidth))
-				if i < len(m.FAQs)-1 {
-					faqContent += "\n\n"
-				}
-			}
-			detailView = titleStyle.Render("FAQ") + "\n\n" + faqContent
-			if !m.account.faqFocused {
-				hintStyle := m.theme.TextDim()
-				detailView += "\n\n" + hintStyle.Render("enter: scroll faq")
-			}
-		case "about":
-			detailView = m.AboutView(detailContentWidth)
-		}
-	}
-
-	// Apply internal scrolling to just the detail view
-	// Scrolling is needed for: order detail/list and FAQ when focused
-	if m.account.orderViewState >= 1 || m.account.faqFocused {
-		detailLines := strings.Split(detailView, "\n")
-		totalLines := len(detailLines)
-
-		// In stacked mode, reduce available height by left panel
-		scrollHeight := availableHeight
-		if m.size < large {
-			leftPanelHeight := len(models.AccountMenuItems) + 1
-			scrollHeight = availableHeight - leftPanelHeight
-		}
-		if scrollHeight < 3 {
-			scrollHeight = 3
-		}
-
-		// Clamp scroll offset locally (don't mutate m since value receiver)
-		offset := m.account.scrollOffset
-		maxScroll := totalLines - scrollHeight
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
-		if offset > maxScroll {
-			offset = maxScroll
-		}
-		if offset < 0 {
-			offset = 0
-		}
-
-		// Slice to visible window
-		if totalLines > scrollHeight {
-			end := offset + scrollHeight
-			if end > totalLines {
-				end = totalLines
-			}
-			detailLines = detailLines[offset:end]
-		}
-		detailView = strings.Join(detailLines, "\n")
-	}
-
-	detailContainer := lipgloss.NewStyle().
-		Width(rightWidth)
+	// Viewport handles scrolling/clipping — no manual line-slicing needed
+	detailRendered := m.account.detailViewport.View()
 
 	// Responsive layout: side-by-side on large, stacked on small/medium
 	if m.size < large {
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
 			leftContainer.Render(leftPanel),
-			detailContainer.Width(m.widthContent).Render(detailView),
+			detailRendered,
 		)
 	}
 
@@ -125,7 +171,7 @@ func (m Model) BuildAccountView(availableHeight int) string {
 		lipgloss.Top,
 		leftContainer.Render(leftPanel),
 		"  ",
-		detailContainer.Render(detailView),
+		detailRendered,
 	)
 }
 
@@ -153,56 +199,15 @@ func (m Model) AboutView(width int) string {
 	aboutContent += accentStyle.Render("Terminal Products, Inc.")
 
 	return titleStyle.Render("About") + "\n\n" + aboutContent
-
-}
-
-// computeFaqScrollMax calculates the maximum scroll offset for the FAQ content.
-// This renders the FAQ the same way BuildAccountView does, counts the lines,
-// and returns the max scroll value. Returns 0 if no scrolling is needed.
-func (m Model) computeFaqScrollMax() int {
-	leftWidth := 18
-	rightWidth := m.widthContent - leftWidth - 2
-	detailContentWidth := rightWidth - 2
-	if m.size < large {
-		detailContentWidth = m.widthContent - 2
-	}
-
-	questionStyle := m.theme.TextHighlight().Bold(true)
-	contentStyle := m.theme.TextBody().Width(detailContentWidth)
-
-	faqContent := ""
-	for i, faq := range m.FAQs {
-		faqContent += questionStyle.Render(wordWrap(faq.Question, detailContentWidth)) + "\n"
-		faqContent += contentStyle.Render(wordWrap(faq.Answer, detailContentWidth))
-		if i < len(m.FAQs)-1 {
-			faqContent += "\n\n"
-		}
-	}
-
-	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
-	detailView := titleStyle.Render("FAQ") + "\n\n" + faqContent
-
-	totalLines := len(strings.Split(detailView, "\n"))
-
-	scrollHeight := m.heightContainer - 7
-	if m.size < large {
-		scrollHeight -= len(models.AccountMenuItems) + 1
-	}
-	if scrollHeight < 3 {
-		scrollHeight = 3
-	}
-
-	maxScroll := totalLines - scrollHeight
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
-	return maxScroll
 }
 
 func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
-		return m, nil
+		// Pass non-key messages to viewport (e.g. window resize)
+		var cmd tea.Cmd
+		m.account.detailViewport, cmd = m.account.detailViewport.Update(msg)
+		return m, cmd
 	}
 
 	selectedItem := ""
@@ -212,87 +217,57 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 
 	switch keyMsg.String() {
 	case "up", "k":
+		// In order detail or FAQ, scroll the viewport directly
+		if m.account.orderViewState == 2 || m.account.faqFocused {
+			m.account.detailViewport.ScrollUp(3)
+			return m, nil
+		}
 		if m.account.addressListFocused && m.account.addressDeleting == nil {
 			if m.account.addressCursor > 0 {
 				m.account.addressCursor--
+				m = m.scrollToAccountDetailItem()
 			}
 		} else if m.account.cardListFocused && m.account.cardDeleting == nil {
 			if m.account.cardCursor > 0 {
 				m.account.cardCursor--
-			}
-		} else if m.account.faqFocused {
-			m.account.scrollOffset -= 3
-			if m.account.scrollOffset < 0 {
-				m.account.scrollOffset = 0
+				m = m.scrollToAccountDetailItem()
 			}
 		} else if m.account.orderViewState == 1 && m.account.orderCursor > 0 {
 			m.account.orderCursor--
-			cardHeight := 5
-			if m.heightContainer >= 25 {
-				cardHeight = 7
-			}
-			targetTop := 3 + m.account.orderCursor*cardHeight
-			if targetTop < m.account.scrollOffset {
-				m.account.scrollOffset = targetTop
-			}
+			m = m.scrollToAccountDetailItem()
 		} else if m.account.orderViewState == 0 && m.account.cursor > 0 {
 			m.account.cursor--
-			m.account.scrollOffset = 0
+			m.account.detailViewport.GotoTop()
 		}
 
 	case "down", "j":
+		if m.account.orderViewState == 2 || m.account.faqFocused {
+			m.account.detailViewport.ScrollDown(3)
+			return m, nil
+		}
 		if m.account.addressListFocused && m.account.addressDeleting == nil {
 			if m.account.addressCursor < len(m.SavedAddresses)-1 {
 				m.account.addressCursor++
+				m = m.scrollToAccountDetailItem()
 			}
 		} else if m.account.cardListFocused && m.account.cardDeleting == nil {
 			if m.account.cardCursor < len(m.SavedCards)-1 {
 				m.account.cardCursor++
-			}
-		} else if m.account.faqFocused {
-			m.account.scrollOffset += 3
-			maxScroll := m.computeFaqScrollMax()
-			if m.account.scrollOffset > maxScroll {
-				m.account.scrollOffset = maxScroll
+				m = m.scrollToAccountDetailItem()
 			}
 		} else if m.account.orderViewState == 1 && m.account.orderCursor < len(m.Orders)-1 {
 			m.account.orderCursor++
-			cardHeight := 5
-			if m.heightContainer >= 25 {
-				cardHeight = 7
-			}
-			viewportHeight := m.heightContainer - 7
-			if m.size < large {
-				viewportHeight -= len(models.AccountMenuItems) + 1
-			}
-			if viewportHeight < 5 {
-				viewportHeight = 5
-			}
-			targetBottom := 3 + (m.account.orderCursor+1)*cardHeight
-			if targetBottom > m.account.scrollOffset+viewportHeight {
-				m.account.scrollOffset = targetBottom - viewportHeight
-			}
+			m = m.scrollToAccountDetailItem()
 		} else if m.account.orderViewState == 0 && !m.account.addressListFocused && !m.account.cardListFocused && m.account.cursor < len(models.AccountMenuItems)-1 {
 			m.account.cursor++
-			m.account.scrollOffset = 0
+			m.account.detailViewport.GotoTop()
 		}
 
-	case "pgup", "ctrl+u":
-		if m.account.faqFocused || m.account.orderViewState >= 2 {
-			m.account.scrollOffset -= 3
-			if m.account.scrollOffset < 0 {
-				m.account.scrollOffset = 0
-			}
-		}
-
-	case "pgdown", "ctrl+d":
-		if m.account.faqFocused || m.account.orderViewState >= 2 {
-			m.account.scrollOffset += 3
-			maxScroll := m.computeFaqScrollMax()
-			if m.account.faqFocused && maxScroll >= 0 && m.account.scrollOffset > maxScroll {
-				m.account.scrollOffset = maxScroll
-			}
-		}
+	case "pgup", "ctrl+u", "pgdown", "ctrl+d":
+		// Let viewport handle page scrolling directly
+		var cmd tea.Cmd
+		m.account.detailViewport, cmd = m.account.detailViewport.Update(msg)
+		return m, cmd
 
 	case "x", "d":
 		if m.account.addressListFocused && m.account.addressDeleting == nil && m.account.addressCursor < len(m.SavedAddresses) {
@@ -333,7 +308,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				if m.account.orderViewState == 0 {
 					m.account.orderViewState = 1
 					m.account.orderCursor = 0
-					m.account.scrollOffset = 0
+					m.account.detailViewport.GotoTop()
 					m.footer = []footerCommand{
 						{key: "j/k", value: "orders"},
 						{key: "enter", value: "details"},
@@ -341,8 +316,10 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 						{key: "q", value: "quit"},
 					}
 				} else if m.account.orderViewState == 1 {
+					// Save scroll position before entering detail view
+					m.account.orderYOffset = m.account.detailViewport.YOffset
 					m.account.orderViewState = 2
-					m.account.scrollOffset = 0
+					m.account.detailViewport.GotoTop()
 					m.footer = []footerCommand{
 						{key: "esc", value: "back"},
 						{key: "s", value: "shop"},
@@ -373,7 +350,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		case "faq":
 			if !m.account.faqFocused {
 				m.account.faqFocused = true
-				m.account.scrollOffset = 0
+				m.account.detailViewport.GotoTop()
 				m.footer = []footerCommand{
 					{key: "j/k", value: "scroll"},
 					{key: "esc", value: "back"},
@@ -405,15 +382,18 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.account.cardListFocused = false
 			m.account.cardCursor = 0
 			m.footer = accountDefaultFooter
-			m.footer = accountDefaultFooter
 		} else if m.account.faqFocused {
 			m.account.faqFocused = false
-			m.account.scrollOffset = 0
+			m.account.detailViewport.GotoTop()
 			m.footer = accountDefaultFooter
 		} else if m.account.orderViewState > 0 {
 			m.account.orderViewState--
-			m.account.scrollOffset = 0
 			if m.account.orderViewState == 1 {
+				// Restore scroll position from before entering detail view
+				if m.account.orderYOffset > 0 {
+					m.account.detailViewport.SetYOffset(m.account.orderYOffset)
+					m.account.orderYOffset = 0
+				}
 				m.footer = []footerCommand{
 					{key: "j/k", value: "orders"},
 					{key: "enter", value: "details"},
@@ -421,6 +401,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 					{key: "q", value: "quit"},
 				}
 			} else {
+				m.account.detailViewport.GotoTop()
 				m.footer = accountDefaultFooter
 			}
 		}

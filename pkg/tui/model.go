@@ -168,9 +168,9 @@ type paymentState struct {
 
 type accountState struct {
 	cursor             int
-	scrollOffset       int
 	orderViewState     int
 	orderCursor        int
+	orderYOffset       int // saved scroll pos when entering order detail
 	faqFocused         bool
 	addressListFocused bool
 	cardListFocused    bool
@@ -178,6 +178,8 @@ type accountState struct {
 	cardCursor         int
 	addressDeleting    *int
 	cardDeleting       *int
+	detailViewport     viewport.Model
+	viewportReady      bool
 }
 
 type reviewState struct {
@@ -260,6 +262,8 @@ func (m Model) AccountSwitch() (Model, tea.Cmd) {
 		{key: "?", value: "help"},
 		{key: "q", value: "quit"},
 	}
+	m = m.updateAccountViewport()
+	m.account.detailViewport.GotoTop()
 	if !m.OrdersLoaded {
 		return m, m.fetchOrdersCmd()
 	}
