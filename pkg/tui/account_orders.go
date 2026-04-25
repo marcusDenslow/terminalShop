@@ -98,7 +98,7 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool,
 	var itemBox lipgloss.Style
 	if isSelected {
 		itemBox = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), true).
+			Border(lipgloss.ThickBorder()).
 			BorderForeground(m.theme.Accent()).
 			Padding(boxPadding, 2).
 			Width(boxWidth)
@@ -110,11 +110,17 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool,
 			Width(boxWidth)
 	}
 
+	// Add cursor indicator for selected order
+	prefix := "  "
+	if isSelected {
+		prefix = "> "
+	}
+
 	centered := lipgloss.NewStyle().
 		Width(containerWidth).
 		Align(lipgloss.Center)
 
-	return centered.Render(itemBox.Render(boxContent))
+	return centered.Render(prefix + itemBox.Render(boxContent))
 }
 
 // buildOrderDetailView renders the full detail view for a single order
