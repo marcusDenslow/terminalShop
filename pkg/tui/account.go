@@ -11,12 +11,11 @@ import (
 // updateAccountViewport initializes or resizes the detail viewport for the account page.
 // Follows the reference pattern: each page owns its own viewport(s).
 func (m Model) updateAccountViewport() Model {
+	// Match the reference: only subtract header + footer, no extra margins
+	// (account is a viewport page — views.go renders it without margin padding)
 	headerHeight := lipgloss.Height(m.BuildHeader())
-	footerHeight := 1
-	marginTop := 1
-	marginBottom := 1
-	bufferSpace := 1
-	verticalMarginHeight := headerHeight + footerHeight + marginTop + marginBottom + bufferSpace
+	footerHeight := lipgloss.Height(m.BuildFooter())
+	verticalMarginHeight := headerHeight + footerHeight
 
 	availableHeight := m.heightContainer - verticalMarginHeight
 
@@ -102,25 +101,20 @@ func (m Model) scrollToAccountDetailItem() Model {
 
 	switch {
 	case m.account.orderViewState == 1:
-		// "Order History" + MarginBottom(2) + "\n\n" = ~5 header lines
-		headerOffset = 5
-		if m.heightContainer >= 25 {
-			// border(2) + vPadding(2) + content(~4) + gap(1) = 9
-			itemHeight = 9
-		} else {
-			// border(2) + content(~4) + gap(1) = 7
-			itemHeight = 7
-		}
+		// No title in list mode, cards joined with JoinVertical (no gaps)
+		// Card: border(2) + content(2) + PaddingLeft only = 4 lines
+		headerOffset = 0
+		itemHeight = 4
 		itemCount = len(m.Orders)
 		selectedIndex = m.account.orderCursor
 	case m.account.addressListFocused:
-		headerOffset = 5
-		itemHeight = 6
+		headerOffset = 3
+		itemHeight = 5
 		itemCount = len(m.SavedAddresses)
 		selectedIndex = m.account.addressCursor
 	case m.account.cardListFocused:
-		headerOffset = 5
-		itemHeight = 5
+		headerOffset = 3
+		itemHeight = 4
 		itemCount = len(m.SavedCards)
 		selectedIndex = m.account.cardCursor
 	default:

@@ -10,49 +10,49 @@ import (
 )
 
 func (m Model) OrdersView(width int) string {
-	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
+	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(1)
 	contentStyle := m.theme.TextBody().Width(width)
 
 	if !m.OrdersLoaded {
-		return titleStyle.Render("Order History") + "\n\n" + contentStyle.Render("Loading orders...")
+		return titleStyle.Render("Order History") + "\n" + contentStyle.Render("Loading orders...")
 	}
 	if len(m.Orders) == 0 {
-		return titleStyle.Render("Order History") + "\n\n" + contentStyle.Render("No orders yet")
+		return titleStyle.Render("Order History") + "\n" + contentStyle.Render("No orders yet")
 	}
 	if m.account.orderViewState == 2 {
 		return m.buildOrderDetailView(m.Orders[m.account.orderCursor], width)
 	}
 
-	boxWidth := width - 4
-	boxPadding := 0
-	if m.heightContainer >= 25 {
-		boxPadding = 1
-	}
+	boxWidth := width - 2
 
-	lines := titleStyle.Render("Order History") + "\n\n"
+	// Build cards and join vertically — no manual "\n" gaps means fixed spacing
+	var cards []string
 	for i, order := range m.Orders {
 		isSelected := m.account.orderViewState == 1 && i == m.account.orderCursor
-		lines += m.buildOrderCard(order, boxWidth, isSelected, boxPadding)
-		if i < len(m.Orders)-1 {
-			lines += "\n"
-		}
+		cards = append(cards, m.buildOrderCard(order, boxWidth, isSelected))
 	}
+	cardList := lipgloss.JoinVertical(lipgloss.Left, cards...)
 
+	// In preview mode (viewState 0), show title + hint
 	if m.account.orderViewState == 0 {
 		hintStyle := m.theme.TextDim()
-		lines += "\n" + hintStyle.Render("enter: browse orders")
+		return titleStyle.Render("Order History") + "\n" +
+			cardList + "\n" +
+			hintStyle.Render("enter: browse orders")
 	}
-	return lines
+
+	// In list browsing mode (viewState 1), just show cards — no title
+	// (the left panel menu already shows "order history" as selected)
+	return cardList
 }
 
-// buildOrderCard renders a single order as a bordered box for the order list.
-// Shows order number, date, status, total, and the first 2 items as a preview.
-func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool, boxPadding int) string {
-	// Order header line: "Order #123" left, "Jan 02 2026  PAID" right
+// buildOrderCard renders a single order as a bordered box with fixed height.
+// Shows order number + total on line 1, date + status on line 2.
+// Item details are shown in the detail view (viewState 2).
+func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool) string {
 	nameStyle := m.theme.TextAccent().Bold(true)
 
-	// When selected, item preview text uses accent color instead of dim
-	// so the whole card "lights up" — much more visible than border color alone
+	// When selected, secondary text uses accent color so the whole card "lights up"
 	dimStyle := m.theme.TextDim()
 	if isSelected {
 		dimStyle = m.theme.TextAccent()
@@ -60,49 +60,30 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool,
 
 	statusStyle := m.theme.TextHighlight().Bold(true)
 
+	// Line 1: "Order #N" left, "$X.XX" right
 	orderLabel := nameStyle.Render(fmt.Sprintf("Order #%d", order.ID))
 	total := nameStyle.Render(fmt.Sprintf("$%.2f", float64(order.Total)/100.0))
-	date := dimStyle.Render(order.CreatedAt.Format("Jan 02 2006"))
-	status := statusStyle.Render(strings.ToUpper(string(order.Status)))
 
-	rightSide := date + "  " + status + "  " + total
-	rightWidth := lipgloss.Width(rightSide)
+	innerWidth := boxWidth - 4 // account for border + padding
 	leftWidth := lipgloss.Width(orderLabel)
-	spacing := boxWidth - leftWidth - rightWidth - 4 // 4 for padding
+	rightWidth := lipgloss.Width(total)
+	spacing := innerWidth - leftWidth - rightWidth
 	if spacing < 1 {
 		spacing = 1
 	}
+	line1 := orderLabel + lipgloss.NewStyle().Width(spacing).Render("") + total
 
-	line1 := orderLabel + lipgloss.NewStyle().Width(spacing).Render("") + rightSide
+	// Line 2: date + status
+	date := dimStyle.Render(order.CreatedAt.Format("Jan 02 2006"))
+	status := statusStyle.Render(strings.ToUpper(string(order.Status)))
+	line2 := date + "  " + status
 
-	// Item preview lines (show first 2 items)
-	var lines []string
-	lines = append(lines, line1)
+	boxContent := line1 + "\n" + line2
 
-	previewCount := 2
-	if len(order.Items) < previewCount {
-		previewCount = len(order.Items)
-	}
-	for i := 0; i < previewCount; i++ {
-		item := order.Items[i]
-		itemLine := dimStyle.Render(fmt.Sprintf("%dx %s - $%.2f", item.Quantity, item.Name, float64(item.Price)/100.0))
-		lines = append(lines, itemLine)
-	}
-	if len(order.Items) > 2 {
-		extra := len(order.Items) - 2
-		moreText := "item"
-		if extra > 1 {
-			moreText = "items"
-		}
-		lines = append(lines, dimStyle.Render(fmt.Sprintf("+ %d more %s", extra, moreText)))
-	}
-
-	boxContent := strings.Join(lines, "\n")
-
-	// Create bordered box — both use NormalBorder, differentiated by color only
+	// Fixed-height box: NormalBorder + PaddingLeft only (no vertical padding)
 	base := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
-		Padding(boxPadding, 2).
+		PaddingLeft(1).
 		Width(boxWidth)
 
 	var itemBox lipgloss.Style
@@ -116,7 +97,7 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool,
 }
 
 // buildOrderDetailView renders the full detail view for a single order
-func (m Model) buildOrderDetailView(order models.Order, width int) string {
+func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(1)
 
 	labelStyle := m.theme.TextHighlight().Bold(true)
