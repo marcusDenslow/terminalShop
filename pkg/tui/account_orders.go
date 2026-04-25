@@ -88,7 +88,7 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool)
 
 	var itemBox lipgloss.Style
 	if isSelected {
-		itemBox = base.BorderForeground(m.theme.Highlight())
+		itemBox = base.BorderForeground(lipgloss.Color("#4682B4")).Bold(true)
 	} else {
 		itemBox = base.BorderForeground(m.theme.Border())
 	}
