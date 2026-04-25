@@ -80,17 +80,17 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool)
 
 	boxContent := line1 + "\n" + line2
 
-	// Fixed-height box: PaddingLeft only (no vertical padding)
-	// Selected uses DoubleBorder for an unmistakable visual difference
+	// Styles must use theme.Base() (SSH renderer) — lipgloss.NewStyle()
+	// uses the default renderer which can't output colors over SSH
 	var itemBox lipgloss.Style
 	if isSelected {
-		itemBox = lipgloss.NewStyle().
-			Border(lipgloss.DoubleBorder()).
-			BorderForeground(lipgloss.Color("#4682B4")).
+		itemBox = m.theme.Base().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(m.theme.Highlight()).
 			PaddingLeft(1).
 			Width(boxWidth)
 	} else {
-		itemBox = lipgloss.NewStyle().
+		itemBox = m.theme.Base().
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(m.theme.Border()).
 			PaddingLeft(1).
