@@ -92,23 +92,35 @@ func (m Model) getAccountDetailContent() string {
 
 // scrollToAccountDetailItem adjusts the viewport scroll to keep the selected item visible.
 // Follows the reference pattern: cursor moves immediately, viewport catches up.
+//
+// Each sub-page has a title header (e.g. "Order History" + margin + newlines) that
+// pushes the first item down. headerOffset accounts for those lines. itemHeight
+// must match the actual rendered card height including borders, padding, and the
+// inter-card gap ("\n" between cards in the view function).
 func (m Model) scrollToAccountDetailItem() Model {
-	var itemHeight, itemCount, selectedIndex int
+	var itemHeight, itemCount, selectedIndex, headerOffset int
 
 	switch {
 	case m.account.orderViewState == 1:
-		itemHeight = 7
-		if m.heightContainer < 25 {
-			itemHeight = 5
+		// "Order History" + MarginBottom(2) + "\n\n" = ~5 header lines
+		headerOffset = 5
+		if m.heightContainer >= 25 {
+			// border(2) + vPadding(2) + content(~4) + gap(1) = 9
+			itemHeight = 9
+		} else {
+			// border(2) + content(~4) + gap(1) = 7
+			itemHeight = 7
 		}
 		itemCount = len(m.Orders)
 		selectedIndex = m.account.orderCursor
 	case m.account.addressListFocused:
-		itemHeight = 5
+		headerOffset = 5
+		itemHeight = 6
 		itemCount = len(m.SavedAddresses)
 		selectedIndex = m.account.addressCursor
 	case m.account.cardListFocused:
-		itemHeight = 4
+		headerOffset = 5
+		itemHeight = 5
 		itemCount = len(m.SavedCards)
 		selectedIndex = m.account.cardCursor
 	default:
@@ -119,13 +131,15 @@ func (m Model) scrollToAccountDetailItem() Model {
 		return m
 	}
 
-	targetY := (selectedIndex * itemHeight) + 2
+	targetY := headerOffset + (selectedIndex * itemHeight)
 	vpH := m.account.detailViewport.Height
 	offset := m.account.detailViewport.YOffset
 
+	// If item is above viewport, scroll up to show it
 	if targetY < offset {
-		m.account.detailViewport.SetYOffset(targetY - 2)
+		m.account.detailViewport.SetYOffset(targetY)
 	}
+	// If item is below viewport, scroll down to show it
 	if targetY+itemHeight > offset+vpH {
 		m.account.detailViewport.SetYOffset(targetY - vpH + itemHeight)
 	}

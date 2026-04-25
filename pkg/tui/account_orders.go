@@ -51,7 +51,12 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool,
 	// Order header line: "Order #123" left, "Jan 02 2026  PAID" right
 	nameStyle := m.theme.TextAccent().Bold(true)
 
+	// When selected, item preview text uses accent color instead of dim
+	// so the whole card "lights up" — much more visible than border color alone
 	dimStyle := m.theme.TextDim()
+	if isSelected {
+		dimStyle = m.theme.TextAccent()
+	}
 
 	statusStyle := m.theme.TextHighlight().Bold(true)
 
