@@ -219,21 +219,25 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case "up", "k":
 		// In order detail or FAQ, scroll the viewport directly
 		if m.account.orderViewState == 2 || m.account.faqFocused {
+			m.account.detailViewport.SetContent(m.getAccountDetailContent())
 			m.account.detailViewport.ScrollUp(3)
 			return m, nil
 		}
 		if m.account.addressListFocused && m.account.addressDeleting == nil {
 			if m.account.addressCursor > 0 {
 				m.account.addressCursor--
+				m.account.detailViewport.SetContent(m.getAccountDetailContent())
 				m = m.scrollToAccountDetailItem()
 			}
 		} else if m.account.cardListFocused && m.account.cardDeleting == nil {
 			if m.account.cardCursor > 0 {
 				m.account.cardCursor--
+				m.account.detailViewport.SetContent(m.getAccountDetailContent())
 				m = m.scrollToAccountDetailItem()
 			}
 		} else if m.account.orderViewState == 1 && m.account.orderCursor > 0 {
 			m.account.orderCursor--
+			m.account.detailViewport.SetContent(m.getAccountDetailContent())
 			m = m.scrollToAccountDetailItem()
 		} else if m.account.orderViewState == 0 && m.account.cursor > 0 {
 			m.account.cursor--
@@ -242,21 +246,25 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 
 	case "down", "j":
 		if m.account.orderViewState == 2 || m.account.faqFocused {
+			m.account.detailViewport.SetContent(m.getAccountDetailContent())
 			m.account.detailViewport.ScrollDown(3)
 			return m, nil
 		}
 		if m.account.addressListFocused && m.account.addressDeleting == nil {
 			if m.account.addressCursor < len(m.SavedAddresses)-1 {
 				m.account.addressCursor++
+				m.account.detailViewport.SetContent(m.getAccountDetailContent())
 				m = m.scrollToAccountDetailItem()
 			}
 		} else if m.account.cardListFocused && m.account.cardDeleting == nil {
 			if m.account.cardCursor < len(m.SavedCards)-1 {
 				m.account.cardCursor++
+				m.account.detailViewport.SetContent(m.getAccountDetailContent())
 				m = m.scrollToAccountDetailItem()
 			}
 		} else if m.account.orderViewState == 1 && m.account.orderCursor < len(m.Orders)-1 {
 			m.account.orderCursor++
+			m.account.detailViewport.SetContent(m.getAccountDetailContent())
 			m = m.scrollToAccountDetailItem()
 		} else if m.account.orderViewState == 0 && !m.account.addressListFocused && !m.account.cardListFocused && m.account.cursor < len(models.AccountMenuItems)-1 {
 			m.account.cursor++
@@ -264,7 +272,8 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 	case "pgup", "ctrl+u", "pgdown", "ctrl+d":
-		// Let viewport handle page scrolling directly
+		// Ensure viewport has content before delegating scroll
+		m.account.detailViewport.SetContent(m.getAccountDetailContent())
 		var cmd tea.Cmd
 		m.account.detailViewport, cmd = m.account.detailViewport.Update(msg)
 		return m, cmd
@@ -389,7 +398,8 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		} else if m.account.orderViewState > 0 {
 			m.account.orderViewState--
 			if m.account.orderViewState == 1 {
-				// Restore scroll position from before entering detail view
+				// Set content first so SetYOffset can clamp against correct line count
+				m.account.detailViewport.SetContent(m.getAccountDetailContent())
 				if m.account.orderYOffset > 0 {
 					m.account.detailViewport.SetYOffset(m.account.orderYOffset)
 					m.account.orderYOffset = 0
