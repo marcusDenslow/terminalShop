@@ -129,13 +129,13 @@ func (m Model) scrollToAccountDetailItem() Model {
 	vpH := m.account.detailViewport.Height
 	offset := m.account.detailViewport.YOffset
 
-	// If item is above viewport, scroll up to show it
-	if targetY < offset {
-		m.account.detailViewport.SetYOffset(targetY)
+	// 1-item buffer: scroll when the NEXT item would be off-screen,
+	// not when the current item hits the very edge
+	if targetY-itemHeight < offset {
+		m.account.detailViewport.SetYOffset(targetY - itemHeight)
 	}
-	// If item is below viewport, scroll down to show it
-	if targetY+itemHeight > offset+vpH {
-		m.account.detailViewport.SetYOffset(targetY - vpH + itemHeight)
+	if targetY+itemHeight+itemHeight > offset+vpH {
+		m.account.detailViewport.SetYOffset(targetY - vpH + itemHeight + itemHeight)
 	}
 
 	return m
