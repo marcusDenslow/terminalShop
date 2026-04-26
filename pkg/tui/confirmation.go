@@ -208,6 +208,8 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		if m.review.success {
 			m.review.success = false
 			m.review.cardJustAdded = false
+			m.shipping.form = nil
+			m.payment.form = nil
 			m, _ = m.ShopSwitch()
 			return m, func() tea.Msg {
 				if m.APIClient != nil {
