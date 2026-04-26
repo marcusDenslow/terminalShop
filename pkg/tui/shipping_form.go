@@ -384,6 +384,8 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.ErrorMsg = "Invalid address. Currently only US and Norwegian addresses are supported."
 			return m, m.shipping.form.form.Init()
 		}
+		saved := msg.Address
+		m.ShippingInfo = &saved
 		return m.PaymentSwitch()
 
 	case ShippingFormErrorMsg:
