@@ -386,6 +386,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		saved := msg.Address
 		m.ShippingInfo = &saved
+		m.SavedAddresses = append(m.SavedAddresses, saved)
 		return m.PaymentSwitch()
 
 	case ShippingFormErrorMsg:
