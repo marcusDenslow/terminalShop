@@ -248,6 +248,13 @@ func (h *CardHandler) SaveCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// remove existing local card with the same last4 + brand + expiry
+	var existingCard models.Card
+	if err := db.Where("user_id = ? AND last4 = ? AND brand = ? AND exp_month = ? AND exp_year = ?",
+		user.ID, pm.Card.Last4, string(pm.Card.Brand), pm.Card.ExpMonth, pm.Card.ExpYear).First(&existingCard).Error; err == nil {
+		db.Delete(&existingCard)
+	}
+
 	// Persist only the safe card metadata — no raw card data is stored.
 	card := models.Card{
 		UserID:          user.ID,

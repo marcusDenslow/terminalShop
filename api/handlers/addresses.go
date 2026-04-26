@@ -141,6 +141,12 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// remove existing addres with the same street addres
+	var existing models.Address
+	if err := db.Where("user_id = ? AND street = ?", userID, address.Street).First(&existing).Error; err == nil {
+		db.Delete(&existing)
+	}
+
 	if err := db.Create(&address).Error; err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to create address", nil)
 		return
