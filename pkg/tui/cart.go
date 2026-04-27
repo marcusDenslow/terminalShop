@@ -86,29 +86,14 @@ func (m Model) generateCartContent() string {
 
 		boxContent := contentLine1 + "\n" + contentLine2
 
-		var itemBox lipgloss.Style
-		if idx == m.cart.cursor {
-			itemBox = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder(), true).
-				BorderForeground(m.theme.Accent()).
-				Padding(boxPadding, 2).
-				Width(boxWidth).
-				Foreground(m.theme.Accent()).
-				Bold(true)
+		isSelected := idx == m.cart.cursor
+		if isSelected {
+			boxContent = m.theme.TextAccent().Bold(true).Render(boxContent)
 		} else {
-			itemBox = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(m.theme.Border()).
-				Padding(boxPadding, 2).
-				Width(boxWidth).
-				Foreground(m.theme.Accent())
+			boxContent = m.theme.TextAccent().Render(boxContent)
 		}
-
-		centered := lipgloss.NewStyle().
-			Width(m.widthContent).
-			Align(lipgloss.Center)
-
-		cartItems += centered.Render(itemBox.Render(boxContent))
+		box := m.createBoxInner(boxContent, isSelected, lipgloss.Left, 2, boxPadding, boxWidth)
+		cartItems += m.theme.Base().Width(m.widthContent).Align(lipgloss.Center).Render(box)
 
 		if idx < len(itemSlice)-1 {
 			cartItems += "\n"

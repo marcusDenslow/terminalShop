@@ -83,24 +83,7 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool)
 
 	boxContent := line1 + "\n" + line2
 
-	// Styles must use theme.Base() (SSH renderer) — lipgloss.NewStyle()
-	// uses the default renderer which can't output colors over SSH
-	var itemBox lipgloss.Style
-	if isSelected {
-		itemBox = m.theme.Base().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(m.theme.Highlight()).
-			PaddingLeft(1).
-			Width(boxWidth)
-	} else {
-		itemBox = m.theme.Base().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(m.theme.Border()).
-			PaddingLeft(1).
-			Width(boxWidth)
-	}
-
-	return itemBox.Render(boxContent)
+	return m.CreateBoxCustom(boxContent, isSelected, boxWidth)
 }
 
 // buildOrderDetailView renders the full detail view for a single order
