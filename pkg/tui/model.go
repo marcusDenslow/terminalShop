@@ -58,6 +58,13 @@ type footerCommand struct {
 	value string
 }
 
+// VisibleError is a typed error message displayed to the user as a banner.
+// Using a struct instead of a plain string lets the Update loop catch raw
+// errors and convert them, and lets ESC dismiss the banner.
+type VisibleError struct {
+	message string
+}
+
 type Model struct {
 	// User authentication
 	User               *models.User
@@ -102,7 +109,7 @@ type Model struct {
 	pendingHeight int // buffered height from latest resize
 
 	Loading   bool   // true when fetching data from API
-	ErrorMsg  string // error message if API fetch fails
+	error     *VisibleError
 	APIClient *api.Client
 
 	// Rendering
@@ -206,7 +213,7 @@ var modifiedKeyMap = viewport.KeyMap{
 func (m Model) SwitchPage(p page) Model {
 	m.currentPage = p
 	m.switched = true
-	m.ErrorMsg = ""
+	m.error = nil
 	return m
 }
 

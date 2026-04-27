@@ -49,6 +49,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case VisibleError:
+		m.error = &msg
+		return m, nil
+	case error:
+		m.error = &VisibleError{message: msg.Error()}
+		if m.currentPage == shopPage || m.currentPage == cartPage {
+			return m, m.fetchCartCmd
+		}
+		return m, nil
 	case tea.WindowSizeMsg:
 		m.pendingWidth = msg.Width
 		m.pendingHeight = msg.Height
@@ -59,7 +68,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 	case SplashAuthMsg:
 		if msg.Err != nil {
-			m.ErrorMsg = fmt.Sprintf("authentication failed: %v", msg.Err)
+			m.error = &VisibleError{message: fmt.Sprintf("authentication failed: %v", msg.Err)}
 			// Still attempt to load view data (products may not require auth)
 			// so the splash screen doesn't get permanently stuck.
 			return m, m.splashViewInitCmd
@@ -125,12 +134,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case AddressDeletedMsg:
 		if msg.Err != nil {
-			m.ErrorMsg = fmt.Sprintf("failed to delete address: %v", msg.Err)
+			m.error = &VisibleError{message: fmt.Sprintf("failed to delete address: %v", msg.Err)}
 		}
 		return m, nil
 	case CardDeletedMsg:
 		if msg.Err != nil {
-			m.ErrorMsg = fmt.Sprintf("failed to delete card: %v", msg.Err)
+			m.error = &VisibleError{message: fmt.Sprintf("failed to delete card: %v", msg.Err)}
 		}
 		return m, nil
 	case DelayCompleteMsg:
@@ -148,6 +157,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If a form is active, skip global keys — let the page handler own input
 		if m.shipping.form != nil || m.payment.form != nil {
 			break
+		}
+		// Dismiss error banner with ESC
+		if msg.String() == "esc" && m.error != nil {
+			m.error = nil
+			return m, nil
 		}
 		// Global navigation
 		switch msg.String() {

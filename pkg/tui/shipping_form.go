@@ -304,45 +304,30 @@ func (m Model) ShippingPageView() string {
 
 func (m Model) RenderAddressList() string {
 	titleStyle := m.theme.TextAccent().Bold(true).Padding(0, 0, 1, 0)
-	activeStyle := m.theme.TextAccent().Bold(true)
-	inactiveStyle := m.theme.TextDim()
-	labelStyle := m.theme.TextLabel()
 
 	title := titleStyle.Render("Selected Shipping Address")
 
-	var lines []string
+	var boxes []string
 	for i, addr := range m.SavedAddresses {
-		cursor := "  "
-		style := inactiveStyle
-		if i == m.shipping.addressCursor {
-			cursor = "> "
-			style = activeStyle
-		}
+		focused := i == m.shipping.addressCursor
 
-		name := style.Render(addr.Name)
-		street := labelStyle.Render(addr.Street)
+		street := addr.Street
 		if addr.Street2 != "" {
-			street += ", " + labelStyle.Render(addr.Street2)
+			street += ", " + addr.Street2
 		}
-		city := labelStyle.Render(fmt.Sprintf("%s, %s %s", addr.City, addr.Country, addr.Zip))
+		city := fmt.Sprintf("%s, %s %s", addr.City, addr.Country, addr.Zip)
+		content := addr.Name + "\n" + street + "\n" + city
 
-		lines = append(lines, cursor+name)
-		lines = append(lines, "  "+street)
-		lines = append(lines, "  "+city)
-		lines = append(lines, "")
+		box := m.CreateBox(m.formatListItem(content, focused), focused)
+		boxes = append(boxes, box)
 	}
 
-	addCursor := "  "
-	addStyle := inactiveStyle
-	if m.shipping.addressCursor == len(m.SavedAddresses) {
-		addCursor = "> "
-		addStyle = activeStyle
-	}
-
-	lines = append(lines, addCursor+addStyle.Render("+ Add new address"))
+	addFocused := m.shipping.addressCursor == len(m.SavedAddresses)
+	addBox := m.CreateBox(m.formatListItem("+ Add new address", addFocused), addFocused)
+	boxes = append(boxes, addBox)
 
 	parts := []string{title}
-	parts = append(parts, strings.Join(lines, "\n"))
+	parts = append(parts, lipgloss.JoinVertical(lipgloss.Left, boxes...))
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
@@ -381,7 +366,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.shipping.form.submitting = false
 				m.shipping.form.form = m.buildShippingForm(m.shipping.form)
 			}
-			m.ErrorMsg = "Invalid address. Currently only US and Norwegian addresses are supported."
+			m.error = &VisibleError{message: "Invalid address. Currently only US and Norwegian addresses are supported."}
 			return m, m.shipping.form.form.Init()
 		}
 		saved := msg.Address
@@ -390,7 +375,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		return m.PaymentSwitch()
 
 	case ShippingFormErrorMsg:
-		m.ErrorMsg = msg.Message
+		m.error = &VisibleError{message: msg.Message}
 		return m, nil
 	}
 
@@ -400,7 +385,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		m.ErrorMsg = ""
+		m.error = nil
 		switch keyMsg.String() {
 		case "esc":
 			return m.CartSwitch()
@@ -453,7 +438,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	if m.shipping.form != nil {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if keyMsg.String() == "esc" {
-				m.ErrorMsg = ""
+				m.error = nil
 				if len(m.SavedAddresses) > 0 {
 					m.shipping.view = 0
 					m.shipping.form = nil
@@ -470,7 +455,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				return m, cmd
 			}
 			// Clear error only when user starts typing, not on internal huh messages
-			m.ErrorMsg = ""
+			m.error = nil
 		}
 		return m, m.UpdateShippingForm(msg, m.shipping.form)
 	}

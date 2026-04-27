@@ -73,9 +73,9 @@ func (m Model) View() string {
 	if m.Loading {
 		loadingStyle := m.theme.TextLoading().Padding(2, 4)
 		content = loadingStyle.Render("Loading products from API...")
-	} else if m.ErrorMsg != "" {
+	} else if m.error != nil {
 		errorStyle := m.theme.PanelError().Padding(0, 1).MarginBottom(1)
-		errorBanner := errorStyle.Render(m.ErrorMsg)
+		errorBanner := errorStyle.Render(m.error.message)
 		content = errorBanner + "\n" + m.buildPageContent(availableContentHeight)
 	} else {
 		content = m.buildPageContent(availableContentHeight)

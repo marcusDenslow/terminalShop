@@ -332,48 +332,32 @@ func (m Model) PaymentPageView() string {
 
 func (m Model) RenderCardList() string {
 	titleStyle := m.theme.TextAccent().Bold(true).Padding(0, 0, 1, 0)
-	activeStyle := m.theme.TextAccent().Bold(true)
-	inactiveStyle := m.theme.TextDim()
-	labelStyle := m.theme.TextLabel()
 
 	title := titleStyle.Render("Select Payment Method")
 
-	var lines []string
+	var boxes []string
 	for i, card := range m.SavedCards {
-		cursor := "  "
-		style := inactiveStyle
-		if i == m.payment.cardCursor {
-			cursor = "> "
-			style = activeStyle
-		}
+		focused := i == m.payment.cardCursor
 
-		brand := style.Render(strings.ToUpper(card.Brand[:1]) + card.Brand[1:])
-		last4 := labelStyle.Render(fmt.Sprintf("**** **** **** %s", card.Last4))
-		exp := labelStyle.Render(fmt.Sprintf("Expires %02d/%02d", card.ExpMonth, card.ExpYear%100))
+		brand := strings.ToUpper(card.Brand[:1]) + card.Brand[1:]
+		last4 := fmt.Sprintf("**** **** **** %s", card.Last4)
+		exp := fmt.Sprintf("Expires %02d/%02d", card.ExpMonth, card.ExpYear%100)
+		content := brand + " " + last4 + "\n" + exp
 
-		lines = append(lines, cursor+brand+" "+last4)
-		lines = append(lines, "  "+exp)
-		lines = append(lines, "")
+		box := m.CreateBox(m.formatListItem(content, focused), focused)
+		boxes = append(boxes, box)
 	}
 
-	sshCursor := "  "
-	sshStyle := inactiveStyle
-	if m.payment.cardCursor == len(m.SavedCards) {
-		sshCursor = "> "
-		sshStyle = activeStyle
-	}
-	lines = append(lines, sshCursor+sshStyle.Render("+ add card via ssh"))
+	sshFocused := m.payment.cardCursor == len(m.SavedCards)
+	sshBox := m.CreateBox(m.formatListItem("+ add card via ssh", sshFocused), sshFocused)
+	boxes = append(boxes, sshBox)
 
-	httpsCursor := "  "
-	httpsStyle := inactiveStyle
-	if m.payment.cardCursor == len(m.SavedCards)+1 {
-		httpsCursor = "> "
-		httpsStyle = activeStyle
-	}
-	lines = append(lines, httpsCursor+httpsStyle.Render("+ add payment via browser"))
+	httpsFocused := m.payment.cardCursor == len(m.SavedCards)+1
+	httpsBox := m.CreateBox(m.formatListItem("+ add payment via browser", httpsFocused), httpsFocused)
+	boxes = append(boxes, httpsBox)
 
 	parts := []string{title}
-	parts = append(parts, strings.Join(lines, "\n"))
+	parts = append(parts, lipgloss.JoinVertical(lipgloss.Left, boxes...))
 
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
@@ -423,7 +407,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case PaymentFormErrorMsg:
-		m.ErrorMsg = msg.Message
+		m.error = &VisibleError{message: msg.Message}
 		return m, nil
 
 	case CardSavedForReviewMsg:
@@ -431,7 +415,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.payment.form.submitting = false
 		}
 		if msg.Err != nil {
-			m.ErrorMsg = fmt.Sprintf("failed to save card: %v", msg.Err)
+			m.error = &VisibleError{message: fmt.Sprintf("failed to save card: %v", msg.Err)}
 			m.payment.view = 1
 			m.payment.form = m.InitPaymentForm()
 			m.footer = []footerCommand{
@@ -478,7 +462,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		if !ok || m.CheckingOut {
 			return m, nil
 		}
-		m.ErrorMsg = ""
+		m.error = nil
 		switch keyMsg.String() {
 		case "esc":
 			return m.ShippingSwitch()
@@ -559,7 +543,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	if m.payment.form != nil {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if keyMsg.String() == "esc" {
-				m.ErrorMsg = ""
+				m.error = nil
 				if len(m.SavedCards) > 0 {
 					m.payment.view = 0
 					m.payment.form = nil
@@ -576,7 +560,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				return m, m.fetchAddressesCmd()
 			}
 			// Clear error only when user starts typing, not on internal huh messages
-			m.ErrorMsg = ""
+			m.error = nil
 		}
 		return m, m.UpdatePaymentForm(msg, m.payment.form)
 	}

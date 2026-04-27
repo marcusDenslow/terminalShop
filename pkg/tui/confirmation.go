@@ -188,7 +188,7 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.CheckingOut = false
 		if msg.Err != nil {
 			m = m.SwitchPage(paymentPage)
-			m.ErrorMsg = fmt.Sprintf("checkout failed: %v", msg.Err)
+			m.error = &VisibleError{message: fmt.Sprintf("checkout failed: %v", msg.Err)}
 			m.review.cardJustAdded = false
 			m.payment.view = 0
 			m.payment.form = nil
