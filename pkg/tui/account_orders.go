@@ -50,9 +50,9 @@ func (m Model) OrdersView(width int) string {
 // Shows order number + total on line 1, date + status on line 2.
 // Item details are shown in the detail view (viewState 2).
 func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool) string {
-	nameStyle := m.theme.TextAccent()
+	nameStyle := m.theme.TextDim()
 	if isSelected {
-		nameStyle = nameStyle.Bold(true)
+		nameStyle = m.theme.TextAccent().Bold(true)
 	}
 
 	// When selected, secondary text uses accent color so the whole card "lights up"
