@@ -90,7 +90,7 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool)
 			PaddingLeft(1).
 			Width(boxWidth)
 	} else {
-		itemBox = m.theme.Base().
+		itemBox = m.theme.TextDim().
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(m.theme.Border()).
 			PaddingLeft(1).
