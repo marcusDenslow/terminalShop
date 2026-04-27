@@ -7,8 +7,6 @@ import (
 func (m Model) CardsView(width int) string {
 	titleSTyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
 	contentStyle := m.theme.TextBody().Width(width)
-	activeStyle := m.theme.TextAccent().Bold(true)
-
 
 	lines := titleSTyle.Render("Cards") + "\n\n"
 	if m.SavedCardsIsEmpty() {
@@ -19,10 +17,8 @@ func (m Model) CardsView(width int) string {
 			label := fmt.Sprintf("**** **** **** %s  %s  exp %02d/%02d", card.Last4, card.Brand, card.ExpMonth, card.ExpYear%100)
 			if m.account.cardDeleting != nil && *m.account.cardDeleting == i {
 				lines += m.theme.TextError().Bold(true).Render(" delete? (y/s)") + "\n"
-			} else if isSelected {
-				lines += activeStyle.Render("> "+label) + "\n"
 			} else {
-				lines += contentStyle.Render(" "+label) + "\n"
+				lines += m.formatListItemCustom(label, isSelected, width, true) + "\n"
 			}
 		}
 	}
