@@ -186,7 +186,8 @@ func (m Model) BuildAccountView(availableHeight int) string {
 func (m Model) AboutView(width int) string {
 	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
 	contentStyle := m.theme.TextBody().Width(width)
-	accentStyle := m.theme.TextHighlight().Bold(true)
+	// USE this if wanting to add a corp name later
+	// accentStyle := m.theme.TextHighlight().Bold(true)
 	userStyle := m.theme.TextAccent().Bold(true)
 
 	aboutContent := contentStyle.Render(wordWrap(
@@ -204,7 +205,6 @@ func (m Model) AboutView(width int) string {
 		"This project tries to copy the idea of terminalDotShop, but with one twist: write everything in GO. this is my humble attempt",
 		width,
 	)) + "\n"
-	aboutContent += accentStyle.Render("Terminal Products, Inc.")
 
 	return titleStyle.Render("About") + "\n\n" + aboutContent
 }
