@@ -29,6 +29,7 @@ func SetupRoutes(
 	r.Use(middleware.Logger)
 	r.Use(middleware.CORS())
 	r.Use(middleware.Recovery)
+	r.Use(middleware.Metrics)
 	r.Use(middleware.Auth(jwtManager))
 	// Broad IP-level rate limit: 200 req/min per IP across all endpoints.
 	r.Use(middleware.RateLimitByIP(200, time.Minute))
@@ -50,6 +51,7 @@ func SetupRoutes(
 		w.Header().Set("Content-Type", "text/html")
 		w.Write([]byte(`<!DOCTYPE html><html><body style="font-family:monospace;text-align:center;padding:4rem"><h2>Card added.</h2><p>You can close this tab.</p></body></html>`))
 	})
+	r.Handle("/metrics", middleware.MetricsHandler())
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Health — accept HEAD for cheap probes from monitoring tools.
