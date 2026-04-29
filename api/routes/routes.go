@@ -52,9 +52,11 @@ func SetupRoutes(
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Health
+		// Health — accept HEAD for cheap probes from monitoring tools.
 		r.Get("/health", healthHandler.GetHealth)
+		r.Head("/health", healthHandler.GetHealth)
 		r.Get("/ping", healthHandler.Ping)
+		r.Head("/ping", healthHandler.Ping)
 
 		// Stripe webhooks — unauthenticated, verified via HMAC signature.
 		// Apply a generous IP rate limit here (Stripe retries from many IPs).
