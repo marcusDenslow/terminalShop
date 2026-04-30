@@ -4,6 +4,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 // responseWriter wraps http.ResponseWriter to capture status code
@@ -29,14 +31,21 @@ func Logger(next http.Handler) http.Handler {
 		wrapped := newResponseWriter(w)
 		next.ServeHTTP(wrapped, r)
 
+		sc := trace.SpanContextFromContext(r.Context())
+		tid := ""
+		if sc.HasTraceID() {
+			tid = sc.TraceID().String()
+		}
+
 		duration := time.Since(start)
 
 		log.Printf(
-			"%s %s %d %s",
+			"%s %s %d %s trace_id=%s",
 			r.Method,
 			r.RequestURI,
 			wrapped.statusCode,
 			duration,
+			tid,
 		)
 	})
 }
