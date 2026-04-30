@@ -10,6 +10,8 @@ import (
 	"github.com/stripe/stripe-go/v78/paymentmethod"
 	"gorm.io/gorm"
 
+	"go.opentelemetry.io/otel"
+
 	"terminalShop/api/middleware"
 	"terminalShop/pkg/audit"
 	"terminalShop/pkg/database"
@@ -242,6 +244,10 @@ func (h *CartHandler) ClearCart(w http.ResponseWriter, r *http.Request) {
 func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB()
 	userID := middleware.UserIDFromContext(r.Context())
+
+	ctx, span := otel.Tracer("api").Start(r.Context(), "cart.convert")
+	defer span.End()
+	r = r.WithContext(ctx)
 
 	cart, err := getOrCreateCart(userID)
 	if err != nil {

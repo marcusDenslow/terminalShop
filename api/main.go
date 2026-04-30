@@ -15,6 +15,7 @@ import (
 	"terminalShop/pkg/auth"
 	"terminalShop/pkg/config"
 	"terminalShop/pkg/database"
+	"terminalShop/pkg/observability"
 )
 
 const version = "v0.1.0"
@@ -43,6 +44,17 @@ func main() {
 	// Seed database with initial data
 	if err := database.Seed(db); err != nil {
 		log.Fatalf("Failed to seed database: %v", err)
+	}
+
+	otlpEndpoint := os.Getenv("OTLP_ENDPOINT")
+	if otlpEndpoint == "" {
+		otlpEndpoint = "tempo:4318"
+	}
+	shutdown, err := observability.InitTracing(context.Background(), "terminalshop-api", otlpEndpoint)
+	if err != nil {
+		log.Printf("tracing init failed (non-fatal): %v", err)
+	} else {
+		defer shutdown(context.Background())
 	}
 
 	// Init JWT manager (same secret + duration as SSH server)

@@ -9,6 +9,8 @@ import (
 	"terminalShop/api/handlers"
 	"terminalShop/api/middleware"
 	"terminalShop/pkg/auth"
+
+	"github.com/riandyrn/otelchi"
 )
 
 // SetupRoutes configures all API routes
@@ -25,7 +27,9 @@ func SetupRoutes(
 ) *chi.Mux {
 	r := chi.NewRouter()
 
+
 	// Global middleware
+	r.Use(otelchi.Middleware("terminalshop-api", otelchi.WithChiRoutes(r)))
 	r.Use(middleware.Logger)
 	r.Use(middleware.CORS())
 	r.Use(middleware.Recovery)
