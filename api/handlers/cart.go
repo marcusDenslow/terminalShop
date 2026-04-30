@@ -453,6 +453,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.OrderPaid(userID, order.ID, total, pi.ID)
+	middleware.RecordOrderCreated(string(order.Status))
 
 	if err := db.Preload("Items").First(&order, order.ID).Error; err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to preload items", nil)
