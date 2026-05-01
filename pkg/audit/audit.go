@@ -1,12 +1,10 @@
-// Package audit writes structured JSON logs for financial events.
+// Package audit writes structured logs for financial events.
 // Every card addition, order creation, payment, and refund is recorded here.
 // Pipe this output to your log aggregator (Datadog, Loki, CloudWatch, etc.).
 package audit
 
 import (
-	"encoding/json"
-	"log"
-	"time"
+	"log/slog"
 )
 
 type eventType string
@@ -22,103 +20,117 @@ const (
 )
 
 type event struct {
-	Time      time.Time         `json:"time"`
-	Event     eventType         `json:"event"`
-	UserID    uint              `json:"user_id,omitempty"`
-	OrderID   uint              `json:"order_id,omitempty"`
-	CardID    uint              `json:"card_id,omitempty"`
-	Amount    int               `json:"amount_cents,omitempty"`
-	StripeID  string            `json:"stripe_id,omitempty"`
-	CardLast4 string            `json:"card_last4,omitempty"`
-	CardBrand string            `json:"card_brand,omitempty"`
-	Error     string            `json:"error,omitempty"`
-	Extra     map[string]string `json:"extra,omitempty"`
+	Event     eventType
+	UserID    uint
+	OrderID   uint
+	CardID    uint
+	Amount    int
+	StripeID  string
+	CardLast4 string
+	CardBrand string
+	Error     string
 }
 
-func emit(e event) {
-	e.Time = time.Now().UTC()
-	b, err := json.Marshal(e)
-	if err != nil {
-		log.Printf("[audit] failed to marshal event: %v", err)
-		return
+func (e event) attrs() []any {
+	a := []any{"event", string(e.Event)}
+	if e.UserID != 0 {
+		a = append(a, "user_id", e.UserID)
 	}
-	log.Printf("[AUDIT] %s", b)
+	if e.OrderID != 0 {
+		a = append(a, "order_id", e.OrderID)
+	}
+	if e.CardID != 0 {
+		a = append(a, "card_id", e.CardID)
+	}
+	if e.Amount != 0 {
+		a = append(a, "amount_cents", e.Amount)
+	}
+	if e.StripeID != "" {
+		a = append(a, "stripe_id", e.StripeID)
+	}
+	if e.CardLast4 != "" {
+		a = append(a, "card_last4", e.CardLast4)
+	}
+	if e.CardBrand != "" {
+		a = append(a, "card_brand", e.CardBrand)
+	}
+	if e.Error != "" {
+		a = append(a, "error", e.Error)
+	}
+	return a
 }
 
 // CardAdded records that a user saved a new payment method.
 func CardAdded(userID, cardID uint, brand, last4 string) {
-	emit(event{
+	slog.Info("audit", event{
 		Event:     eventCardAdded,
 		UserID:    userID,
 		CardID:    cardID,
 		CardBrand: brand,
 		CardLast4: last4,
-	})
+	}.attrs()...)
 }
 
 // CardDeleted records that a user removed a saved payment method.
 func CardDeleted(userID, cardID uint) {
-	emit(event{
+	slog.Info("audit", event{
 		Event:  eventCardDeleted,
 		UserID: userID,
 		CardID: cardID,
-	})
+	}.attrs()...)
 }
 
 // OrderCreated records that an order record was created (before payment).
 func OrderCreated(userID, orderID uint, amountCents int) {
-	emit(event{
+	slog.Info("audit", event{
 		Event:   eventOrderCreated,
 		UserID:  userID,
 		OrderID: orderID,
 		Amount:  amountCents,
-	})
+	}.attrs()...)
 }
 
 // OrderPaid records a successful charge.
 func OrderPaid(userID, orderID uint, amountCents int, stripePaymentIntentID string) {
-	emit(event{
+	slog.Info("audit", event{
 		Event:    eventOrderPaid,
 		UserID:   userID,
 		OrderID:  orderID,
 		Amount:   amountCents,
 		StripeID: stripePaymentIntentID,
-	})
+	}.attrs()...)
 }
 
-// OrderFailed records a failed charge attempt.
+// OrderFailed records a failed charge attempt. Logged at WARN.
 func OrderFailed(userID, orderID uint, amountCents int, reason string) {
-	emit(event{
+	slog.Warn("audit", event{
 		Event:   eventOrderFailed,
 		UserID:  userID,
 		OrderID: orderID,
 		Amount:  amountCents,
 		Error:   reason,
-	})
+	}.attrs()...)
 }
 
 // OrderRefunded records a refund.
 func OrderRefunded(userID, orderID uint, amountCents int, stripeRefundID string) {
-	emit(event{
+	slog.Info("audit", event{
 		Event:    eventOrderRefunded,
 		UserID:   userID,
 		OrderID:  orderID,
 		Amount:   amountCents,
 		StripeID: stripeRefundID,
-	})
+	}.attrs()...)
 }
 
 // PaymentCritical records the dangerous state where Stripe charged the card
 // but the local database transaction failed. This MUST be investigated and
-// manually reconciled. Emit a loud log line that monitoring can alert on.
+// manually reconciled. Logged at ERROR so monitoring can alert on it.
 func PaymentCritical(orderID uint, stripePaymentIntentID string, err error) {
-	emit(event{
+	slog.Error("audit", event{
 		Event:    eventPaymentCritical,
 		OrderID:  orderID,
 		StripeID: stripePaymentIntentID,
 		Error:    err.Error(),
-	})
-	// Second line so it's impossible to miss in plain-text log tails.
-	log.Printf("[AUDIT][CRITICAL] order %d was charged (pi=%s) but DB commit failed: %v — REQUIRES MANUAL RECONCILIATION",
-		orderID, stripePaymentIntentID, err)
+	}.attrs()...)
 }
