@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -15,6 +15,8 @@ import (
 	"terminalShop/pkg/shippo"
 	"terminalShop/pkg/utils"
 )
+
+var addressLog = slog.With("component", "address")
 
 type AddressHandler struct {
 	shippoKey   string
@@ -91,7 +93,7 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 			Phone:   req.Phone,
 		})
 		if err != nil {
-			log.Printf("shippo address validation failed: %v", err)
+			addressLog.Warn("shippo address validation failed", "error", err, "country", "US")
 			utils.RespondError(w, http.StatusBadRequest, "INVALID_ADDRESS", "address is invalid", nil)
 			return
 		}
@@ -122,7 +124,7 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 			Phone:   req.Phone,
 		})
 		if err != nil {
-			log.Printf("bring address validation failed: %v", err)
+			addressLog.Warn("bring address validation failed", "error", err, "country", "NO")
 			utils.RespondError(w, http.StatusBadRequest, "INVALID_ADDRESS", "address is invalid", nil)
 			return
 		}
