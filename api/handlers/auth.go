@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"terminalShop/api/middleware"
 	"terminalShop/pkg/auth"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
@@ -46,18 +47,21 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 
 	var req TokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		middleware.RecordAuthAttempt("invalid_json")
 		utils.RespondError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body", nil)
 		return
 	}
 
 	// validate shared secret
 	if req.ClientSecret != h.authFingerprintKey {
+		middleware.RecordAuthAttempt("invalid_secret")
 		utils.RespondError(w, http.StatusUnauthorized, "INVALID_SECRET", "invalid client secret", nil)
 		return
 	}
 
 	// Return if no fingerprint is found
 	if req.Fingerprint == "" {
+		middleware.RecordAuthAttempt("missing_fingerprint")
 		utils.RespondError(w, http.StatusBadRequest, "MISSING_FINGERPRINT", "fingerprint is required", nil)
 		return
 	}
@@ -67,6 +71,7 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	err := db.Where("ssh_key_fingerprint = ?", req.Fingerprint).First(&user).Error
 	if err == gorm.ErrRecordNotFound {
 		if req.SSHPublicKey == "" {
+			middleware.RecordAuthAttempt("user_not_found")
 			utils.RespondError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "no user found for this fingerprint", nil)
 			return
 		}
@@ -75,20 +80,25 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 			SSHPublicKey:      req.SSHPublicKey,
 		}
 		if err := db.Create(&user).Error; err != nil {
+			middleware.RecordAuthAttempt("error")
 			utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to create user", nil)
 			return
 		}
+		middleware.RecordAuthAttempt("registered")
 	} else if err != nil {
+		middleware.RecordAuthAttempt("error")
 		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to look up user", nil)
 		return
 	}
 
 	token, err := h.jwtManager.GenerateToken(user.ID, user.Email, user.Name)
 	if err != nil {
+		middleware.RecordAuthAttempt("error")
 		utils.RespondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "failed to generate token", nil)
 		return
 	}
 
+	middleware.RecordAuthAttempt("success")
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"access_token": token,
 		"token_type":   "Bearer",

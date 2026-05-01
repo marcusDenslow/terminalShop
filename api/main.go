@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"terminalShop/api/handlers"
+	"terminalShop/api/middleware"
 	"terminalShop/api/routes"
 	"terminalShop/pkg/auth"
 	"terminalShop/pkg/config"
@@ -21,6 +22,9 @@ import (
 const version = "v0.1.0"
 
 func main() {
+	observability.InitLogger()
+	middleware.SetBuildInfo(version)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// Load configuration

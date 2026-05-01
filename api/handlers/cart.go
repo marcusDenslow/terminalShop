@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/stripe/stripe-go/v78"
 	"github.com/stripe/stripe-go/v78/paymentintent"
@@ -251,6 +252,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	cart, err := getOrCreateCart(userID)
 	if err != nil {
+		middleware.RecordCartConversion("cart_lookup_failed")
 		utils.RespondError(w, http.StatusInternalServerError, "CART_ERROR", "failed to get cart", nil)
 		return
 	}
@@ -259,34 +261,40 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	db.Where("cart_id = ? AND quantity > 0", cart.ID).Preload("Coffee").Find(&items)
 
 	if len(items) == 0 {
+		middleware.RecordCartConversion("validation_empty_cart")
 		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "cart is empty", nil)
 		return
 	}
 
 	if cart.AddressID == nil {
+		middleware.RecordCartConversion("validation_missing_address")
 		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "shipping address is required", nil)
 		return
 	}
 
 	if cart.CardID == nil {
+		middleware.RecordCartConversion("validation_missing_card")
 		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "payment card is required", nil)
 		return
 	}
 
 	var address models.Address
 	if err := db.First(&address, *cart.AddressID).Error; err != nil {
+		middleware.RecordCartConversion("validation_invalid_address")
 		utils.RespondError(w, http.StatusBadRequest, "INVALID_ADDRESS", "shipping address not found", nil)
 		return
 	}
 
 	var card models.Card
 	if err := db.First(&card, *cart.CardID).Error; err != nil {
+		middleware.RecordCartConversion("validation_invalid_card")
 		utils.RespondError(w, http.StatusBadRequest, "INVALID_CARD", "payment card not found", nil)
 		return
 	}
 
 	var user models.User
 	if err := db.First(&user, userID).Error; err != nil {
+		middleware.RecordCartConversion("user_not_found")
 		utils.RespondError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found", nil)
 		return
 	}
@@ -295,6 +303,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	// Ensure the user has a Stripe customer (shared helper with cards handler).
 	if err := ensureStripeCustomer(db, &user); err != nil {
+		middleware.RecordCartConversion("stripe_customer_failed")
 		utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create stripe customer", nil)
 		return
 	}
@@ -343,6 +352,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	total := subtotal + cart.ShippingCost
 
 	if total < 50 {
+		middleware.RecordCartConversion("validation_min_amount")
 		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "order total must be at least $0.50", nil)
 		return
 	}
@@ -369,6 +379,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := db.Create(&order).Error; err != nil {
+		middleware.RecordCartConversion("db_create_order_failed")
 		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to create order", nil)
 		return
 	}
@@ -405,27 +416,35 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		"order_id": fmt.Sprintf("%d", order.ID),
 	}
 
+	stripeStart := time.Now()
 	pi, err := paymentintent.New(piParams)
+	stripeDur := time.Since(stripeStart).Seconds()
 	if err != nil {
+		middleware.ObserveStripeRequest("payment_intent_create", "error", stripeDur)
 		db.Model(&order).Update("status", models.OrderStatusFailed)
 		if stripeErr, ok := err.(*stripe.Error); ok {
 			switch stripeErr.Type {
 			case stripe.ErrorTypeCard:
+				middleware.RecordCartConversion("card_declined")
 				audit.OrderFailed(userID, order.ID, total, stripeErr.Msg)
 				utils.RespondError(w, http.StatusPaymentRequired, "CARD_DECLINED", stripeErr.Msg, nil)
 			case stripe.ErrorTypeInvalidRequest:
+				middleware.RecordCartConversion("stripe_invalid_request")
 				audit.OrderFailed(userID, order.ID, total, stripeErr.Msg)
 				utils.RespondError(w, http.StatusBadRequest, "INVALID_PAYMENT", stripeErr.Msg, nil)
 			default:
+				middleware.RecordCartConversion("stripe_error")
 				audit.OrderFailed(userID, order.ID, total, stripeErr.Error())
 				utils.RespondError(w, http.StatusInternalServerError, "PAYMENT_FAILED", "payment failed", nil)
 			}
 			return
 		}
+		middleware.RecordCartConversion("stripe_error")
 		audit.OrderFailed(userID, order.ID, total, err.Error())
 		utils.RespondError(w, http.StatusInternalServerError, "PAYMENT_FAILED", "payment failed", nil)
 		return
 	}
+	middleware.ObserveStripeRequest("payment_intent_create", "success", stripeDur)
 
 	// Commit payment ID and clear cart in a single transaction.
 	txErr := db.Transaction(func(tx *gorm.DB) error {
@@ -447,6 +466,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		// most dangerous failure mode: the customer paid but has no order.
 		// The reconciliation job will catch this within 5 minutes.
 		// The audit log entry below must be treated as a critical alert.
+		middleware.RecordCartConversion("payment_critical")
 		audit.PaymentCritical(order.ID, pi.ID, txErr)
 		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "payment succeeded but failed to record order — please contact support", nil)
 		return
@@ -454,6 +474,8 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	audit.OrderPaid(userID, order.ID, total, pi.ID)
 	middleware.RecordOrderCreated(string(order.Status))
+	middleware.RecordCartConversion("success")
+	middleware.ObserveOrderValueCents(total)
 
 	if err := db.Preload("Items").First(&order, order.ID).Error; err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to preload items", nil)

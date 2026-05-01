@@ -16,6 +16,7 @@ func RateLimitByIP(limit int, window time.Duration) func(http.Handler) http.Hand
 		limit, window,
 		httprate.WithKeyFuncs(httprate.KeyByIP),
 		httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
+			RecordRateLimitRejection("ip")
 			utils.RespondError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests", nil)
 		}),
 	)
@@ -34,6 +35,7 @@ func RateLimitByUser(limit int, window time.Duration) func(http.Handler) http.Ha
 			return "user:" + strconv.FormatUint(uint64(userID), 10), nil
 		}),
 		httprate.WithLimitHandler(func(w http.ResponseWriter, r *http.Request) {
+			RecordRateLimitRejection("user")
 			utils.RespondError(w, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests", nil)
 		}),
 	)
