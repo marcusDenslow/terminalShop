@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var authLog = slog.With("component", "auth")
+func authLog() *slog.Logger { return slog.With("component", "auth") }
 
 // AuthHandler handles authentication-related requests
 type AuthHandler struct {
@@ -58,7 +58,7 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	// validate shared secret
 	if req.ClientSecret != h.authFingerprintKey {
 		middleware.RecordAuthAttempt("invalid_secret")
-		authLog.Warn("invalid client secret", "remote", r.RemoteAddr)
+		authLog().Warn("invalid client secret", "remote", r.RemoteAddr)
 		utils.RespondError(w, http.StatusUnauthorized, "INVALID_SECRET", "invalid client secret", nil)
 		return
 	}
@@ -76,7 +76,7 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	if err == gorm.ErrRecordNotFound {
 		if req.SSHPublicKey == "" {
 			middleware.RecordAuthAttempt("user_not_found")
-			authLog.Warn("user not found and no public key for registration", "fingerprint", req.Fingerprint)
+			authLog().Warn("user not found and no public key for registration", "fingerprint", req.Fingerprint)
 			utils.RespondError(w, http.StatusUnauthorized, "USER_NOT_FOUND", "no user found for this fingerprint", nil)
 			return
 		}
@@ -86,15 +86,15 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := db.Create(&user).Error; err != nil {
 			middleware.RecordAuthAttempt("error")
-			authLog.Error("failed to create user", "error", err)
+			authLog().Error("failed to create user", "error", err)
 			utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to create user", nil)
 			return
 		}
 		middleware.RecordAuthAttempt("registered")
-		authLog.Info("user registered", "user_id", user.ID)
+		authLog().Info("user registered", "user_id", user.ID)
 	} else if err != nil {
 		middleware.RecordAuthAttempt("error")
-		authLog.Error("failed to look up user", "error", err)
+		authLog().Error("failed to look up user", "error", err)
 		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to look up user", nil)
 		return
 	}
@@ -102,7 +102,7 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	token, err := h.jwtManager.GenerateToken(user.ID, user.Email, user.Name)
 	if err != nil {
 		middleware.RecordAuthAttempt("error")
-		authLog.Error("failed to generate token", "user_id", user.ID, "error", err)
+		authLog().Error("failed to generate token", "user_id", user.ID, "error", err)
 		utils.RespondError(w, http.StatusInternalServerError, "TOKEN_ERROR", "failed to generate token", nil)
 		return
 	}

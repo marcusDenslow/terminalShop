@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var reconcileLog = slog.With("component", "reconcile")
+func reconcileLog() *slog.Logger { return slog.With("component", "reconcile") }
 
 // ReconcileOrders finds pending orders with no Stripe ID older than 10 minutes
 // and checks whether Stripe has a succeeded PaymentIntent for them. This fixes
@@ -32,7 +32,7 @@ func ReconcileOrders(stripeKey string) {
 		return
 	}
 
-	reconcileLog.Info("checking pending orders", "count", len(orders))
+	reconcileLog().Info("checking pending orders", "count", len(orders))
 
 	for _, order := range orders {
 		params := &stripe.PaymentIntentSearchParams{
@@ -44,7 +44,7 @@ func ReconcileOrders(stripeKey string) {
 		iter := paymentintent.Search(params)
 		for iter.Next() {
 			pi := iter.PaymentIntent()
-			reconcileLog.Warn("found succeeded payment intent for unrecorded order — patching",
+			reconcileLog().Warn("found succeeded payment intent for unrecorded order — patching",
 				"order_id", order.ID, "pi", pi.ID)
 
 			txErr := db.Transaction(func(tx *gorm.DB) error {
@@ -67,11 +67,11 @@ func ReconcileOrders(stripeKey string) {
 				}).Error
 			})
 			if txErr != nil {
-				reconcileLog.Error("failed to patch order", "order_id", order.ID, "error", txErr)
+				reconcileLog().Error("failed to patch order", "order_id", order.ID, "error", txErr)
 			}
 		}
 		if err := iter.Err(); err != nil {
-			reconcileLog.Error("stripe search error", "order_id", order.ID, "error", err)
+			reconcileLog().Error("stripe search error", "order_id", order.ID, "error", err)
 		}
 	}
 }

@@ -19,7 +19,7 @@ import (
 	"terminalShop/pkg/utils"
 )
 
-var webhookLog = slog.With("component", "webhook")
+func webhookLog() *slog.Logger { return slog.With("component", "webhook") }
 
 // WebhookHandler handles inbound Stripe webhook events.
 type WebhookHandler struct {
@@ -48,13 +48,13 @@ func (h *WebhookHandler) HandleStripe(w http.ResponseWriter, r *http.Request) {
 	// Verify the Stripe signature. Reject anything that doesn't match.
 	if h.webhookSecret == "" {
 		// No secret configured — log a loud warning but still process in dev.
-		webhookLog.Warn("stripe webhook secret not set; skipping signature verification")
+		webhookLog().Warn("stripe webhook secret not set; skipping signature verification")
 	} else {
 		sig := r.Header.Get("Stripe-Signature")
 		if _, err := webhook.ConstructEventWithOptions(body, sig, h.webhookSecret, webhook.ConstructEventOptions{
 			IgnoreAPIVersionMismatch: true,
 		}); err != nil {
-			webhookLog.Warn("signature verification failed", "error", err)
+			webhookLog().Warn("signature verification failed", "error", err)
 			utils.RespondError(w, http.StatusUnauthorized, "INVALID_SIGNATURE", "webhook signature verification failed", nil)
 			return
 		}
@@ -87,7 +87,7 @@ func (h *WebhookHandler) HandleStripe(w http.ResponseWriter, r *http.Request) {
 		"payment_method.detached",
 		"payment_method.updated":
 		// Handled by the reconcile job and direct API calls; log only.
-		webhookLog.Info("payment method event received", "event_type", string(event.Type))
+		webhookLog().Info("payment method event received", "event_type", string(event.Type))
 	}
 
 	// Always return 200 so Stripe doesn't retry.
@@ -97,7 +97,7 @@ func (h *WebhookHandler) HandleStripe(w http.ResponseWriter, r *http.Request) {
 func (h *WebhookHandler) handlePaymentIntentSucceeded(event stripe.Event) {
 	var pi stripe.PaymentIntent
 	if err := json.Unmarshal(event.Data.Raw, &pi); err != nil {
-		webhookLog.Error("failed to unmarshal payment_intent", "error", err, "event", "payment_intent.succeeded")
+		webhookLog().Error("failed to unmarshal payment_intent", "error", err, "event", "payment_intent.succeeded")
 		return
 	}
 
@@ -110,7 +110,7 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(event stripe.Event) {
 	db := database.GetDB()
 	var order models.Order
 	if err := db.Where("id = ?", orderIDStr).First(&order).Error; err != nil {
-		webhookLog.Warn("order not found for payment intent", "order_id", orderIDStr, "pi", pi.ID)
+		webhookLog().Warn("order not found for payment intent", "order_id", orderIDStr, "pi", pi.ID)
 		return
 	}
 
@@ -140,19 +140,19 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(event stripe.Event) {
 		}).Error
 	})
 	if txErr != nil {
-		webhookLog.Error("failed to record paid status",
+		webhookLog().Error("failed to record paid status",
 			"order_id", orderIDStr, "pi", pi.ID, "error", txErr)
 		return
 	}
 
 	audit.OrderPaid(order.UserID, order.ID, int(pi.Amount), pi.ID)
-	webhookLog.Info("order marked paid", "order_id", orderIDStr, "pi", pi.ID)
+	webhookLog().Info("order marked paid", "order_id", orderIDStr, "pi", pi.ID)
 }
 
 func (h *WebhookHandler) handlePaymentIntentFailed(event stripe.Event) {
 	var pi stripe.PaymentIntent
 	if err := json.Unmarshal(event.Data.Raw, &pi); err != nil {
-		webhookLog.Error("failed to unmarshal payment_intent", "error", err, "event", "payment_intent.payment_failed")
+		webhookLog().Error("failed to unmarshal payment_intent", "error", err, "event", "payment_intent.payment_failed")
 		return
 	}
 
@@ -164,20 +164,20 @@ func (h *WebhookHandler) handlePaymentIntentFailed(event stripe.Event) {
 	db := database.GetDB()
 	if err := db.Model(&models.Order{}).Where("id = ? AND status = ?", orderIDStr, models.OrderStatusPending).
 		Update("status", models.OrderStatusFailed).Error; err != nil {
-		webhookLog.Error("failed to mark order failed", "order_id", orderIDStr, "error", err)
+		webhookLog().Error("failed to mark order failed", "order_id", orderIDStr, "error", err)
 	}
 
 	errMsg := "unknown"
 	if pi.LastPaymentError != nil {
 		errMsg = pi.LastPaymentError.Msg
 	}
-	webhookLog.Warn("payment failed", "order_id", orderIDStr, "pi", pi.ID, "reason", errMsg)
+	webhookLog().Warn("payment failed", "order_id", orderIDStr, "pi", pi.ID, "reason", errMsg)
 }
 
 func (h *WebhookHandler) handleCheckoutSessionCompleted(event stripe.Event) {
 	var sess stripe.CheckoutSession
 	if err := json.Unmarshal(event.Data.Raw, &sess); err != nil {
-		webhookLog.Error("failed to unmarshal checkout session", "error", err)
+		webhookLog().Error("failed to unmarshal checkout session", "error", err)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(event stripe.Event) {
 	}
 
 	if sess.SetupIntent == nil || sess.Customer == nil {
-		webhookLog.Warn("checkout session missing setup_intent or customer")
+		webhookLog().Warn("checkout session missing setup_intent or customer")
 		return
 	}
 
@@ -194,25 +194,25 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(event stripe.Event) {
 
 	si, err := setupintent.Get(sess.SetupIntent.ID, nil)
 	if err != nil {
-		webhookLog.Error("failed to get setup intent", "setup_intent", sess.SetupIntent.ID, "error", err)
+		webhookLog().Error("failed to get setup intent", "setup_intent", sess.SetupIntent.ID, "error", err)
 		return
 	}
 
 	if si.PaymentMethod == nil {
-		webhookLog.Warn("setup intent has no payment method", "setup_intent", si.ID)
+		webhookLog().Warn("setup intent has no payment method", "setup_intent", si.ID)
 		return
 	}
 
 	pm, err := paymentmethod.Get(si.PaymentMethod.ID, nil)
 	if err != nil {
-		webhookLog.Error("failed to get payment method", "payment_method", si.PaymentMethod.ID, "error", err)
+		webhookLog().Error("failed to get payment method", "payment_method", si.PaymentMethod.ID, "error", err)
 		return
 	}
 
 	db := database.GetDB()
 	var user models.User
 	if err := db.Where("stripe_customer_id = ?", sess.Customer.ID).First(&user).Error; err != nil {
-		webhookLog.Warn("user not found for customer", "customer", sess.Customer.ID, "error", err)
+		webhookLog().Warn("user not found for customer", "customer", sess.Customer.ID, "error", err)
 		return
 	}
 
@@ -232,10 +232,10 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(event stripe.Event) {
 	}
 
 	if err := db.Create(&card).Error; err != nil {
-		webhookLog.Error("failed to save card", "user_id", user.ID, "error", err)
+		webhookLog().Error("failed to save card", "user_id", user.ID, "error", err)
 		return
 	}
 
 	audit.CardAdded(user.ID, card.ID, card.Brand, card.Last4)
-	webhookLog.Info("card saved via checkout.session.completed", "user_id", user.ID)
+	webhookLog().Info("card saved via checkout.session.completed", "user_id", user.ID)
 }
