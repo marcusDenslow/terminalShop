@@ -26,11 +26,23 @@ func HuhTheme(t Theme) *huh.Theme {
 	f.TextInput.Text = t.renderer.NewStyle().Foreground(t.accent)
 	f.ErrorIndicator = t.renderer.NewStyle().Foreground(t.error)
 	f.ErrorMessage = t.renderer.NewStyle().Foreground(t.error)
+
+	f.SelectSelector = t.renderer.NewStyle().Foreground(t.accent).SetString("> ")
+	f.Option = t.renderer.NewStyle().Foreground(t.body)
+	f.SelectedOption = t.renderer.NewStyle().Foreground(t.highlight).Bold(true)
+	f.MultiSelectSelector = t.renderer.NewStyle().Foreground(t.accent).SetString("> ")
+	f.SelectedPrefix = t.renderer.NewStyle().Foreground(t.highlight).SetString("[x] ")
+	f.UnselectedPrefix = t.renderer.NewStyle().Foreground(t.dim).SetString("[ ] ")
+	f.UnselectedOption = t.renderer.NewStyle().Foreground(t.body)
+
 	th.Help = help.New().Styles
 
 	th.Blurred = copyFieldStyles(*f)
 	th.Blurred.Base = th.Blurred.Base.BorderStyle(lipgloss.HiddenBorder())
 	th.Blurred.Title = th.Blurred.Title.Foreground(t.body)
+	th.Blurred.SelectSelector = t.renderer.NewStyle().SetString("  ")
+	th.Blurred.SelectedOption = t.renderer.NewStyle().Foreground(t.success).Bold(true)
+	th.Blurred.Option = t.renderer.NewStyle().Foreground(t.dim)
 
 	return &th
 }

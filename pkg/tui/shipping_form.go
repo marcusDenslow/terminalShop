@@ -81,6 +81,11 @@ func (m Model) buildShippingForm(state *ShippingFormState) *huh.Form {
 
 	f := huh.NewForm(
 		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Country").
+				Key("country").
+				Options(countryOptions...).
+				Value(&state.Country),
 			huh.NewInput().
 				Title("Full Name").
 				Key("name").
@@ -107,12 +112,6 @@ func (m Model) buildShippingForm(state *ShippingFormState) *huh.Form {
 				Title("Postal Code").
 				Key("zip").
 				Value(&state.Zip),
-			huh.NewSelect[string]().
-				Title("Country").
-				Key("country").
-				Options(countryOptions...).
-				Value(&state.Country).
-				Height(3),
 			huh.NewInput().
 				Title("Phone").
 				Key("phone").
@@ -137,7 +136,7 @@ func (m Model) buildShippingForm(state *ShippingFormState) *huh.Form {
 // so that huh's Value() bindings point to stable memory.
 func (m Model) InitShippingForm() *ShippingFormState {
 	state := &ShippingFormState{
-		Country: "NO",
+		Country: "US",
 	}
 
 	if m.User != nil && m.User.Name != "" {
@@ -366,7 +365,7 @@ func (m Model) ShippingUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.shipping.form.submitting = false
 				m.shipping.form.form = m.buildShippingForm(m.shipping.form)
 			}
-			m.error = &VisibleError{message: "Invalid address. Currently only US and Norwegian addresses are supported."}
+			m.error = &VisibleError{message: "Address could not be validated. Check the street, region, and postal code. US and Norway only."}
 			return m, m.shipping.form.form.Init()
 		}
 		saved := msg.Address
