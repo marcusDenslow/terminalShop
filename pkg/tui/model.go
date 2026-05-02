@@ -108,7 +108,7 @@ type Model struct {
 	pendingWidth  int // buffered width from latest resize
 	pendingHeight int // buffered height from latest resize
 
-	Loading   bool   // true when fetching data from API
+	Loading   bool // true when fetching data from API
 	error     *VisibleError
 	APIClient *api.Client
 
@@ -587,6 +587,38 @@ func (m Model) deleteCardCmd(id uint) tea.Cmd {
 	}
 }
 
+// resolveCartAddress sets the shipping address on the cart, creating it first
+// if the address had no ID yet (i.e the user typed it in fresh rather than picking
+// from saved addresses)
+func (m Model) resolveCartAddress() error {
+	if m.ShippingInfo == nil {
+		return nil
+	}
+	if m.ShippingInfo.ID != 0 {
+		if err := m.APIClient.SetCartAddress(m.ShippingInfo.ID); err != nil {
+			return fmt.Errorf("failed to set address: %w", err)
+		}
+		return nil
+	}
+	saved, err := m.APIClient.CreateAddress(api.CreateAddressRequest{
+		Name:    m.ShippingInfo.Name,
+		Street:  m.ShippingInfo.Street,
+		Street2: m.ShippingInfo.Street2,
+		City:    m.ShippingInfo.City,
+		State:   m.ShippingInfo.State,
+		Zip:     m.ShippingInfo.Zip,
+		Country: m.ShippingInfo.Country,
+		Phone:   m.ShippingInfo.Phone,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to save address: %w", err)
+	}
+	if err := m.APIClient.SetCartAddress(saved.ID); err != nil {
+		return fmt.Errorf("failed to set address: %w", err)
+	}
+	return nil
+}
+
 // checkoutWithSavedCard sets address and saved card on the cart, then converts.
 // Used when the user selects an existing card from the list (no tokenization needed).
 func (m Model) checkoutWithSavedCard() tea.Cmd {
@@ -595,28 +627,8 @@ func (m Model) checkoutWithSavedCard() tea.Cmd {
 			return CheckoutResultMsg{Err: fmt.Errorf("API client or card not available")}
 		}
 
-		// 1. Set the shipping address on the cart
-		if m.ShippingInfo != nil && m.ShippingInfo.ID != 0 {
-			if err := m.APIClient.SetCartAddress(m.ShippingInfo.ID); err != nil {
-				return CheckoutResultMsg{Err: fmt.Errorf("failed to set address: %w", err)}
-			}
-		} else if m.ShippingInfo != nil {
-			saved, err := m.APIClient.CreateAddress(api.CreateAddressRequest{
-				Name:    m.ShippingInfo.Name,
-				Street:  m.ShippingInfo.Street,
-				Street2: m.ShippingInfo.Street2,
-				City:    m.ShippingInfo.City,
-				State:   m.ShippingInfo.State,
-				Zip:     m.ShippingInfo.Zip,
-				Country: m.ShippingInfo.Country,
-				Phone:   m.ShippingInfo.Phone,
-			})
-			if err != nil {
-				return CheckoutResultMsg{Err: fmt.Errorf("failed to save address: %w", err)}
-			}
-			if err := m.APIClient.SetCartAddress(saved.ID); err != nil {
-				return CheckoutResultMsg{Err: fmt.Errorf("failed to set address: %w", err)}
-			}
+		if err := m.resolveCartAddress(); err != nil {
+			return CheckoutResultMsg{Err: err}
 		}
 
 		// 2. Set the saved card on the cart
@@ -682,29 +694,8 @@ func (m Model) saveCardAndConvert(form PaymentFormCompleteMsg) tea.Cmd {
 			return CheckoutResultMsg{Err: fmt.Errorf("failed to save card: %w", err)}
 		}
 
-		// 2. Set the shipping address on the cart
-		if m.ShippingInfo != nil && m.ShippingInfo.ID != 0 {
-			if err := m.APIClient.SetCartAddress(m.ShippingInfo.ID); err != nil {
-				return CheckoutResultMsg{Err: fmt.Errorf("failed to set address: %w", err)}
-			}
-		} else if m.ShippingInfo != nil {
-			// Address was entered fresh (not from saved list), save it first
-			saved, err := m.APIClient.CreateAddress(api.CreateAddressRequest{
-				Name:    m.ShippingInfo.Name,
-				Street:  m.ShippingInfo.Street,
-				Street2: m.ShippingInfo.Street2,
-				City:    m.ShippingInfo.City,
-				State:   m.ShippingInfo.State,
-				Zip:     m.ShippingInfo.Zip,
-				Country: m.ShippingInfo.Country,
-				Phone:   m.ShippingInfo.Phone,
-			})
-			if err != nil {
-				return CheckoutResultMsg{Err: fmt.Errorf("failed to save address: %w", err)}
-			}
-			if err := m.APIClient.SetCartAddress(saved.ID); err != nil {
-				return CheckoutResultMsg{Err: fmt.Errorf("failed to set address: %w", err)}
-			}
+		if err := m.resolveCartAddress(); err != nil {
+			return CheckoutResultMsg{Err: err}
 		}
 
 		// 3. Set the card on the cart

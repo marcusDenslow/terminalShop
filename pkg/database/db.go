@@ -11,6 +11,8 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+
+	"gorm.io/plugin/opentelemetry/tracing"
 )
 
 var (
@@ -39,6 +41,14 @@ func Connect(dsn string) (*gorm.DB, error) {
 		}
 		if err != nil {
 			err = fmt.Errorf("failed to connect to database: %w", err)
+			return
+		}
+
+		if pluginErr := db.Use(tracing.NewPlugin(
+			tracing.WithoutMetrics(),
+			tracing.WithoutQueryVariables(),
+		)); pluginErr != nil {
+			err = fmt.Errorf("failed to register otel plugin: %w", pluginErr)
 			return
 		}
 

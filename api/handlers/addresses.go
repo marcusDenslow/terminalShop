@@ -35,7 +35,7 @@ func NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey string) *AddressHa
 
 // Retrieve all saved addresses for a user
 func (h *AddressHandler) GetAddresses(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 
 	userID := middleware.UserIDFromContext(r.Context())
 
@@ -48,7 +48,7 @@ func (h *AddressHandler) GetAddresses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 
 	userID := middleware.UserIDFromContext(r.Context())
 
@@ -82,7 +82,7 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		client := shippo.NewClient(h.shippoKey)
-		validated, err := client.ValidateAddress(shippo.Address{
+		validated, err := client.ValidateAddress(r.Context(), shippo.Address{
 			Name:    req.Name,
 			Street1: req.Street,
 			Street2: req.Street2,
@@ -114,7 +114,7 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		client := bring.NewClient(h.bringAPIUID, h.bringAPIKey)
-		validated, err := client.ValidateAddress(bring.Address{
+		validated, err := client.ValidateAddress(r.Context(), bring.Address{
 			Name:    req.Name,
 			Street1: req.Street,
 			Street2: req.Street2,
@@ -161,7 +161,7 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 
 // DeleteAddress deltes a saved address
 func (h *AddressHandler) DeleteAddress(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
@@ -191,7 +191,7 @@ func (h *AddressHandler) DeleteAddress(w http.ResponseWriter, r *http.Request) {
 // Mark an address as the users default address
 
 func (h *AddressHandler) SetDefaultAddress(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")

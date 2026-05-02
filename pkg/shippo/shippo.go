@@ -2,11 +2,14 @@ package shippo
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const baseURL = "https://api.goshippo.com"
@@ -22,7 +25,8 @@ func NewClient(apiKey string) *Client {
 	return &Client{
 		apiKey: apiKey,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
 		},
 	}
 }
@@ -75,7 +79,7 @@ type addressResponse struct {
 
 // ValidateAddress sends an address to Shippo for validation.
 // Returns the normalized/corrected address if valid, or an error if invalid.
-func (c *Client) ValidateAddress(addr Address) (*Address, error) {
+func (c *Client) ValidateAddress(ctx context.Context, addr Address) (*Address, error) {
 	reqBody := addressRequest{
 		Name:     addr.Name,
 		Street1:  addr.Street1,
@@ -93,7 +97,7 @@ func (c *Client) ValidateAddress(addr Address) (*Address, error) {
 		return nil, fmt.Errorf("failed to marshal address: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", baseURL+"/v1/addresses", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/v1/addresses", bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

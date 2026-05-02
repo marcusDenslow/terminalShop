@@ -1,6 +1,7 @@
 package bring
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const baseURL = "https://api.bring.com/address"
@@ -27,6 +30,7 @@ func NewClient(apiUID, apiKey string) *Client {
 		apiKey: apiKey,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
 		},
 	}
 }
@@ -79,7 +83,7 @@ func parseStreet(street string) (name string, number string) {
 	return strings.TrimSpace(street), ""
 }
 
-func (c *Client) ValidateAddress(addr Address) (*Address, error) {
+func (c *Client) ValidateAddress(ctx context.Context, addr Address) (*Address, error) {
 	streetName, streetNumber := parseStreet(addr.Street1)
 
 	params := url.Values{}
@@ -93,7 +97,7 @@ func (c *Client) ValidateAddress(addr Address) (*Address, error) {
 
 	reqURL := fmt.Sprintf("%s/api/no/validation?%s", baseURL, params.Encode())
 
-	req, err := http.NewRequest("GET", reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

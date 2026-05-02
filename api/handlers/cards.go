@@ -66,7 +66,7 @@ func NewCardHandler(stripeSecretKey string, appURL string) *CardHandler {
 
 // GetCards returns all saved cards for the authenticated user.
 func (h *CardHandler) GetCards(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var cards []models.Card
@@ -81,7 +81,7 @@ func (h *CardHandler) GetCards(w http.ResponseWriter, r *http.Request) {
 
 // GetCard returns a single saved card by ID.
 func (h *CardHandler) GetCard(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
@@ -103,7 +103,7 @@ func (h *CardHandler) GetCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CardHandler) SetDefaultCard(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
@@ -136,7 +136,7 @@ func (h *CardHandler) SetDefaultCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CardHandler) CollectCard(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var user models.User
@@ -184,7 +184,7 @@ type SaveCardRequest struct {
 // fingerprint, attaches to the user's Stripe customer, and saves the
 // card metadata locally. No raw card data is stored at any point.
 func (h *CardHandler) SaveCard(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var req SaveCardRequest
@@ -280,7 +280,7 @@ func (h *CardHandler) SaveCard(w http.ResponseWriter, r *http.Request) {
 // DeleteCard removes a saved card. If the card is currently set on the user's
 // cart, the cart's card selection is cleared.
 func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")
@@ -345,7 +345,7 @@ func ensureStripeCustomer(gdb *gorm.DB, user *models.User) error {
 	}
 	user.StripeCustomerID = cust.ID
 	if err := gdb.Save(user).Error; err != nil {
-		return fmt.Errorf("Failed to save stripe customer: %w", err)
+		return fmt.Errorf("failed to save stripe customer: %w", err)
 	}
 	return nil
 }

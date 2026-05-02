@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -30,8 +31,8 @@ func NewCartHandler(stripeSecretKey string) *CartHandler {
 }
 
 // getOrCreateCart finds the users cart or creates one.
-func getOrCreateCart(userID uint) (*models.Cart, error) {
-	db := database.GetDB()
+func getOrCreateCart(ctx context.Context, userID uint) (*models.Cart, error) {
+	db := database.GetDB().WithContext(ctx)
 	var cart models.Cart
 	err := db.Where("user_id = ?", userID).First(&cart).Error
 	if err != nil {
@@ -43,8 +44,8 @@ func getOrCreateCart(userID uint) (*models.Cart, error) {
 	return &cart, nil
 }
 
-func cartResponse(cart *models.Cart) map[string]interface{} {
-	db := database.GetDB()
+func cartResponse(ctx context.Context, cart *models.Cart) map[string]interface{} {
+	db := database.GetDB().WithContext(ctx)
 
 	var items []models.CartItem
 	db.Where("cart_id = ? AND quantity > 0", cart.ID).Preload("Coffee").Find(&items)
@@ -76,14 +77,14 @@ func cartResponse(cart *models.Cart) map[string]interface{} {
 func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
-	cart, err := getOrCreateCart(userID)
+	cart, err := getOrCreateCart(r.Context(), userID)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "CART_ERROR", "failed to get cart", nil)
 		return
 	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
-		"cart": cartResponse(cart),
+		"cart": cartResponse(r.Context(), cart),
 	})
 }
 
@@ -93,7 +94,7 @@ type SetItemRequest struct {
 }
 
 func (h *CartHandler) SetItem(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var req SetItemRequest
@@ -113,7 +114,7 @@ func (h *CartHandler) SetItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cart, err := getOrCreateCart(userID)
+	cart, err := getOrCreateCart(r.Context(), userID)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "CART_ERROR", "failed to get cart", nil)
 		return
@@ -146,7 +147,7 @@ func (h *CartHandler) SetItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
-		"cart": cartResponse(cart),
+		"cart": cartResponse(r.Context(), cart),
 	})
 }
 
@@ -155,7 +156,7 @@ type SetAddressRequest struct {
 }
 
 func (h *CartHandler) SetAddress(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var req SetAddressRequest
@@ -170,7 +171,7 @@ func (h *CartHandler) SetAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cart, err := getOrCreateCart(userID)
+	cart, err := getOrCreateCart(r.Context(), userID)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "CART_ERROR", "failed to get cart", nil)
 		return
@@ -191,7 +192,7 @@ type SetCardRequest struct {
 }
 
 func (h *CartHandler) SetCard(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var req SetCardRequest
@@ -206,7 +207,7 @@ func (h *CartHandler) SetCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cart, err := getOrCreateCart(userID)
+	cart, err := getOrCreateCart(r.Context(), userID)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "CART_ERROR", "failed to get cart", nil)
 		return
@@ -223,10 +224,10 @@ func (h *CartHandler) SetCard(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CartHandler) ClearCart(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
-	cart, err := getOrCreateCart(userID)
+	cart, err := getOrCreateCart(r.Context(), userID)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "CART_ERROR", "failed to get cart", nil)
 		return
@@ -243,14 +244,14 @@ func (h *CartHandler) ClearCart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	ctx, span := otel.Tracer("api").Start(r.Context(), "cart.convert")
 	defer span.End()
 	r = r.WithContext(ctx)
 
-	cart, err := getOrCreateCart(userID)
+	cart, err := getOrCreateCart(r.Context(), userID)
 	if err != nil {
 		middleware.RecordCartConversion("cart_lookup_failed")
 		utils.RespondError(w, http.StatusInternalServerError, "CART_ERROR", "failed to get cart", nil)

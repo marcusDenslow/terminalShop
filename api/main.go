@@ -17,6 +17,7 @@ import (
 	"terminalShop/pkg/config"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/observability"
+	"terminalShop/pkg/stripeclient"
 )
 
 const version = "v0.1.0"
@@ -60,6 +61,8 @@ func main() {
 	} else {
 		defer shutdown(context.Background())
 	}
+
+	stripeclient.InitOTel()
 
 	// Init JWT manager (same secret + duration as SSH server)
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 30*time.Minute)

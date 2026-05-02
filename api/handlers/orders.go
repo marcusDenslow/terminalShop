@@ -24,7 +24,7 @@ func NewOrderHandler(stripeSecretKey string) *OrderHandler {
 }
 
 func (h *OrderHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var orders []models.Order
@@ -38,7 +38,7 @@ func (h *OrderHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 // RefundOrder issues a full refund for an order via Stripe and marks it as
 // refunded. Only orders in paid or shipped status can be refunded.
 func (h *OrderHandler) RefundOrder(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	idStr := chi.URLParam(r, "id")

@@ -46,7 +46,7 @@ type TokenResponse struct {
 }
 
 func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 
 	var req TokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -127,7 +127,7 @@ type RegisterRequest struct {
 // RegisterWithSSHKey registers a new user with their SSH public key
 // No username required - following terminal.shop pattern
 func (h *AuthHandler) RegisterWithSSHKey(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -180,7 +180,7 @@ func (h *AuthHandler) RegisterWithSSHKey(w http.ResponseWriter, r *http.Request)
 
 // GetUserBySSHKey retrieves a user by their SSH key fingerprint
 func (h *AuthHandler) GetUserBySSHKey(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 
 	fingerprint := r.URL.Query().Get("fingerprint")
 	if fingerprint == "" {

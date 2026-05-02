@@ -16,7 +16,7 @@ func NewViewHandler() *ViewHandler {
 }
 
 func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var user models.User

@@ -20,7 +20,7 @@ func NewProductHandler() *ProductHandler {
 
 // GetProducts returns all products from the database
 func (h *ProductHandler) GetProducts(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 
 	var products []models.Coffee
 
@@ -37,7 +37,7 @@ func (h *ProductHandler) GetProducts(w http.ResponseWriter, r *http.Request) {
 
 // GetProduct returns a single product by ID
 func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
-	db := database.GetDB()
+	db := database.GetDB().WithContext(r.Context())
 
 	// Get ID from URL parameter
 	idStr := chi.URLParam(r, "id")
