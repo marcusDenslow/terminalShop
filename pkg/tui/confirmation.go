@@ -155,7 +155,7 @@ func (m Model) generateReviewContent() string {
 	view.WriteString(fmt.Sprintf("subtotal: %s\n", formatUSD(subtotal)))
 	view.WriteString(m.theme.TextAccent().Render(fmt.Sprintf("total:    %s", formatUSD(subtotal))) + "\n")
 	view.WriteString("\n")
-	view.WriteString(m.theme.TextError().Render("press enter to confirm") + "\n")
+	view.WriteString(m.theme.TextBrand().Render("press enter to confirm") + "\n")
 
 	return m.theme.Base().Padding(0, 1).Render(view.String())
 }

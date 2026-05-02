@@ -22,22 +22,11 @@ import (
 	"terminalShop/pkg/tui"
 )
 
-const (
-	port = "23456"
-)
-
 func listenHost() string {
 	if h := os.Getenv("SSH_HOST"); h != "" {
 		return h
 	}
 	return "localhost"
-}
-
-func listenPort() string {
-	if p := os.Getenv("SSH_PORT"); p != "" {
-		return p
-	}
-	return port
 }
 
 var (
@@ -78,7 +67,7 @@ func main() {
 
 	// Create SSH server
 	host := listenHost()
-	p := listenPort()
+	p := cfg.SSHPort
 	s, err := wish.NewServer(
 		wish.WithAddress(fmt.Sprintf("%s:%s", host, p)),
 		wish.WithHostKeyPath(".ssh/term_info_ed25519"),
