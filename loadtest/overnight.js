@@ -44,99 +44,60 @@ function authHeaders() {
   return tok ? { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' } : null;
 }
 
+// Rate limits we are operating under (per-IP, single source IP):
+//   global ........... 200 req/min
+//   /api/v1/auth/* ...  20 req/min  (auth/register, auth/user, auth/token)
+//   /api/v1/webhooks/   60 req/min
+// All rates below are tuned to stay UNDER these ceilings with headroom so
+// nothing gets rate-limited and the histogram captures real handler latency.
+// Total ~148 req/min combined. Wall time ~10h.
 export const options = {
   discardResponseBodies: true,
+  summaryTrendStats: ['avg', 'p(95)', 'p(99)', 'max'],
   scenarios: {
     browse: {
-      executor: 'ramping-arrival-rate',
-      startRate: 6,
+      // /products, /products/{id}, /health, /ping. Only the global 200/min
+      // limit applies to these. Hold steady at 100/min all night so we never
+      // get close to the ceiling no matter what other scenarios do.
+      executor: 'constant-arrival-rate',
+      rate: 100,
       timeUnit: '1m',
-      preAllocatedVUs: 10,
-      maxVUs: 50,
-      stages: [
-        { target: 12,  duration: '1h' },
-        { target: 30,  duration: '2h' },
-        { target: 90,  duration: '2h' },
-        { target: 60,  duration: '2h' },
-        { target: 120, duration: '3h' },
-        { target: 30,  duration: '2h' },
-      ],
-      exec: 'browse',
-    },
-    authed_browse: {
-      executor: 'ramping-arrival-rate',
-      startRate: 2,
-      timeUnit: '1m',
+      duration: '10h',
       preAllocatedVUs: 5,
       maxVUs: 20,
-      stages: [
-        { target: 10, duration: '4h' },
-        { target: 30, duration: '4h' },
-        { target: 8,  duration: '4h' },
-      ],
-      exec: 'authedBrowse',
-    },
-    convert_fail: {
-      // /cart/convert is rate-limited 10/min per user. We share one loadtest
-      // user across all VUs so ceiling is 10/min; we stay under at 4/min.
-      executor: 'ramping-arrival-rate',
-      startRate: 1,
-      timeUnit: '1m',
-      preAllocatedVUs: 3,
-      maxVUs: 5,
-      stages: [
-        { target: 2, duration: '4h' },
-        { target: 4, duration: '4h' },
-        { target: 2, duration: '4h' },
-      ],
-      exec: 'convertFail',
-    },
-    address_bad: {
-      executor: 'ramping-arrival-rate',
-      startRate: 1,
-      timeUnit: '1m',
-      preAllocatedVUs: 3,
-      maxVUs: 5,
-      stages: [
-        { target: 3, duration: '12h' },
-      ],
-      exec: 'addressBad',
-    },
-    auth_warn: {
-      executor: 'ramping-arrival-rate',
-      startRate: 1,
-      timeUnit: '1m',
-      preAllocatedVUs: 5,
-      maxVUs: 10,
-      stages: [
-        { target: 3,  duration: '4h' },
-        { target: 10, duration: '4h' },
-        { target: 5,  duration: '4h' },
-      ],
-      exec: 'authBad',
-    },
-    auth_lookup: {
-      executor: 'ramping-arrival-rate',
-      startRate: 1,
-      timeUnit: '1m',
-      preAllocatedVUs: 5,
-      maxVUs: 10,
-      stages: [
-        { target: 4, duration: '6h' },
-        { target: 8, duration: '6h' },
-      ],
-      exec: 'authLookup',
+      exec: 'browse',
     },
     err_404: {
-      executor: 'ramping-arrival-rate',
-      startRate: 1,
+      // /products/{99xxx} — chi route still matches, returns 404. Counts
+      // against the global 200/min only.
+      executor: 'constant-arrival-rate',
+      rate: 30,
       timeUnit: '1m',
+      duration: '10h',
       preAllocatedVUs: 3,
-      maxVUs: 5,
-      stages: [
-        { target: 5, duration: '12h' },
-      ],
+      maxVUs: 10,
       exec: 'notFound',
+    },
+    auth_lookup: {
+      // GET /auth/user — counts against the /auth/* 20/min group ceiling
+      // SHARED with auth_warn. We split: 10/min lookup + 8/min warn = 18/min.
+      executor: 'constant-arrival-rate',
+      rate: 10,
+      timeUnit: '1m',
+      duration: '10h',
+      preAllocatedVUs: 2,
+      maxVUs: 5,
+      exec: 'authLookup',
+    },
+    auth_warn: {
+      // POST /auth/token with bad creds — same 20/min group ceiling as above.
+      executor: 'constant-arrival-rate',
+      rate: 8,
+      timeUnit: '1m',
+      duration: '10h',
+      preAllocatedVUs: 2,
+      maxVUs: 5,
+      exec: 'authBad',
     },
   },
 };
