@@ -4,85 +4,55 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 )
 
 func (m Model) BuildHeader() string {
-	// Calculate cart total and item count
-	total := m.CalculateSubtotal()
-	itemCount := m.CartItemCount()
+	bold := m.theme.TextAccent().Bold(true).Render
+	accent := m.theme.TextAccent().Render
+	base := m.theme.Base().Render
+	cursor := m.theme.Base().Background(m.theme.Brand()).Render(" ")
 
-	// Define colors
-	grayStyle := m.theme.TextBody()
-	boldWhiteStyle := m.theme.TextAccent().Bold(true)
-	boldGrayStyle := m.theme.TextBody().Bold(true)
+	mark := bold("t") + cursor
+	logo := bold("terminal")
+	menu := bold("m") + base(" ☰")
 
-	// Build cart tab (used in all sizes)
-	itemCountText := grayStyle.Render(fmt.Sprintf("[%d]", itemCount))
-
-	var cartKeybind, cartName, cartInfo string
-	if m.inCartFlow() {
-		// Active: bold white keybind and name
-		cartKeybind = boldWhiteStyle.Render("c")
-		cartName = boldWhiteStyle.Render("cart")
-		cartInfo = fmt.Sprintf(" %s %s",
-			boldWhiteStyle.Render(fmt.Sprintf("$%.2f", float64(total)/100)),
-			itemCountText)
-	} else {
-		// Inactive: bold gray keybind, gray name
-		cartKeybind = boldGrayStyle.Render("c")
-		cartName = grayStyle.Render("cart")
-		cartInfo = fmt.Sprintf(" %s %s",
-			boldWhiteStyle.Render(fmt.Sprintf("$%.2f", float64(total)/100)),
-			itemCountText)
+	tab := func(key, name string, active bool) string {
+		if active {
+			return accent(key + " " + name)
+		}
+		return accent(key) + base(" "+name)
 	}
-	cartTab := cartKeybind + " " + cartName + cartInfo
+	shop := tab("s", "shop", m.currentPage == shopPage)
+	account := tab("a", "account", m.currentPage == accountPage)
 
-	var tabsContent string
+	priceStr := fmt.Sprintf(" $%2v", m.CalculateSubtotal()/100)
+	countStr := fmt.Sprintf(" [%d]", m.CartItemCount())
+	cartLabel := base(" cart")
+	if m.inCartFlow() {
+		cartLabel = accent(" cart")
+	}
+	cart := accent("c") + cartLabel + accent(priceStr) + base(countStr)
 
+	var tabs []string
 	switch m.size {
 	case small:
-		// Small: just a mark + Cart
-		mark := boldWhiteStyle.Render("t")
-		tabsContent = mark + "    " + cartTab
+		tabs = []string{mark, cart}
 	case medium:
-		menuTab := boldGrayStyle.Render("m") + " " + grayStyle.Render("menu")
-		logo := boldWhiteStyle.Render("terminal coffee")
-		separator := m.theme.TextAccent().Render("|")
-		tabsContent = menuTab + " " + separator + " " + logo + " " + separator + " " + cartTab
+		tabs = []string{menu, logo, cart}
 	default:
-		separator := m.theme.TextAccent().Render("|")
-
-		var shopKeybind, shopName string
-		if m.currentPage == shopPage {
-			shopKeybind = boldWhiteStyle.Render("s")
-			shopName = boldWhiteStyle.Render("shop")
-		} else {
-			shopKeybind = boldGrayStyle.Render("s")
-			shopName = grayStyle.Render("shop")
-		}
-
-		var accountKeybind, accountName string
-		if m.currentPage == accountPage {
-			accountKeybind = boldWhiteStyle.Render("a")
-			accountName = boldWhiteStyle.Render("account")
-		} else {
-			accountKeybind = boldGrayStyle.Render("a")
-			accountName = grayStyle.Render("account")
-		}
-
-		tabsContent = fmt.Sprintf("%s %s %s %s %s %s %s", shopKeybind, shopName, separator, accountKeybind, accountName, separator, cartTab)
+		tabs = []string{logo, shop, account, cart}
 	}
 
-	// Add box with padding (no vertical padding, just horizontal)
-	tabBox := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		Padding(0, 2).
-		MarginBottom(1)
+	tbl := table.New().Border(lipgloss.NormalBorder()).BorderStyle(m.renderer.NewStyle().Foreground(m.theme.Border())).Row(tabs...).Width(m.widthContent).StyleFunc(func(row, col int) lipgloss.Style {
+		return m.theme.Base().Padding(0, 1).AlignHorizontal(lipgloss.Center)
+	}).Render()
 
-	// Center the whole thing within the container
-	centered := lipgloss.NewStyle().
-		Width(m.widthContainer).
-		Align(lipgloss.Center)
-
-	return centered.Render(tabBox.Render(tabsContent))
+	return lipgloss.Place(
+		m.widthContainer,
+		lipgloss.Height(tbl),
+		lipgloss.Center,
+		lipgloss.Center,
+		tbl,
+	)
 }
