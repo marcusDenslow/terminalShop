@@ -94,4 +94,9 @@ migrations/*.state
 
 
 
+loadtest/run.pid
+loadtest/run.err
 
+/00
+
+ROADMAP.md
