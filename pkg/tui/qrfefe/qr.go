@@ -8,7 +8,7 @@ import (
 
 var topsBottoms = []rune{' ', '▀', '▄', '█'}
 
-func Generate(size int, text string) (string, int, error) {
+func Generate(text string) (string, int, error) {
 	return generate(qr.L, text)
 }
 
