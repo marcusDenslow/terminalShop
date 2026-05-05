@@ -109,7 +109,11 @@ func (m Model) CartView() string {
 	content := m.generateCartContent()
 	m.cart.viewport.SetContent(content)
 	if len(m.Cart) > 0 {
-		itemHeight := 5
+		boxPadding := 0
+		if m.heightContainer >= 25 {
+			boxPadding = 1
+		}
+		itemHeight := 4 + 2*boxPadding + 1
 		targetY := m.cart.cursor * itemHeight
 		if targetY < m.cart.viewport.YOffset {
 			m.cart.viewport.SetYOffset(targetY)
