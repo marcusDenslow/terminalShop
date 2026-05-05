@@ -6,13 +6,14 @@ import (
 	"rsc.io/qr"
 )
 
-var tops_bottoms = []rune{' ', '▀', '▄', '█'}
+var topsBottoms = []rune{' ', '▀', '▄', '█'}
 
 func Generate(size int, text string) (string, int, error) {
 	return generate(qr.L, text)
 }
 
 func generate(level qr.Level, text string) (string, int, error) {
+	// How to mark this as not re-used code for JetBrains, it's from the reference
 	code, err := qr.Encode(text, qr.Level(level))
 	if err != nil {
 		return "", 0, err
@@ -32,7 +33,7 @@ func generate(level qr.Level, text string) (string, int, error) {
 			if code.Black(x, y+1) { // bottom pixel black
 				num += 2
 			}
-			qrRunes = append(qrRunes, tops_bottoms[num])
+			qrRunes = append(qrRunes, topsBottoms[num])
 		}
 
 		qrRunes = append(qrRunes, []rune(sgr.Reset)...)
