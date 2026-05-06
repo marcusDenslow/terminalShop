@@ -202,7 +202,8 @@ func validatePaymentForm(state *PaymentFormState) string {
 // UpdatePaymentForm handles updates to the payment form.
 // Mutates state in place, returns only the tea.Cmd.
 func (m Model) UpdatePaymentForm(msg tea.Msg, state *PaymentFormState) tea.Cmd {
-	if _, ok := msg.(tea.WindowSizeMsg); ok {
+	switch _, ok := msg.(tea.WindowSizeMsg); {
+	case ok:
 		if m.size < medium {
 			state.form = state.form.WithLayout(huh.LayoutStack).WithWidth(m.widthContent)
 		} else {

@@ -18,7 +18,7 @@ func TestModel_updateLayout(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := NewModel("")
-			m.updateLayout(tt.width, tt.height)
+			m = m.updateLayout(tt.width, tt.height)
 			if m.viewportWidth != tt.width {
 				t.Errorf("viewportWidth = %d, want %d", m.viewportWidth, tt.width)
 			}
