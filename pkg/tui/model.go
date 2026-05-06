@@ -346,7 +346,7 @@ func (m Model) checkoutStep() int {
 
 // updateLayout recalculates all layout variables from the raw viewport dimensions.
 // This should be called whenever the terminal is resized.
-func (m *Model) updateLayout(width, height int) {
+func (m Model) updateLayout(width, height int) Model {
 	m.viewportWidth = width
 	m.viewportHeight = height
 	switch {
@@ -369,6 +369,7 @@ func (m *Model) updateLayout(width, height int) {
 	}
 
 	m.widthContent = m.widthContainer - 2
+	return m
 }
 
 // ProductsMsg is sent when products are fetched from API
@@ -646,15 +647,15 @@ func (m Model) checkoutWithSavedCard() tea.Cmd {
 	}
 }
 
-func (m *Model) syncCartItemCmd(coffeeID uint, quantity int) tea.Cmd {
+func (m Model) syncCartItemCmd(coffeeID uint, quantity int) (Model, tea.Cmd) {
 	if m.APIClient == nil || m.User == nil {
-		return nil
+		return m, nil
 	}
 
 	updateID := time.Now().UTC().UnixMilli()
 	m.lastCartUpdateID = updateID
 
-	return func() tea.Msg {
+	return m, func() tea.Msg {
 		cart, err := m.APIClient.SetCartItem(coffeeID, quantity)
 		return CartSyncedMsg{
 			UpdateID: updateID,
@@ -748,10 +749,10 @@ func (m Model) saveCardOnlyCmd(form PaymentFormCompleteMsg) tea.Cmd {
 
 // loadCartFromAPI populates the in-memory cart map from an API CartData response
 // It matches cart items to local Coffees by ID so the Coffee struct is populated
-func (m *Model) loadCartFromAPI(cartData *api.CartData) {
+func (m Model) loadCartFromAPI(cartData *api.CartData) Model {
 	m.Cart = make(map[uint]*models.CartItem)
 	if cartData == nil {
-		return
+		return m
 	}
 
 	for _, item := range cartData.Items {
@@ -765,14 +766,15 @@ func (m *Model) loadCartFromAPI(cartData *api.CartData) {
 	if m.cart.cursor >= len(m.Cart) {
 		m.cart.cursor = 0
 	}
+	return m
 }
 
 // GetCartItemsSlice converts the cart map to a sorted slice for consistent iteration.
 func (m Model) GetCartItemsSlice() []*models.CartItem {
 	// Get keys and sort them for stable ordering
 	keys := make([]uint, 0, len(m.Cart))
-	for key := range m.Cart {
-		keys = append(keys, key)
+	for cartKey := range m.Cart {
+		keys = append(keys, cartKey)
 	}
 
 	// Sort keys to ensure consistent order
@@ -780,8 +782,8 @@ func (m Model) GetCartItemsSlice() []*models.CartItem {
 
 	// Build items slice in sorted order
 	items := make([]*models.CartItem, 0, len(m.Cart))
-	for _, key := range keys {
-		items = append(items, m.Cart[key])
+	for _, cartKey := range keys {
+		items = append(items, m.Cart[cartKey])
 	}
 	return items
 }
@@ -890,7 +892,7 @@ func newModelWithRenderer(username string, renderer *lipgloss.Renderer) Model {
 		APIClient: api.NewClient("http://localhost:8080", ""),
 		FAQs:      LoadFaqs(),
 	}
-	m.updateLayout(120, 30)
+	m = m.updateLayout(120, 30)
 	return m
 }
 

@@ -13,7 +13,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Resize debounce tick, must fire before page dispatch
 	if tick, ok := msg.(resizeTickMsg); ok {
 		if tick.seq == m.resizeSeq {
-			m.updateLayout(m.pendingWidth, m.pendingHeight)
+			m = m.updateLayout(m.pendingWidth, m.pendingHeight)
 			switch m.currentPage {
 			case shopPage:
 				m = m.updateShopViewports()
@@ -97,7 +97,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Username = u.Name
 		}
 		cart := &api.CartData{Items: msg.Data.Cart}
-		m.loadCartFromAPI(cart)
+		m = m.loadCartFromAPI(cart)
 		m.SavedAddresses = msg.Data.Addresses
 		m.SavedCards = msg.Data.Cards
 		m.Orders = msg.Data.Orders
@@ -112,7 +112,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.fetchCartCmd
 		}
 		if msg.UpdateID == m.lastCartUpdateID {
-			m.loadCartFromAPI(msg.Cart)
+			m = m.loadCartFromAPI(msg.Cart)
 		}
 		return m, nil
 	case tokenRefreshTickMsg:

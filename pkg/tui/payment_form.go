@@ -370,7 +370,7 @@ func (m Model) renderPaymentHttpsView() string {
 		return baseStyle.Render("  generating payment link...")
 	}
 
-	qr, qrSize, err := qrfefe.Generate(0, *m.payment.collectURL)
+	qr, qrSize, err := qrfefe.Generate(*m.payment.collectURL)
 	if err != nil || qrSize > m.widthContent {
 		// QR too wide for the terminal — just show the URL.
 		return baseStyle.Render("open in browser to add payment information:") + "\n\n" +

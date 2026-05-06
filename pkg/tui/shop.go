@@ -180,7 +180,8 @@ func (m Model) ShopUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			} else {
 				m.Cart[coffeeID] = &models.CartItem{CoffeeID: coffeeID, Coffee: coffee, Quantity: 1}
 			}
-			return m, m.syncCartItemCmd(coffeeID, m.Cart[coffeeID].Quantity)
+			m, cmd := m.syncCartItemCmd(coffeeID, m.Cart[coffeeID].Quantity)
+			return m, cmd
 		case "-", "_":
 			coffeeID := coffee.ID
 			if item, exists := m.Cart[coffeeID]; exists {
@@ -190,7 +191,8 @@ func (m Model) ShopUpdate(msg tea.Msg) (Model, tea.Cmd) {
 					delete(m.Cart, coffeeID)
 					newQty = 0
 				}
-				return m, m.syncCartItemCmd(coffeeID, newQty)
+				m, cmd := m.syncCartItemCmd(coffeeID, newQty)
+				return m, cmd
 			}
 		}
 	}

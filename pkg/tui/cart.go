@@ -33,7 +33,8 @@ func (m Model) generateCartContent() string {
 			Align(lipgloss.Center).
 			Width(m.widthContent).
 			Padding(2, 0)
-		return emptyStyle.Render("Your cart is empty\n\nPress s to go back to shop")
+		render := emptyStyle.Render("Your cart is empty\n\nPress s to go back to shop")
+		return render
 	}
 
 	cartItems := ""
@@ -148,7 +149,8 @@ func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		cartItems := m.GetCartItemsSlice()
 		if m.cart.cursor >= 0 && m.cart.cursor < len(cartItems) {
 			cartItems[m.cart.cursor].Quantity++
-			return m, m.syncCartItemCmd(cartItems[m.cart.cursor].CoffeeID, cartItems[m.cart.cursor].Quantity)
+			m, cmd := m.syncCartItemCmd(cartItems[m.cart.cursor].CoffeeID, cartItems[m.cart.cursor].Quantity)
+			return m, cmd
 		}
 	case "-", "_":
 		cartItems := m.GetCartItemsSlice()
@@ -165,7 +167,8 @@ func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				newQty = 0
 			}
-			return m, m.syncCartItemCmd(coffeeID, newQty)
+			m, cmd := m.syncCartItemCmd(coffeeID, newQty)
+			return m, cmd
 		}
 	case "p", "enter":
 		if !m.IsCartEmpty() {
