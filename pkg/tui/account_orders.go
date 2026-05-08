@@ -135,6 +135,25 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 	b.WriteString(labelStyle.Render(fmt.Sprintf("  %-22s %s", "Total", total)))
 	b.WriteString("\n\n")
 
+	// Shipping (only when carrier is set)
+	if order.Carrier != "" {
+		b.WriteString(labelStyle.Render("Shipping"))
+		b.WriteString("\n")
+		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Carrier", order.Carrier)))
+		b.WriteString("\n")
+		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Tracking", order.TrackingNumber)))
+		b.WriteString("\n")
+		if order.ShippedAt != nil {
+			b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s",
+				"Shipped", order.ShippedAt.Format("Jan 02 2006"))))
+			b.WriteString("\n")
+		}
+		if order.TrackingUrl != "" {
+			b.WriteString(dimStyle.Render(" " + order.TrackingUrl))
+			b.WriteString("\n")
+		}
+	}
+
 	// Shipping address
 	b.WriteString(labelStyle.Render("Ship To"))
 	b.WriteString("\n")

@@ -19,7 +19,7 @@ func InitTracing(ctx context.Context, serviceName, endpoint string) (func(contex
 		return nil, err
 	}
 
-	res, err := resource.New(ctx, resource.WithAttributes(semconv.ServiceName(serviceName)),)
+	res, err := resource.New(ctx, resource.WithAttributes(semconv.ServiceName(serviceName)))
 	if err != nil {
 		return nil, err
 	}

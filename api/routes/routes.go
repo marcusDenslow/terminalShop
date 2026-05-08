@@ -27,7 +27,6 @@ func SetupRoutes(
 ) *chi.Mux {
 	r := chi.NewRouter()
 
-
 	// Global middleware
 	r.Use(otelchi.Middleware("terminalshop-api", otelchi.WithChiRoutes(r)))
 	r.Use(middleware.Logger)
@@ -122,6 +121,12 @@ func SetupRoutes(
 				r.Delete("/{id}", addressHandler.DeleteAddress)
 				r.Put("/{id}/default", addressHandler.SetDefaultAddress)
 			})
+		})
+
+		// Admin endpoints, gated by ADMIN_API_KEY only, no JWT required
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.RequireAdmin)
+			r.Patch("/orders/{id}/tracking", orderHandler.UpdateTracking)
 		})
 	})
 

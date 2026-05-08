@@ -14,6 +14,7 @@ const (
 	eventCardDeleted     eventType = "card_deleted"
 	eventOrderCreated    eventType = "order_created"
 	eventOrderPaid       eventType = "order_paid"
+	eventOrderShipped    eventType = "order_shipped"
 	eventOrderFailed     eventType = "order_failed"
 	eventOrderRefunded   eventType = "order_refunded"
 	eventPaymentCritical eventType = "payment_critical"
@@ -28,6 +29,8 @@ type event struct {
 	StripeID  string
 	CardLast4 string
 	CardBrand string
+	Carrier   string
+	Tracking  string
 	Error     string
 }
 
@@ -53,6 +56,12 @@ func (e event) attrs() []any {
 	}
 	if e.CardBrand != "" {
 		a = append(a, "card_brand", e.CardBrand)
+	}
+	if e.Carrier != "" {
+		a = append(a, "carrier", e.Carrier)
+	}
+	if e.Tracking != "" {
+		a = append(a, "tracking", e.Tracking)
 	}
 	if e.Error != "" {
 		a = append(a, "error", e.Error)
@@ -98,6 +107,17 @@ func OrderPaid(userID, orderID uint, amountCents int, stripePaymentIntentID stri
 		OrderID:  orderID,
 		Amount:   amountCents,
 		StripeID: stripePaymentIntentID,
+	}.attrs()...)
+}
+
+// OrderShipped records that an order has been marked as shipped with carrier metadata
+func OrderShipped(userID, orderID uint, carrier, trackingNumber string) {
+	slog.Info("audit", event{
+		Event:    eventOrderShipped,
+		UserID:   userID,
+		OrderID:  orderID,
+		Carrier:  carrier,
+		Tracking: trackingNumber,
 	}.attrs()...)
 }
 

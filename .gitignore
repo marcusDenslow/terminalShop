@@ -5,6 +5,8 @@
 .env.example
 .env.prod
 
+.junie/
+
 # Build artifacts
 *.exe
 *.exe~

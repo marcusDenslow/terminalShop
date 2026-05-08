@@ -29,7 +29,7 @@ func NewClient(apiUID, apiKey string) *Client {
 		apiUID: apiUID,
 		apiKey: apiKey,
 		httpClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
 			Transport: otelhttp.NewTransport(http.DefaultTransport),
 		},
 	}

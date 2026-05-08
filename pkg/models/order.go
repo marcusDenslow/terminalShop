@@ -26,20 +26,24 @@ type Order struct {
 	CardID          uint           `gorm:"not null" json:"card_id"`
 	StripePaymentID string         `gorm:"size:255" json:"-"` // Stripe PaymentIntent ID
 	Status          OrderStatus    `gorm:"size:50;not null;default:'pending'" json:"status"`
-	Subtotal        int            `gorm:"not null" json:"subtotal"`       // Amount in cents
-	ShippingCost    int            `gorm:"default:0" json:"shipping_cost"` // Amount in cents
-	Total           int            `gorm:"not null" json:"total"`          // Amount in cents
-	ShippingName    string         `gorm:"size:255" json:"shipping_name"`
-	ShippingStreet  string         `gorm:"size:255" json:"shipping_street"`
-	ShippingStreet2 string         `gorm:"size:255" json:"shipping_street2"`
-	ShippingCity    string         `gorm:"size:255" json:"shipping_city"`
-	ShippingState   string         `gorm:"size:50" json:"shipping_state"`
-	ShippingZip     string         `gorm:"size:20" json:"shipping_zip"`
-	ShippingCountry string         `gorm:"size:2" json:"shipping_country"`
-	ShippingPhone   string         `gorm:"size:20" json:"shipping_phone"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+	Subtotal        int            `gorm:"not null" json:"subtotal"`              // Amount in cents
+	ShippingCost    int            `gorm:"default:0" json:"shipping_cost"`        // Amount in cents
+	Total           int            `gorm:"not null" json:"total"`                 // Amount in cents
+	ShippingName    string         `gorm:"size:255" json:"shipping_name"`         // The name of the person the shipment is tied to
+	ShippingStreet  string         `gorm:"size:255" json:"shipping_street"`       // The street address the shipment is tied to
+	ShippingStreet2 string         `gorm:"size:255" json:"shipping_street2"`      // The alternate street address the shipment is going to if first is valid for whatever reason
+	ShippingCity    string         `gorm:"size:255" json:"shipping_city"`         // The city the shipment is going to
+	ShippingState   string         `gorm:"size:50" json:"shipping_state"`         // The state the shipment is tied to
+	ShippingZip     string         `gorm:"size:20" json:"shipping_zip"`           // The zip code the order is tied to
+	ShippingCountry string         `gorm:"size:2" json:"shipping_country"`        // The country the shipment is tied to
+	ShippingPhone   string         `gorm:"size:20" json:"shipping_phone"`         // Phone number the shipment is tied to
+	Carrier         string         `gorm:"size:100" json:"carrier"`               // USPS, Posten (Norge!!), "FedEx"
+	TrackingNumber  string         `gorm:"size:255;index" json:"tracking_number"` // Tracking number of an order
+	TrackingUrl     string         `gorm:"size:255" json:"tracking_url"`          // carrier specific tracking link
+	ShippedAt       *time.Time     `json:"shipped_at"`                            // time the order was shipped at. Null until dispatched
+	CreatedAt       time.Time      `json:"created_at"`                            // time the order was created at. null until dispatched
+	UpdatedAt       time.Time      `json:"updated_at"`                            // time the order was updated at. null until dispatched
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`                        // time the order was deleted at. null until dispatched
 
 	// Associations
 	User  User        `gorm:"foreignKey:UserID" json:"-"`

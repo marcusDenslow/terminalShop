@@ -54,5 +54,5 @@ func (m Model) formatListItemCustom(text string, focused bool, totalWidth int, s
 	var firstLine = lines[0]
 	hintSpace := totalWidth - lipgloss.Width(hint) - lipgloss.Width(firstLine) - padding
 	lines[0] = firstLine + m.theme.Base().Width(hintSpace).Render() + hint
-	return lipgloss.JoinVertical(lipgloss.Left, lines...,)
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
