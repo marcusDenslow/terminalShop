@@ -105,3 +105,6 @@ loadtest/run.err
 /00
 
 ROADMAP.md
+
+*.bak
+terminalshop.prod.*
