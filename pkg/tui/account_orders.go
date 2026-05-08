@@ -135,21 +135,22 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 	b.WriteString(labelStyle.Render(fmt.Sprintf("  %-22s %s", "Total", total)))
 	b.WriteString("\n\n")
 
-	// Shipping (only when carrier is set)
-	if order.Carrier != "" {
+	// Shipping (only when at least one shipment exists)
+	if len(order.Shipments) > 0 {
+		s := order.Shipments[0]
 		b.WriteString(labelStyle.Render("Shipping"))
 		b.WriteString("\n")
-		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Carrier", order.Carrier)))
+		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Carrier", s.Carrier)))
 		b.WriteString("\n")
-		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Tracking", order.TrackingNumber)))
+		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Tracking", s.TrackingNumber)))
 		b.WriteString("\n")
-		if order.ShippedAt != nil {
+		if s.ShippedAt != nil {
 			b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s",
-				"Shipped", order.ShippedAt.Format("Jan 02 2006"))))
+				"Shipped", s.ShippedAt.Format("Jan 02 2006"))))
 			b.WriteString("\n")
 		}
-		if order.TrackingURL != "" {
-			b.WriteString(dimStyle.Render(" " + order.TrackingURL))
+		if s.TrackingURL != "" {
+			b.WriteString(dimStyle.Render(" " + s.TrackingURL))
 			b.WriteString("\n")
 		}
 	}

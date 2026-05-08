@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stripe/stripe-go/v78"
 	"github.com/stripe/stripe-go/v78/refund"
+	"gorm.io/gorm"
 
 	"terminalShop/api/middleware"
 	"terminalShop/pkg/audit"
@@ -30,7 +31,7 @@ func (h *OrderHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var orders []models.Order
-	db.Where("user_id = ?", userID).Preload("Items").Order("created_at desc").Find(&orders)
+	db.Where("user_id = ?", userID).Preload("Items").Preload("Shipments").Order("created_at desc").Find(&orders)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"orders": orders,
@@ -140,18 +141,28 @@ func (h *OrderHandler) UpdateTracking(w http.ResponseWriter, r *http.Request) {
 		shippedAt = &now
 	}
 
-	updates := map[string]interface{}{
-		"carrier":         req.Carrier,
-		"tracking_number": req.TrackingNumber,
-		"tracking_url":    req.TrackingURL,
-		"shipped_at":      shippedAt,
-	}
-	if order.Status == models.OrderStatusPaid {
-		updates["status"] = models.OrderStatusShipped
+	shipment := models.Shipment{
+		OrderID:        order.ID,
+		Carrier:        req.Carrier,
+		TrackingNumber: req.TrackingNumber,
+		TrackingURL:    req.TrackingURL,
+		Status:         models.ShipmentStatusLabelCreated,
+		ShippedAt:      shippedAt,
 	}
 
-	if err := db.Model(&order).Updates(updates).Error; err != nil {
-		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to update order", nil)
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&shipment).Error; err != nil {
+			return err
+		}
+		if order.Status == models.OrderStatusPaid {
+			if err := tx.Model(&order).Update("status", models.OrderStatusShipped).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to record shipment", nil)
 		return
 	}
 
@@ -159,8 +170,9 @@ func (h *OrderHandler) UpdateTracking(w http.ResponseWriter, r *http.Request) {
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"order_id":        order.ID,
+		"shipment_id":     shipment.ID,
 		"carrier":         req.Carrier,
 		"tracking_number": req.TrackingNumber,
-		"status":          updates["status"],
+		"status":          order.Status,
 	})
 }
