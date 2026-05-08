@@ -155,7 +155,7 @@ func (h *OrderHandler) UpdateTracking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	audit.OrderShipped(order.UserID, order.ID, req.Carrier, req.TrackingURL)
+	audit.OrderShipped(order.UserID, order.ID, req.Carrier, req.TrackingNumber)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"order_id":        order.ID,

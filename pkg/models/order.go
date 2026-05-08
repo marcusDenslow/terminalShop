@@ -10,13 +10,13 @@ import (
 type OrderStatus string
 
 const (
-	OrderStatusPending   OrderStatus = "pending"
-	OrderStatusPaid      OrderStatus = "paid"
-	OrderStatusShipped   OrderStatus = "shipped"
-	OrderStatusDelivered OrderStatus = "delivered"
-	OrderStatusCancelled OrderStatus = "cancelled"
-	OrderStatusRefunded  OrderStatus = "refunded"
-	OrderStatusFailed    OrderStatus = "failed"
+	OrderStatusPending OrderStatus = "pending"
+	OrderStatusPaid    OrderStatus = "paid"
+	OrderStatusShipped OrderStatus = "shipped"
+	// OrderStatusDelivered OrderStatus = "delivered"
+	// OrderStatusCancelled OrderStatus = "cancelled"
+	OrderStatusRefunded OrderStatus = "refunded"
+	OrderStatusFailed   OrderStatus = "failed"
 )
 
 // Order represents a completed purchase.
@@ -39,11 +39,11 @@ type Order struct {
 	ShippingPhone   string         `gorm:"size:20" json:"shipping_phone"`         // Phone number the shipment is tied to
 	Carrier         string         `gorm:"size:100" json:"carrier"`               // USPS, Posten (Norge!!), "FedEx"
 	TrackingNumber  string         `gorm:"size:255;index" json:"tracking_number"` // Tracking number of an order
-	TrackingUrl     string         `gorm:"size:255" json:"tracking_url"`          // carrier specific tracking link
+	TrackingURL     string         `gorm:"size:255" json:"tracking_url"`          // carrier specific tracking link
 	ShippedAt       *time.Time     `json:"shipped_at"`                            // time the order was shipped at. Null until dispatched
-	CreatedAt       time.Time      `json:"created_at"`                            // time the order was created at. null until dispatched
-	UpdatedAt       time.Time      `json:"updated_at"`                            // time the order was updated at. null until dispatched
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`                        // time the order was deleted at. null until dispatched
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"` // GORM soft-delete sentinel
 
 	// Associations
 	User  User        `gorm:"foreignKey:UserID" json:"-"`

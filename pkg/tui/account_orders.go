@@ -148,8 +148,8 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 				"Shipped", order.ShippedAt.Format("Jan 02 2006"))))
 			b.WriteString("\n")
 		}
-		if order.TrackingUrl != "" {
-			b.WriteString(dimStyle.Render(" " + order.TrackingUrl))
+		if order.TrackingURL != "" {
+			b.WriteString(dimStyle.Render(" " + order.TrackingURL))
 			b.WriteString("\n")
 		}
 	}

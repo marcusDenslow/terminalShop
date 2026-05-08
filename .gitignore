@@ -5,6 +5,9 @@
 .env.example
 .env.prod
 
+
+FULFILLMENT.md
+.tmp-gocache/
 .junie/
 
 # Build artifacts
