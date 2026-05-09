@@ -61,8 +61,6 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool)
 		dimStyle = m.theme.TextAccent()
 	}
 
-	statusStyle := m.theme.TextHighlight().Bold(true)
-
 	// Line 1: "Order #N" left, "$X.XX" right
 	orderLabel := nameStyle.Render(fmt.Sprintf("Order #%d", order.ID))
 	total := nameStyle.Render(fmt.Sprintf("$%.2f", float64(order.Total)/100.0))
@@ -78,7 +76,7 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool)
 
 	// Line 2: date + status
 	date := dimStyle.Render(order.CreatedAt.Format("Jan 02 2006"))
-	status := statusStyle.Render(strings.ToUpper(string(order.Status)))
+	status := m.statusStyle(order.Status).Bold(true).Render(strings.ToUpper(string(order.Status)))
 	line2 := date + "  " + status
 
 	boxContent := line1 + "\n" + line2
@@ -104,7 +102,7 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 
 	// Status and date
 	b.WriteString(labelStyle.Render("Status:  "))
-	b.WriteString(valueStyle.Render(strings.ToUpper(string(order.Status))))
+	b.WriteString(m.statusStyle(order.Status).Render(strings.ToUpper(string(order.Status))))
 	b.WriteString("\n")
 	b.WriteString(labelStyle.Render("Date:    "))
 	b.WriteString(valueStyle.Render(order.CreatedAt.Format("Jan 02 2006 3:04 PM")))
@@ -136,21 +134,24 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 	b.WriteString("\n\n")
 
 	// Shipping (only when at least one shipment exists)
-	if len(order.Shipments) > 0 {
-		s := order.Shipments[0]
+	if order.Carrier != "" {
 		b.WriteString(labelStyle.Render("Shipping"))
 		b.WriteString("\n")
-		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Carrier", s.Carrier)))
+		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Carrier", order.Carrier)))
 		b.WriteString("\n")
-		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Tracking", s.TrackingNumber)))
+		b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Tracking", order.TrackingNumber)))
 		b.WriteString("\n")
-		if s.ShippedAt != nil {
-			b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s",
-				"Shipped", s.ShippedAt.Format("Jan 02 2006"))))
+		if order.TrackingStatus != "" {
+			b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s", "Status", string(order.TrackingStatus))))
 			b.WriteString("\n")
 		}
-		if s.TrackingURL != "" {
-			b.WriteString(dimStyle.Render(" " + s.TrackingURL))
+		if order.ShippedAt != nil {
+			b.WriteString(valueStyle.Render(fmt.Sprintf("  %-10s %s",
+				"Shipped", order.ShippedAt.Format("Jan 02 2006"))))
+			b.WriteString("\n")
+		}
+		if order.TrackingURL != "" {
+			b.WriteString(dimStyle.Render(" " + order.TrackingURL))
 			b.WriteString("\n")
 		}
 	}
@@ -180,4 +181,17 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 	b.WriteString(dimStyle.Render("esc: back to orders"))
 
 	return b.String()
+}
+
+func (m Model) statusStyle(s models.OrderStatus) lipgloss.Style {
+	switch s {
+	case models.OrderStatusDelivered:
+		return m.theme.TextSuccess()
+	case models.OrderStatusShipped:
+		return m.theme.TextBrand()
+	case models.OrderStatusFailed, models.OrderStatusCancelled, models.OrderStatusRefunded:
+		return m.theme.TextError()
+
+	}
+	return m.theme.TextHighlight()
 }
