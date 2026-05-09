@@ -74,9 +74,9 @@ func (m Model) buildOrderCard(order models.Order, boxWidth int, isSelected bool)
 	}
 	line1 := orderLabel + lipgloss.NewStyle().Width(spacing).Render("") + total
 
-	// Line 2: date + status
+	// Line 2: date + derived status
 	date := dimStyle.Render(order.CreatedAt.Format("Jan 02 2006"))
-	status := m.statusStyle(order.Status).Bold(true).Render(strings.ToUpper(string(order.Status)))
+	status := m.displayStyle(order.DisplayKind()).Bold(true).Render(order.DisplayState())
 	line2 := date + "  " + status
 
 	boxContent := line1 + "\n" + line2
@@ -102,7 +102,7 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 
 	// Status and date
 	b.WriteString(labelStyle.Render("Status:  "))
-	b.WriteString(m.statusStyle(order.Status).Render(strings.ToUpper(string(order.Status))))
+	b.WriteString(m.displayStyle(order.DisplayKind()).Render(order.DisplayState()))
 	b.WriteString("\n")
 	b.WriteString(labelStyle.Render("Date:    "))
 	b.WriteString(valueStyle.Render(order.CreatedAt.Format("Jan 02 2006 3:04 PM")))
@@ -183,15 +183,23 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 	return b.String()
 }
 
-func (m Model) statusStyle(s models.OrderStatus) lipgloss.Style {
-	switch s {
-	case models.OrderStatusDelivered:
+// displayStyle maps a model-layer DisplayKind token to a themed lipgloss style.
+// Keeps pkg/models free of UI deps.
+func (m Model) displayStyle(k models.DisplayKind) lipgloss.Style {
+	switch k {
+	case models.DisplayKindSuccess:
 		return m.theme.TextSuccess()
-	case models.OrderStatusShipped:
+	case models.DisplayKindBrand:
 		return m.theme.TextBrand()
-	case models.OrderStatusFailed, models.OrderStatusCancelled, models.OrderStatusRefunded:
+	case models.DisplayKindAccent:
+		return m.theme.TextAccent()
+	case models.DisplayKindError:
 		return m.theme.TextError()
-
+	case models.DisplayKindWarning:
+		// !TODO add refunds and change this
+		// No warning color in theme yet, reuse loading pink as visual flag
+		// for now
+		return m.theme.TextLoading()
 	}
 	return m.theme.TextHighlight()
 }
