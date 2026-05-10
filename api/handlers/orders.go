@@ -107,7 +107,7 @@ type updateTrackingRequest struct {
 
 // UpdateTracking sets carrier metadata on the order. Transitions paid orders
 // to shipped automatically. Admin only, gated by RequireAdmin in routes.go,
-// not RequireAuth, so no user JWT is needed
+// not RequireAuth, so no user JWT is needed.
 func (h *OrderHandler) UpdateTracking(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB().WithContext(r.Context())
 
