@@ -301,6 +301,9 @@ func addrPayload(a Address) map[string]any {
 	if a.Phone != "" {
 		m["phone"] = a.Phone
 	}
+	if a.Email != "" {
+		m["email"] = a.Email
+	}
 	return m
 }
 
@@ -344,6 +347,7 @@ func fromAddress() Address {
 		Country: os.Getenv("SHIP_FROM_COUNTRY"),
 		Zip:     os.Getenv("SHIP_FROM_ZIP"),
 		Phone:   os.Getenv("SHIP_FROM_PHONE"),
+		Email:   os.Getenv("SHIP_FROM_EMAIL"),
 	}
 }
 
@@ -357,6 +361,7 @@ type Address struct {
 	Country string `json:"country"`
 	Zip     string `json:"zip"`
 	Phone   string `json:"phone,omitempty"`
+	Email   string `json:"email,omitempty"`
 }
 
 // addressRequest is the payload sent to Shippo's address validation endpoint.
