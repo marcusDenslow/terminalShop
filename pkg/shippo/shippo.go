@@ -183,7 +183,7 @@ func (c *Client) createShippoOrder(ctx context.Context, to Address, email string
 		lines = append(lines, map[string]any{
 			"quantity":    item.Quantity,
 			"title":       item.Title,
-			"weight":      item.WeightKg,
+			"weight":      roundN(item.WeightKg, 4),
 			"weight_unit": "kg",
 		})
 	}
@@ -195,7 +195,7 @@ func (c *Client) createShippoOrder(ctx context.Context, to Address, email string
 		"to_address":  toPayload,
 		"line_items":  lines,
 		"placed_at":   time.Now().Format(time.RFC3339),
-		"weight":      totalKg,
+		"weight":      roundN(totalKg, 2),
 		"weight_unit": "kg",
 	}
 	var resp shippoOrderResponse
@@ -302,6 +302,19 @@ func addrPayload(a Address) map[string]any {
 		m["phone"] = a.Phone
 	}
 	return m
+}
+
+// roundN rounds to n decimal places. Shippo's /v1/orders rejects >2 decimals
+// on parcel weight and >4 on line-item weight.
+func roundN(v float64, n int) float64 {
+	pow := 1.0
+	for i := 0; i < n; i++ {
+		pow *= 10
+	}
+	if v >= 0 {
+		return float64(int64(v*pow+0.5)) / pow
+	}
+	return float64(int64(v*pow-0.5)) / pow
 }
 
 func parseAmountCents(s string) int {
