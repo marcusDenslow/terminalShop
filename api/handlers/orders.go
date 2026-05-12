@@ -185,12 +185,13 @@ func (h *OrderHandler) PurchaseLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if order.Status != models.OrderStatusPaid {
-		utils.RespondError(w, http.StatusConflict, "INVALID_STATE", "only paid orders can be labeled", nil)
-		return
-	}
 	if order.TrackingNumber != "" {
 		utils.RespondError(w, http.StatusConflict, "ALREADY_LABELED", "order already has a tracking number", nil)
+		return
+	}
+
+	if order.Status != models.OrderStatusPaid {
+		utils.RespondError(w, http.StatusConflict, "INVALID_STATE", "only paid orders can be labeled", nil)
 		return
 	}
 
