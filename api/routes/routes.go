@@ -127,6 +127,7 @@ func SetupRoutes(
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.RequireAdmin)
 			r.Patch("/orders/{id}/tracking", orderHandler.UpdateTracking)
+			r.Post("/orders/{id}/label", orderHandler.PurchaseLabel)
 		})
 	})
 

@@ -18,6 +18,8 @@ const (
 	eventOrderFailed     eventType = "order_failed"
 	eventOrderRefunded   eventType = "order_refunded"
 	eventPaymentCritical eventType = "payment_critical"
+	eventLabelPurchased  eventType = "label_purchased"
+	eventLabelOrphaned   eventType = "label_orphaned"
 )
 
 type event struct {
@@ -151,6 +153,27 @@ func PaymentCritical(orderID uint, stripePaymentIntentID string, err error) {
 		Event:    eventPaymentCritical,
 		OrderID:  orderID,
 		StripeID: stripePaymentIntentID,
+		Error:    err.Error(),
+	}.attrs()...)
+}
+
+func LabelPurchased(orderID uint, carrier, trackingNumber, shippoTxID string, costCents int) {
+	slog.Info("audit", event{
+		Event:    eventLabelPurchased,
+		OrderID:  orderID,
+		Carrier:  carrier,
+		Tracking: trackingNumber,
+		StripeID: shippoTxID,
+		Amount:   costCents,
+	}.attrs()...)
+}
+
+func LabelOrphaned(orderID uint, shippoTxID, trackingNumber string, err error) {
+	slog.Error("audit", event{
+		Event:    eventLabelOrphaned,
+		OrderID:  orderID,
+		StripeID: shippoTxID,
+		Tracking: trackingNumber,
 		Error:    err.Error(),
 	}.attrs()...)
 }

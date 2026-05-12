@@ -58,6 +58,11 @@ type Order struct {
 	TrackingStatusDetails   string         `gorm:"size:512" json:"tracking_status_details"`
 	TrackingStatusUpdatedAt *time.Time     `json:"tracking_status_updated_at"`
 
+	// Shippo label shit, populated by the PurchaseLabel handler
+	ShippoTransactionID string `gorm:"size:255;uniqueIndex" json:"-"`
+	LabelURL            string `gorm:"size:512" json:"-"`
+	LabelCostCents      int    `json:"-"`
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"` // GORM soft-delete sentinel

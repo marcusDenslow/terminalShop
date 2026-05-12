@@ -3,7 +3,9 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
+	"terminalShop/pkg/shippo"
 	"time"
 
 	"terminalShop/api/middleware"
@@ -161,5 +163,99 @@ func (h *OrderHandler) UpdateTracking(w http.ResponseWriter, r *http.Request) {
 		"carrier":         req.Carrier,
 		"tracking_number": req.TrackingNumber,
 		"status":          order.Status,
+	})
+}
+
+// PurchaseLabel buys a shipping label from shippo for the order, writes
+// the carrier, tracking, and label fields onto the order, and changes the status
+// from paid to shipped
+func (h *OrderHandler) PurchaseLabel(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB().WithContext(r.Context())
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_ID", "invalid order id", nil)
+		return
+	}
+
+	var order models.Order
+	if err := db.Preload("Items.Coffee").Preload("User").Where("id = ?", id).First(&order).Error; err != nil {
+		utils.RespondError(w, http.StatusNotFound, "ORDER_NOT_FOUND", "order not found", nil)
+		return
+	}
+
+	if order.Status != models.OrderStatusPaid {
+		utils.RespondError(w, http.StatusConflict, "INVALID_STATE", "only paid orders can be labeled", nil)
+		return
+	}
+	if order.TrackingNumber != "" {
+		utils.RespondError(w, http.StatusConflict, "ALREADY_LABELED", "order already has a tracking number", nil)
+		return
+	}
+
+	// Coffee.Ounces in ounces; shippo client expects kg
+	const ozToKg = 0.0283495
+	const defaultOunces = 12.0
+
+	lineItems := make([]shippo.LineItem, 0, len(order.Items))
+	for _, it := range order.Items {
+		oz := float64(it.Coffee.Ounces)
+		if oz <= 0 {
+			oz = defaultOunces
+		}
+		lineItems = append(lineItems, shippo.LineItem{
+			Title:    it.Name,
+			Quantity: it.Quantity,
+			WeightKg: oz * ozToKg,
+		})
+	}
+
+	to := shippo.Address{
+		Name:    order.ShippingName,
+		Street1: order.ShippingStreet,
+		Street2: order.ShippingStreet2,
+		City:    order.ShippingCity,
+		State:   order.ShippingState,
+		Country: order.ShippingCountry,
+		Zip:     order.ShippingZip,
+		Phone:   order.ShippingPhone,
+	}
+
+	client := shippo.NewClient(os.Getenv("SHIPPO_API_KEY"))
+	result, err := client.CreateLabel(r.Context(), to, order.User.Email, lineItems)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadGateway, "SHIPPO_ERROR", err.Error(), nil)
+		return
+	}
+
+	now := time.Now()
+	updates := map[string]any{
+		"carrier":               result.Carrier,
+		"tracking_number":       result.TrackingNumber,
+		"tracking_url":          result.TrackingURL,
+		"shipped_at":            &now,
+		"status":                models.OrderStatusShipped,
+		"shippo_transaction_id": result.TransactionID,
+		"label_url":             result.LabelURL,
+		"label_cost_cents":      result.CostCents,
+	}
+	if err := db.Model(&order).Updates(updates).Error; err != nil {
+		audit.LabelOrphaned(order.ID, result.TransactionID, result.TrackingNumber, err)
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "label purchased but failed to record on order; ops will reconcile", nil)
+		return
+	}
+
+	audit.LabelPurchased(order.ID, result.Carrier, result.TrackingNumber, result.TransactionID, result.CostCents)
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
+		"order_id":        order.ID,
+		"carrier":         result.Carrier,
+		"service":         result.ServiceLevel,
+		"tracking_number": result.TrackingNumber,
+		"tracking_url":    result.TrackingURL,
+		"label_url":       result.LabelURL,
+		"cost_cents":      result.CostCents,
+		"status":          models.OrderStatusShipped,
 	})
 }
