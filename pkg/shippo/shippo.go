@@ -10,6 +10,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"terminalShop/pkg/shipping"
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -52,17 +53,6 @@ type LineItem struct {
 	WeightKg float64
 }
 
-type LabelResult struct {
-	TransactionID  string
-	RateID         string
-	Carrier        string
-	ServiceLevel   string
-	TrackingNumber string
-	TrackingURL    string
-	LabelURL       string
-	CostCents      int
-}
-
 type shipmentRate struct {
 	ObjectID     string `json:"object_id"`
 	Amount       string `json:"amount"`
@@ -95,7 +85,7 @@ type transactionResponse struct {
 	} `json:"messages"`
 }
 
-func (c *Client) CreateLabel(ctx context.Context, to Address, email string, items []LineItem) (*LabelResult, error) {
+func (c *Client) CreateLabel(ctx context.Context, to Address, email string, items []LineItem) (*shipping.LabelResult, error) {
 	from := fromAddress()
 	if from.Street1 == "" {
 		return nil, fmt.Errorf("SHIP_FROM_STREET1 not configured")
@@ -133,7 +123,7 @@ func (c *Client) CreateLabel(ctx context.Context, to Address, email string, item
 
 	costCents := parseAmountCents(rate.Amount)
 
-	return &LabelResult{
+	return &shipping.LabelResult{
 		TransactionID:  final.ObjectID,
 		RateID:         rate.ObjectID,
 		Carrier:        rate.Provider,

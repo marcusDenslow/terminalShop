@@ -26,6 +26,7 @@ type Config struct {
 	AuthFingerprintKey  string
 	BringAPIUID         string
 	BringAPIKey         string
+	BringCustomerNumber string
 }
 
 // Load reads configuration from environment variables and validates required secrets.
@@ -58,6 +59,7 @@ func Load() (*Config, error) {
 		AuthFingerprintKey:  os.Getenv("AUTH_FINGERPRINT_KEY"),
 		BringAPIUID:         os.Getenv("BRING_API_UID"),
 		BringAPIKey:         os.Getenv("BRING_API_KEY"),
+		BringCustomerNumber: os.Getenv("BRING_CUSTOMER_NUMBER"),
 	}
 
 	if err := cfg.validate(); err != nil {

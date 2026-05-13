@@ -23,6 +23,7 @@ func SetupRoutes(
 	shippoAPIKey string,
 	bringAPIUID string,
 	bringAPIKey string,
+	bringCustomerNumber string,
 	appURL string,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -43,7 +44,7 @@ func SetupRoutes(
 	authHandler := handlers.NewAuthHandler(jwtManager, authFingerprintKey)
 	cartHandler := handlers.NewCartHandler(stripeSecretKey)
 	cardHandler := handlers.NewCardHandler(stripeSecretKey, appURL)
-	orderHandler := handlers.NewOrderHandler(stripeSecretKey)
+	orderHandler := handlers.NewOrderHandler(stripeSecretKey, bringAPIUID, bringAPIKey, bringCustomerNumber)
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)
 	viewHandler := handlers.NewViewHandler()
 	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, stripeSecretKey)

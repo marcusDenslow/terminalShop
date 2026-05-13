@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"terminalShop/pkg/bring"
+	"terminalShop/pkg/shipping"
 	"terminalShop/pkg/shippo"
 	"time"
 
@@ -20,11 +22,19 @@ import (
 )
 
 type OrderHandler struct {
-	stripeKey string
+	stripeKey           string
+	bringAPIUID         string
+	bringAPIKey         string
+	bringCustomerNumber string
 }
 
-func NewOrderHandler(stripeSecretKey string) *OrderHandler {
-	return &OrderHandler{stripeKey: stripeSecretKey}
+func NewOrderHandler(stripeSecretKey, bringAPIUID, bringAPIKey, bringCustomerNumber string) *OrderHandler {
+	return &OrderHandler{
+		stripeKey:           stripeSecretKey,
+		bringAPIUID:         bringAPIUID,
+		bringAPIKey:         bringAPIKey,
+		bringCustomerNumber: bringCustomerNumber,
+	}
 }
 
 func (h *OrderHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
@@ -195,38 +205,52 @@ func (h *OrderHandler) PurchaseLabel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Coffee.Ounces in ounces; shippo client expects kg
 	const ozToKg = 0.0283495
 	const defaultOunces = 12.0
 
-	lineItems := make([]shippo.LineItem, 0, len(order.Items))
-	for _, it := range order.Items {
-		oz := float64(it.Coffee.Ounces)
+	totalKg := 0.0
+	bringItems := make([]bring.LineItem, 0, len(order.Items))
+	shippoItems := make([]shippo.LineItem, 0, len(order.Items))
+	for _, item := range order.Items {
+		oz := float64(item.Coffee.Ounces)
 		if oz <= 0 {
 			oz = defaultOunces
 		}
-		lineItems = append(lineItems, shippo.LineItem{
-			Title:    it.Name,
-			Quantity: it.Quantity,
-			WeightKg: oz * ozToKg,
-		})
+		kg := oz * ozToKg
+		totalKg += float64(item.Quantity) * kg
+		bringItems = append(bringItems, bring.LineItem{Title: item.Name, Quantity: item.Quantity, WeightKg: kg})
+		shippoItems = append(shippoItems, shippo.LineItem{Title: item.Name, Quantity: item.Quantity, WeightKg: kg})
 	}
 
-	to := shippo.Address{
-		Name:    order.ShippingName,
-		Street1: order.ShippingStreet,
-		Street2: order.ShippingStreet2,
-		City:    order.ShippingCity,
-		State:   order.ShippingState,
-		Country: order.ShippingCountry,
-		Zip:     order.ShippingZip,
-		Phone:   order.ShippingPhone,
-	}
-
-	client := shippo.NewClient(os.Getenv("SHIPPO_API_KEY"))
-	result, err := client.CreateLabel(r.Context(), to, order.User.Email, lineItems)
-	if err != nil {
-		utils.RespondError(w, http.StatusBadGateway, "SHIPPO_ERROR", err.Error(), nil)
+	var result *shipping.LabelResult
+	switch order.ShippingCountry {
+	case "US":
+		to := shippo.Address{
+			Name: order.ShippingName, Street1: order.ShippingStreet, Street2: order.ShippingStreet2,
+			City: order.ShippingCity, State: order.ShippingState, Country: order.ShippingCountry,
+			Zip: order.ShippingZip, Phone: order.ShippingPhone,
+		}
+		client := shippo.NewClient(os.Getenv("SHIPPO_API_KEY"))
+		result, err = client.CreateLabel(r.Context(), to, order.User.Email, shippoItems)
+		if err != nil {
+			utils.RespondError(w, http.StatusBadGateway, "SHIPPO_ERROR", err.Error(), nil)
+			return
+		}
+	case "NO":
+		to := bring.BookingAddress{
+			Name: order.ShippingName, Street1: order.ShippingStreet, Street2: order.ShippingStreet2,
+			City: order.ShippingCity, Country: order.ShippingCountry, Zip: order.ShippingZip,
+			Phone: order.ShippingPhone,
+		}
+		testMode := os.Getenv("ENVIRONMENT") != "production"
+		client := bring.NewBookingClient(h.bringAPIUID, h.bringAPIKey, h.bringCustomerNumber, testMode)
+		result, err = client.CreateLabel(r.Context(), to, order.User.Email, bringItems)
+		if err != nil {
+			utils.RespondError(w, http.StatusBadGateway, "BRING_ERROR", err.Error(), nil)
+			return
+		}
+	default:
+		utils.RespondError(w, http.StatusBadRequest, "UNSUPPORTED_DESTINATION", "no label vendor configured for this country", nil)
 		return
 	}
 
