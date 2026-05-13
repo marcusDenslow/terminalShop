@@ -168,6 +168,18 @@ func (c *Client) createShipmentForRates(ctx context.Context, from, to Address, p
 	if resp.Status != "SUCCESS" || len(resp.Rates) == 0 {
 		return nil, fmt.Errorf("shippo returned no rates (status=%s)", resp.Status)
 	}
+
+	filtered := resp.Rates[:0:0]
+	for _, r := range resp.Rates {
+		if r.Provider == "USPS" {
+			filtered = append(filtered, r)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, fmt.Errorf("no USPS rates available for this route")
+	}
+	resp.Rates = filtered
+
 	sort.Slice(resp.Rates, func(i, j int) bool {
 		ai, _ := strconv.ParseFloat(resp.Rates[i].Amount, 64)
 		aj, _ := strconv.ParseFloat(resp.Rates[j].Amount, 64)
