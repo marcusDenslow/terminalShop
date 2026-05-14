@@ -24,6 +24,7 @@ func SetupRoutes(
 	bringAPIUID string,
 	bringAPIKey string,
 	bringCustomerNumber string,
+	shippoWebhookSecret string,
 	appURL string,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -47,7 +48,7 @@ func SetupRoutes(
 	orderHandler := handlers.NewOrderHandler(stripeSecretKey, bringAPIUID, bringAPIKey, bringCustomerNumber)
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)
 	viewHandler := handlers.NewViewHandler()
-	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, stripeSecretKey)
+	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, stripeSecretKey, shippoWebhookSecret)
 
 	// Short payment redirect and success page — no auth required.
 	r.Get("/pay/{token}", handlers.PayRedirect)
@@ -68,6 +69,8 @@ func SetupRoutes(
 		// Apply a generous IP rate limit here (Stripe retries from many IPs).
 		r.With(middleware.RateLimitByIP(60, time.Minute)).
 			Post("/webhooks/stripe", webhookHandler.HandleStripe)
+		r.With(middleware.RateLimitByIP(60, time.Minute)).
+			Post("/webhooks/shippo", webhookHandler.HandleShippo)
 
 		// Auth — stricter IP rate limit to protect against brute-force.
 		r.Group(func(r chi.Router) {

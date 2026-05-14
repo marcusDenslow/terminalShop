@@ -20,6 +20,8 @@ const (
 	eventPaymentCritical eventType = "payment_critical"
 	eventLabelPurchased  eventType = "label_purchased"
 	eventLabelOrphaned   eventType = "label_orphaned"
+	eventTrackingUpdated eventType = "tracking_updated"
+	eventOrderDelivered  eventType = "order_delivered"
 )
 
 type event struct {
@@ -33,6 +35,7 @@ type event struct {
 	CardBrand string
 	Carrier   string
 	Tracking  string
+	Status    string
 	Error     string
 }
 
@@ -64,6 +67,9 @@ func (e event) attrs() []any {
 	}
 	if e.Tracking != "" {
 		a = append(a, "tracking", e.Tracking)
+	}
+	if e.Status != "" {
+		a = append(a, "status", e.Status)
 	}
 	if e.Error != "" {
 		a = append(a, "error", e.Error)
@@ -175,5 +181,23 @@ func LabelOrphaned(orderID uint, shippoTxID, trackingNumber string, err error) {
 		StripeID: shippoTxID,
 		Tracking: trackingNumber,
 		Error:    err.Error(),
+	}.attrs()...)
+}
+
+func TrackingUpdated(orderID uint, carrier, trackingNumber, status string) {
+	slog.Info("audit", event{
+		Event:    eventTrackingUpdated,
+		OrderID:  orderID,
+		Carrier:  carrier,
+		Tracking: trackingNumber,
+		Status:   status,
+	}.attrs()...)
+}
+
+func OrderDelivered(orderID uint, trackingNumber string) {
+	slog.Info("audit", event{
+		Event:    eventOrderDelivered,
+		OrderID:  orderID,
+		Tracking: trackingNumber,
 	}.attrs()...)
 }

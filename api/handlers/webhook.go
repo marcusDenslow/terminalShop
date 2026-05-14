@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/stripe/stripe-go/v78"
 	"github.com/stripe/stripe-go/v78/paymentmethod"
@@ -26,11 +28,12 @@ func webhookLog() *slog.Logger { return slog.With("component", "webhook") }
 type WebhookHandler struct {
 	webhookSecret string
 	stripeKey     string
+	shippoSecret  string
 }
 
 // NewWebhookHandler creates a new webhook handler.
-func NewWebhookHandler(webhookSecret string, stripeKey string) *WebhookHandler {
-	return &WebhookHandler{webhookSecret: webhookSecret, stripeKey: stripeKey}
+func NewWebhookHandler(webhookSecret, stripeKey, shippoSecret string) *WebhookHandler {
+	return &WebhookHandler{webhookSecret: webhookSecret, stripeKey: stripeKey, shippoSecret: shippoSecret}
 }
 
 // HandleStripe validates the Stripe signature and routes the event.
@@ -239,4 +242,113 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(ctx context.Context, eve
 
 	audit.CardAdded(user.ID, card.ID, card.Brand, card.Last4)
 	webhookLog().Info("card saved via checkout.session.completed", "user_id", user.ID)
+}
+
+func (h *WebhookHandler) HandleShippo(w http.ResponseWriter, r *http.Request) {
+	token := r.URL.Query().Get("token")
+	if h.shippoSecret == "" || token != h.shippoSecret {
+		webhookLog().Warn("shippo webhook: token missing or invalid")
+		utils.RespondError(w, http.StatusUnauthorized, "INVALID_TOKEN", "token missing or invalid", nil)
+		return
+	}
+
+	const maxBodyBytes = 65536
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "READ_ERROR", "could not read request body", nil)
+		return
+	}
+
+	var payload struct {
+		Event string `json:"event"`
+		Data  struct {
+			TrackingNumber string `json:"tracking_number"`
+			Carrier        string `json:"carrier"`
+			TrackingStatus struct {
+				Status        string    `json:"status"`
+				StatusDetails string    `json:"status_details"`
+				StatusDate    time.Time `json:"status_date"`
+			} `json:"tracking_status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_JSON", "could not parse event", nil)
+		return
+	}
+
+	if payload.Event != "track_updated" {
+		webhookLog().Info("shippo webhook: ignoring no-tracking event", "event", payload.Event)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	newStatus, known := mapShippoStatus(payload.Data.TrackingStatus.Status)
+	if !known {
+		webhookLog().Warn("shippo webhook: unrecognized status, skipping",
+			"status", payload.Data.TrackingStatus.Status,
+			"tracking_number", payload.Data.TrackingNumber)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	db := database.GetDB().WithContext(r.Context())
+	var order models.Order
+	if err := db.Where("tracking_number = ?", payload.Data.TrackingNumber).First(&order).Error; err != nil {
+		webhookLog().Warn("shippo webhook: order not found",
+			"tracking_number", payload.Data.TrackingNumber)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if order.TrackingStatusUpdatedAt != nil && !payload.Data.TrackingStatus.StatusDate.After(*order.TrackingStatusUpdatedAt) {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	statusDate := payload.Data.TrackingStatus.StatusDate
+	previousTrackingStatus := order.TrackingStatus
+	updates := map[string]any{
+		"tracking_status":            newStatus,
+		"tracking_status_details":    payload.Data.TrackingStatus.StatusDetails,
+		"tracking_status_updated_at": &statusDate,
+	}
+	deliveredTransition := newStatus == models.TrackingStatusDelivered &&
+		order.Status != models.OrderStatusDelivered
+	if deliveredTransition {
+		updates["status"] = models.OrderStatusDelivered
+	}
+
+	if err := db.Model(&order).Updates(updates).Error; err != nil {
+		webhookLog().Error("shippo webhook: failed to persist tracking update",
+			"order_id", order.ID, "error", err)
+		utils.RespondError(w, http.StatusInternalServerError, "DB_ERROR", "failed to persist", nil)
+		return
+	}
+
+	if previousTrackingStatus != newStatus {
+		audit.TrackingUpdated(order.ID, order.Carrier, payload.Data.TrackingNumber, string(newStatus))
+	}
+	if deliveredTransition {
+		audit.OrderDelivered(order.ID, payload.Data.TrackingNumber)
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func mapShippoStatus(s string) (models.TrackingStatus, bool) {
+	switch strings.ToUpper(strings.TrimSpace(s)) {
+	case "UNKNOWN":
+		return models.TrackingStatusUnknown, true
+	case "PRE_TRANSIT":
+		return models.TrackingStatusPreTransit, true
+	case "TRANSIT":
+		return models.TrackingStatusTransit, true
+	case "DELIVERED":
+		return models.TrackingStatusDelivered, true
+	case "RETURNED":
+		return models.TrackingStatusReturned, true
+	case "FAILURE":
+		return models.TrackingStatusFailure, true
+	}
+	return models.TrackingStatusUnknown, false
 }
