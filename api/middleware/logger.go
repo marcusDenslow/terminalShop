@@ -49,7 +49,7 @@ func Logger(next http.Handler) http.Handler {
 		log.Printf(
 			"%s %s %d %s trace_id=%s",
 			r.Method,
-			r.RequestURI,
+			r.URL.Path,
 			wrapped.statusCode,
 			duration,
 			tid,
