@@ -104,6 +104,10 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 	b.WriteString(labelStyle.Render("Status:  "))
 	b.WriteString(m.displayStyle(order.DisplayKind()).Render(order.DisplayState()))
 	b.WriteString("\n")
+	if order.TrackingStatusDetails != "" {
+		b.WriteString(dimStyle.Render("         " + order.TrackingStatusDetails))
+		b.WriteString("\n")
+	}
 	b.WriteString(labelStyle.Render("Date:    "))
 	b.WriteString(valueStyle.Render(order.CreatedAt.Format("Jan 02 2006 3:04 PM")))
 	b.WriteString("\n\n")

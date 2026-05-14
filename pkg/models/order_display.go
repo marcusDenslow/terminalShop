@@ -31,16 +31,16 @@ func (order *Order) DisplayState() string {
 	case OrderStatusShipped:
 		switch order.TrackingStatus {
 		case TrackingStatusTransit:
-			return "Shipped * in transit"
+			return "In Transit"
 		case TrackingStatusFailure:
-			return "Shipped * delivery issue"
+			return "Delivery Issue"
 		case TrackingStatusReturned:
-			return "Shipped * returned to sender"
+			return "Returned to Sender"
 		case TrackingStatusDelivered:
 			// Webhook hasn't promoted Status yet, trust tracking
 			return "Delivered"
 		}
-		return "Shipped"
+		return "Label Created"
 	case OrderStatusDelivered:
 		return "Delivered"
 	case OrderStatusCancelled:

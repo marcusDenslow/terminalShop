@@ -279,7 +279,11 @@ func (h *WebhookHandler) HandleShippo(w http.ResponseWriter, r *http.Request) {
 
 	if payload.Event != "track_updated" {
 		webhookLog().Info("shippo webhook: ignoring no-tracking event", "event", payload.Event)
-		w.WriteHeader(http.StatusOK)
+		writeShippoResponse(w, map[string]any{
+			"received": true,
+			"skipped":  "non-tracking event",
+			"event":    payload.Event,
+		})
 		return
 	}
 
@@ -288,7 +292,11 @@ func (h *WebhookHandler) HandleShippo(w http.ResponseWriter, r *http.Request) {
 		webhookLog().Warn("shippo webhook: unrecognized status, skipping",
 			"status", payload.Data.TrackingStatus.Status,
 			"tracking_number", payload.Data.TrackingNumber)
-		w.WriteHeader(http.StatusOK)
+		writeShippoResponse(w, map[string]any{
+			"received":   true,
+			"skipped":    "unrecognized status",
+			"raw_status": payload.Data.TrackingStatus.Status,
+		})
 		return
 	}
 
@@ -297,12 +305,21 @@ func (h *WebhookHandler) HandleShippo(w http.ResponseWriter, r *http.Request) {
 	if err := db.Where("tracking_number = ?", payload.Data.TrackingNumber).First(&order).Error; err != nil {
 		webhookLog().Warn("shippo webhook: order not found",
 			"tracking_number", payload.Data.TrackingNumber)
-		w.WriteHeader(http.StatusOK)
+		writeShippoResponse(w, map[string]any{
+			"received":        true,
+			"skipped":         "order not found",
+			"tracking_number": payload.Data.TrackingNumber,
+		})
 		return
 	}
 
 	if order.TrackingStatusUpdatedAt != nil && !payload.Data.TrackingStatus.StatusDate.After(*order.TrackingStatusUpdatedAt) {
-		w.WriteHeader(http.StatusOK)
+		writeShippoResponse(w, map[string]any{
+			"received":                true,
+			"skipped":                 "stale status_date",
+			"order_id":                order.ID,
+			"current_tracking_status": string(order.TrackingStatus),
+		})
 		return
 	}
 
@@ -332,7 +349,15 @@ func (h *WebhookHandler) HandleShippo(w http.ResponseWriter, r *http.Request) {
 	if deliveredTransition {
 		audit.OrderDelivered(order.ID, payload.Data.TrackingNumber)
 	}
-	w.WriteHeader(http.StatusOK)
+	writeShippoResponse(w, map[string]any{
+		"received":                 true,
+		"order_id":                 order.ID,
+		"tracking_status":          string(newStatus),
+		"previous_tracking_status": string(previousTrackingStatus),
+		"lifecycle_status":         string(order.Status),
+		"delivered_transition":     deliveredTransition,
+		"status_details":           payload.Data.TrackingStatus.StatusDetails,
+	})
 }
 
 func mapShippoStatus(s string) (models.TrackingStatus, bool) {
@@ -351,4 +376,10 @@ func mapShippoStatus(s string) (models.TrackingStatus, bool) {
 		return models.TrackingStatusFailure, true
 	}
 	return models.TrackingStatusUnknown, false
+}
+
+func writeShippoResponse(w http.ResponseWriter, payload map[string]any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(payload)
 }
