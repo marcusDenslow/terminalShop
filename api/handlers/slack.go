@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -98,16 +99,17 @@ func (h *SlackHandler) dispatch(action slackAction, p slackInteractivePayload) {
 	case "buy_label":
 		h.handleBuyLabel(action.Value, p)
 	default:
-		notify.SlackPostToResponseURL(p.ResponseURL, fmt.Sprintf("Unknown action: %s", action.ActionID))
+		slog.Warn("slack interactivity: unknown action", "action_id", action.ActionID)
 	}
 }
 
 func (h *SlackHandler) handleBuyLabel(orderIDStr string, p slackInteractivePayload) {
-	orderID, err := strconv.ParseUint(orderIDStr, 10, 32)
+	orderID64, err := strconv.ParseUint(orderIDStr, 10, 32)
 	if err != nil {
-		notify.SlackPostToResponseURL(p.ResponseURL, fmt.Sprintf(":x: Invalid order id `%s`", orderIDStr))
+		slog.Warn("slack buy_label: invalid order id", "value", orderIDStr)
 		return
 	}
+	orderID := uint(orderID64)
 
 	url := fmt.Sprintf("http://localhost:%s/api/v1/orders/%d/label", h.apiPort, orderID)
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, url, nil)
@@ -115,7 +117,7 @@ func (h *SlackHandler) handleBuyLabel(orderIDStr string, p slackInteractivePaylo
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		notify.SlackPostToResponseURL(p.ResponseURL, fmt.Sprintf(":x: Label purchase failed: %v", err))
+		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Label purchase failed: %v", err))
 		return
 	}
 	defer resp.Body.Close()
@@ -125,10 +127,10 @@ func (h *SlackHandler) handleBuyLabel(orderIDStr string, p slackInteractivePaylo
 			TrackingNumber string `json:"tracking_number"`
 			Carrier        string `json:"carrier"`
 			LabelURL       string `json:"label_url"`
-			CostCents      int `json:"cost_cents"`
+			CostCents      int    `json:"cost_cents"`
 		} `json:"data"`
 		Error struct {
-			Code string `json:"code"`
+			Code    string `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
 	}
@@ -136,20 +138,17 @@ func (h *SlackHandler) handleBuyLabel(orderIDStr string, p slackInteractivePaylo
 	_ = json.Unmarshal(bodyBytes, &result)
 
 	if resp.StatusCode >= 300 {
-		msg := fmt.Sprintf(":x: Order #%d label failed: `%s` %s", orderID, result.Error.Code, result.Error.Message)
-		notify.SlackPostToResponseURL(p.ResponseURL, msg)
+		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Label purchase failed: `%s` %s", result.Error.Code, result.Error.Message))
 		return
 	}
 
-	msg := fmt.Sprintf(
-		":white_check_mark: Order #%d labeled — %s `%s` ($%.2f). <%s|Download label PDF>",
-		orderID,
+	notify.SlackPostToOrderThread(orderID, fmt.Sprintf(
+		":white_check_mark: Labeled — %s `%s` ($%.2f). <%s|Download label PDF>",
 		result.Data.Carrier,
 		result.Data.TrackingNumber,
 		float64(result.Data.CostCents)/100,
 		result.Data.LabelURL,
-		)
-	notify.SlackPostToResponseURL(p.ResponseURL, msg)
+	))
 }
 
 func (h *SlackHandler) verifySignature(r *http.Request, body []byte) bool {

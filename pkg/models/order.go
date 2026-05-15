@@ -60,8 +60,11 @@ type Order struct {
 
 	// Shippo label shit, populated by the PurchaseLabel handler
 	ShippoTransactionID *string `gorm:"size:255;uniqueIndex" json:"-"`
-	LabelURL            string `gorm:"size:512" json:"-"`
-	LabelCostCents      int    `json:"-"`
+	LabelURL            string  `gorm:"size:512" json:"-"`
+	LabelCostCents      int     `json:"-"`
+
+	// Slack parent message ts for this order's thread (NULL if Slack notify disabled).
+	SlackThreadTS *string `gorm:"size:64" json:"-"`
 
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

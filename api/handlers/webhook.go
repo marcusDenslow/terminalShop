@@ -347,6 +347,7 @@ func (h *WebhookHandler) HandleShippo(w http.ResponseWriter, r *http.Request) {
 
 	if previousTrackingStatus != newStatus {
 		audit.TrackingUpdated(order.ID, order.Carrier, payload.Data.TrackingNumber, string(newStatus))
+		go notify.SlackPostToOrderThread(order.ID, formatTrackingUpdate(newStatus, payload.Data.TrackingStatus.StatusDetails))
 	}
 	if deliveredTransition {
 		audit.OrderDelivered(order.ID, payload.Data.TrackingNumber)
@@ -360,6 +361,28 @@ func (h *WebhookHandler) HandleShippo(w http.ResponseWriter, r *http.Request) {
 		"delivered_transition":     deliveredTransition,
 		"status_details":           payload.Data.TrackingStatus.StatusDetails,
 	})
+}
+
+func formatTrackingUpdate(status models.TrackingStatus, details string) string {
+	var icon, label string
+	switch status {
+	case models.TrackingStatusPreTransit:
+		icon, label = ":label:", "Label created"
+	case models.TrackingStatusTransit:
+		icon, label = ":truck:", "In transit"
+	case models.TrackingStatusDelivered:
+		icon, label = ":white_check_mark:", "Delivered"
+	case models.TrackingStatusReturned:
+		icon, label = ":leftwards_arrow_with_hook:", "Returned to sender"
+	case models.TrackingStatusFailure:
+		icon, label = ":warning:", "Delivery exception"
+	default:
+		icon, label = ":package:", string(status)
+	}
+	if details != "" {
+		return fmt.Sprintf("%s *%s* — %s", icon, label, details)
+	}
+	return fmt.Sprintf("%s *%s*", icon, label)
 }
 
 func mapShippoStatus(s string) (models.TrackingStatus, bool) {

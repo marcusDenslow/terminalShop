@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 )
 
@@ -18,26 +19,37 @@ func dollars(cents int) string {
 	return fmt.Sprintf("$%.2f", float64(cents)/100)
 }
 
-// SlackOrderPaid posts a receipt-style Block Kit message with item lines,
-// totals, shipping address, and a "Buy Label" button. Caller must preload
-// order.Items before calling. No-op if SLACK_BOT_TOKEN or SLACK_CHANNEL unset.
-func SlackOrderPaid(order *models.Order) {
-	token := os.Getenv("SLACK_BOT_TOKEN")
-	channel := os.Getenv("SLACK_CHANNEL")
-	if token == "" || channel == "" {
-		return
+// postSlackMessage POSTs to chat.postMessage and returns (ts, ok). Logs on failure.
+func postSlackMessage(token string, payload map[string]any) (string, bool) {
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, "https://slack.com/api/chat.postMessage", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := slackClient.Do(req)
+	if err != nil {
+		slog.Warn("slack post failed", "error", err)
+		return "", false
 	}
+	defer resp.Body.Close()
 
-	fallback := fmt.Sprintf(":coffee: Order #%d paid - %s", order.ID, dollars(order.Total))
+	var parsed struct {
+		Ok    bool   `json:"ok"`
+		TS    string `json:"ts"`
+		Error string `json:"error"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&parsed)
+	if !parsed.Ok {
+		slog.Warn("slack post non-ok", "error", parsed.Error)
+		return "", false
+	}
+	return parsed.TS, true
+}
 
+func buildReceiptBlocks(order *models.Order) []map[string]any {
 	blocks := []map[string]any{
-		{
-			"type": "header",
-			"text": map[string]any{"type": "plain_text", "text": fallback, "emoji": true},
-		},
 		{"type": "divider"},
 	}
-
 	for _, item := range order.Items {
 		line := fmt.Sprintf("*%s* × %d\n%s", item.Name, item.Quantity, dollars(item.Price*item.Quantity))
 		blocks = append(blocks, map[string]any{
@@ -45,7 +57,6 @@ func SlackOrderPaid(order *models.Order) {
 			"text": map[string]any{"type": "mrkdwn", "text": line},
 		})
 	}
-
 	blocks = append(blocks,
 		map[string]any{"type": "divider"},
 		map[string]any{
@@ -82,51 +93,66 @@ func SlackOrderPaid(order *models.Order) {
 			},
 		},
 	)
-
-	body, _ := json.Marshal(map[string]any{
-		"channel": channel,
-		"text":    fallback,
-		"blocks":  blocks,
-	})
-
-	req, _ := http.NewRequest(http.MethodPost, "https://slack.com/api/chat.postMessage", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json; charset=utf-8")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := slackClient.Do(req)
-	if err != nil {
-		slog.Warn("slack notify failed", "error", err, "order_id", order.ID)
-		return
-	}
-	defer resp.Body.Close()
-
-	var parsed struct {
-		Ok    bool   `json:"ok"`
-		Error string `json:"error"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&parsed)
-	if !parsed.Ok {
-		slog.Warn("slack notify non-ok", "error", parsed.Error, "order_id", order.ID)
-	}
+	return blocks
 }
 
-func SlackPostToResponseURL(responseURL, text string) {
-	if responseURL == "" {
+// SlackOrderPaid posts a compact parent message ("Order #N paid - $X.XX") to
+// the orders channel, persists the resulting ts onto the order, and posts the
+// full receipt as the first thread reply. All subsequent order events
+// (label-buy, tracking updates) should be posted as further thread replies
+// via SlackPostToOrderThread. No-op if SLACK_BOT_TOKEN or SLACK_CHANNEL unset.
+func SlackOrderPaid(order *models.Order) {
+	token := os.Getenv("SLACK_BOT_TOKEN")
+	channel := os.Getenv("SLACK_CHANNEL")
+	if token == "" || channel == "" {
 		return
 	}
-	body, _ := json.Marshal(map[string]any{
-		"replace_original": false,
-		"text":             text,
+
+	parentText := fmt.Sprintf(":coffee: Order #%d paid - %s", order.ID, dollars(order.Total))
+	ts, ok := postSlackMessage(token, map[string]any{
+		"channel": channel,
+		"text":    parentText,
 	})
-	resp, err := slackClient.Post(responseURL, "application/json", bytes.NewReader(body))
-	if err != nil {
-		slog.Warn("slack response_url post failed", "error", err)
+	if !ok {
 		return
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 300 {
-		slog.Warn("slack response_url non-2xx", "status", resp.StatusCode)
+
+	if err := database.GetDB().Model(&models.Order{}).Where("id = ?", order.ID).Update("slack_thread_ts", ts).Error; err != nil {
+		slog.Warn("failed to save slack thread ts", "order_id", order.ID, "error", err)
 	}
+
+	_, _ = postSlackMessage(token, map[string]any{
+		"channel":   channel,
+		"thread_ts": ts,
+		"text":      parentText,
+		"blocks":    buildReceiptBlocks(order),
+	})
+}
+
+// SlackPostToOrderThread posts a plain-text reply inside the order's thread.
+// Looks up the thread ts from the database. Silent no-op if the order has no
+// saved thread (Slack was disabled when it was created, or post failed earlier).
+func SlackPostToOrderThread(orderID uint, text string) {
+	token := os.Getenv("SLACK_BOT_TOKEN")
+	channel := os.Getenv("SLACK_CHANNEL")
+	if token == "" || channel == "" {
+		return
+	}
+
+	var order models.Order
+	if err := database.GetDB().Select("id", "slack_thread_ts").Where("id = ?", orderID).First(&order).Error; err != nil {
+		slog.Warn("failed to look up order for thread post", "order_id", orderID, "error", err)
+		return
+	}
+	if order.SlackThreadTS == nil || *order.SlackThreadTS == "" {
+		return
+	}
+
+	_, _ = postSlackMessage(token, map[string]any{
+		"channel":   channel,
+		"thread_ts": *order.SlackThreadTS,
+		"text":      text,
+	})
 }
 
 var _ = time.Second
