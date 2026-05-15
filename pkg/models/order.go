@@ -59,7 +59,7 @@ type Order struct {
 	TrackingStatusUpdatedAt *time.Time     `json:"tracking_status_updated_at"`
 
 	// Shippo label shit, populated by the PurchaseLabel handler
-	ShippoTransactionID string `gorm:"size:255;uniqueIndex" json:"-"`
+	ShippoTransactionID *string `gorm:"size:255;uniqueIndex" json:"-"`
 	LabelURL            string `gorm:"size:512" json:"-"`
 	LabelCostCents      int    `json:"-"`
 
