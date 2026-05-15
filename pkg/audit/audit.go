@@ -5,7 +5,6 @@ package audit
 
 import (
 	"log/slog"
-	"terminalShop/pkg/notify"
 )
 
 type eventType string
@@ -117,7 +116,6 @@ func OrderPaid(userID, orderID uint, amountCents int, stripePaymentIntentID stri
 		Amount:   amountCents,
 		StripeID: stripePaymentIntentID,
 	}.attrs()...)
-	go notify.SlackOrderPaid(orderID, amountCents)
 }
 
 // OrderShipped records that an order has been marked as shipped with carrier metadata

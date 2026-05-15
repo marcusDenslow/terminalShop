@@ -18,6 +18,7 @@ import (
 	"terminalShop/pkg/audit"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
+	"terminalShop/pkg/notify"
 	"terminalShop/pkg/utils"
 )
 
@@ -482,6 +483,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to preload items", nil)
 		return
 	}
+	go notify.SlackOrderPaid(&order)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"order": order,

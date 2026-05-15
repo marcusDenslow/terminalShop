@@ -19,6 +19,7 @@ import (
 	"terminalShop/pkg/audit"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
+	"terminalShop/pkg/notify"
 	"terminalShop/pkg/utils"
 )
 
@@ -113,7 +114,7 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(ctx context.Context, event
 
 	db := database.GetDB().WithContext(ctx)
 	var order models.Order
-	if err := db.Where("id = ?", orderIDStr).First(&order).Error; err != nil {
+	if err := db.Preload("Items").Where("id = ?", orderIDStr).First(&order).Error; err != nil {
 		webhookLog().Warn("order not found for payment intent", "order_id", orderIDStr, "pi", pi.ID)
 		return
 	}
@@ -150,6 +151,7 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(ctx context.Context, event
 	}
 
 	audit.OrderPaid(order.UserID, order.ID, int(pi.Amount), pi.ID)
+	go notify.SlackOrderPaid(&order)
 	webhookLog().Info("order marked paid", "order_id", orderIDStr, "pi", pi.ID)
 }
 
