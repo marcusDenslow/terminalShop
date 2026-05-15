@@ -26,6 +26,9 @@ func SetupRoutes(
 	bringCustomerNumber string,
 	shippoWebhookSecret string,
 	appURL string,
+	slackSigningSecret string,
+	adminAPIKey string,
+	apiPort string,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -49,6 +52,7 @@ func SetupRoutes(
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)
 	viewHandler := handlers.NewViewHandler()
 	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, stripeSecretKey, shippoWebhookSecret)
+	slackHandler := handlers.NewSlackHandler(slackSigningSecret, adminAPIKey, apiPort)
 
 	// Short payment redirect and success page — no auth required.
 	r.Get("/pay/{token}", handlers.PayRedirect)
@@ -71,6 +75,11 @@ func SetupRoutes(
 			Post("/webhooks/stripe", webhookHandler.HandleStripe)
 		r.With(middleware.RateLimitByIP(60, time.Minute)).
 			Post("/webhooks/shippo", webhookHandler.HandleShippo)
+
+		// Slack interactivity — unauthenticated at the HTTP layer; security
+		// comes from HMAC signature verification inside the handler.
+		r.With(middleware.RateLimitByIP(60, time.Minute)).
+			Post("/slack/interactivity", slackHandler.HandleInteractivity)
 
 		// Auth — stricter IP rate limit to protect against brute-force.
 		r.Group(func(r chi.Router) {

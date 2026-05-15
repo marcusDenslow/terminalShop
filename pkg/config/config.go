@@ -28,6 +28,8 @@ type Config struct {
 	BringAPIKey         string
 	BringCustomerNumber string
 	ShippoWebhookSecret string
+	SlackSigningSecret  string
+	AdminAPIKey         string
 }
 
 // Load reads configuration from environment variables and validates required secrets.
@@ -62,6 +64,8 @@ func Load() (*Config, error) {
 		BringAPIKey:         os.Getenv("BRING_API_KEY"),
 		BringCustomerNumber: os.Getenv("BRING_CUSTOMER_NUMBER"),
 		ShippoWebhookSecret: os.Getenv("SHIPPO_WEBHOOK_SECRET"),
+		SlackSigningSecret:  os.Getenv("SLACK_SIGNING_SECRET"),
+		AdminAPIKey:         os.Getenv("ADMIN_API_KEY"),
 	}
 
 	if err := cfg.validate(); err != nil {
