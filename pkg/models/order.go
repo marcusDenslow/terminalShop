@@ -106,3 +106,9 @@ func (OrderItem) TableName() string {
 func (o *Order) TotalInDollars() float64 {
 	return float64(o.Total) / 100
 }
+
+// IsActive returns whether the order is still active, which is paid but unfulfilled,
+// or shipped but not yet delivered.
+func (o *Order) IsActive() bool {
+	return o.Status == OrderStatusPaid || o.Status == OrderStatusShipped
+}

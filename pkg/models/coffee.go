@@ -28,6 +28,7 @@ func (Coffee) TableName() string {
 
 // AccountMenuItems
 var AccountMenuItems = []string{
+	"active orders",
 	"order history",
 	"addresses",
 	"cards",

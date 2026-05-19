@@ -10,24 +10,65 @@ import (
 )
 
 func (m Model) OrdersView(width int) string {
+	return m.orderListView("Order History", m.HistoryOrders(), width)
+}
+
+func (m Model) ActiveOrdersView(width int) string {
+	return m.orderListView("Active Orders", m.ActiveOrders(), width)
+}
+
+func (m Model) ActiveOrders() []models.Order {
+	out := make([]models.Order, 0, len(m.Orders))
+	for _, o := range m.Orders {
+		if o.IsActive() {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+func (m Model) HistoryOrders() []models.Order {
+	out := make([]models.Order, 0, len(m.Orders))
+	for _, o := range m.Orders {
+		if !o.IsActive() {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+func (m Model) currentOrderList() []models.Order {
+	if m.account.cursor < 0 || m.account.cursor >= len(models.AccountMenuItems) {
+		return nil
+	}
+	switch models.AccountMenuItems[m.account.cursor] {
+	case "active orders":
+		return m.ActiveOrders()
+	case "order history":
+		return m.HistoryOrders()
+	}
+	return nil
+}
+
+func (m Model) orderListView(title string, orders []models.Order, width int) string {
 	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(1)
 	contentStyle := m.theme.TextBody().Width(width)
 
 	if !m.OrdersLoaded {
-		return titleStyle.Render("Order History") + "\n" + contentStyle.Render("Loading orders...")
+		return titleStyle.Render(title) + "\n" + contentStyle.Render("Loading orders...")
 	}
-	if len(m.Orders) == 0 {
-		return titleStyle.Render("Order History") + "\n" + contentStyle.Render("No orders yet")
+	if len(orders) == 0 {
+		return titleStyle.Render(title) + "\n" + contentStyle.Render("No orders yet")
 	}
 	if m.account.orderViewState == 2 {
-		return m.buildOrderDetailView(m.Orders[m.account.orderCursor], width)
+		return m.buildOrderDetailView(orders[m.account.orderCursor], width)
 	}
 
 	boxWidth := width - 2
 
 	// Build cards and join vertically — no manual "\n" gaps means fixed spacing
 	var cards []string
-	for i, order := range m.Orders {
+	for i, order := range orders {
 		isSelected := m.account.orderViewState == 1 && i == m.account.orderCursor
 		cards = append(cards, m.buildOrderCard(order, boxWidth, isSelected))
 	}
@@ -36,7 +77,7 @@ func (m Model) OrdersView(width int) string {
 	// In preview mode (viewState 0), show title + hint
 	if m.account.orderViewState == 0 {
 		hintStyle := m.theme.TextDim()
-		return titleStyle.Render("Order History") + "\n" +
+		return titleStyle.Render(title) + "\n" +
 			cardList + "\n" +
 			hintStyle.Render("enter: browse orders")
 	}

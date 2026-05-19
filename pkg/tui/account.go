@@ -59,6 +59,8 @@ func (m Model) getAccountDetailContent() string {
 
 	selectedItem := models.AccountMenuItems[m.account.cursor]
 	switch selectedItem {
+	case "active orders":
+		return m.ActiveOrdersView(detailContentWidth)
 	case "order history":
 		return m.OrdersView(detailContentWidth)
 	case "addresses":
@@ -105,7 +107,7 @@ func (m Model) scrollToAccountDetailItem() Model {
 		// Card: border(2) + content(2) + PaddingLeft only = 4 lines
 		headerOffset = 0
 		itemHeight = 4
-		itemCount = len(m.Orders)
+		itemCount = len(m.currentOrderList())
 		selectedIndex = m.account.orderCursor
 	case m.account.addressListFocused:
 		headerOffset = 3
@@ -270,7 +272,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.account.detailViewport.SetContent(m.getAccountDetailContent())
 				m = m.scrollToAccountDetailItem()
 			}
-		} else if m.account.orderViewState == 1 && m.account.orderCursor < len(m.Orders)-1 {
+		} else if m.account.orderViewState == 1 && m.account.orderCursor < len(m.currentOrderList())-1 {
 			m.account.orderCursor++
 			m.account.detailViewport.SetContent(m.getAccountDetailContent())
 			m = m.scrollToAccountDetailItem()
@@ -320,8 +322,8 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 
 	case "p", "enter":
 		switch selectedItem {
-		case "order history":
-			if len(m.Orders) > 0 {
+		case "order history", "active orders":
+			if len(m.currentOrderList()) > 0 {
 				if m.account.orderViewState == 0 {
 					m.account.orderViewState = 1
 					m.account.orderCursor = 0
