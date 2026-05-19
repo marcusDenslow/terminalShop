@@ -103,10 +103,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Orders = msg.Data.Orders
 		m.OrdersLoaded = true
 		m.splash.dataReady = true
+		m.ordersPollStarted = true
+		pollCmd := m.pollOrderCmd()
 		if m.splash.delayDone {
-			return m.ShopSwitch()
+			nextM, switchCmd := m.ShopSwitch()
+			return nextM, tea.Batch(switchCmd, pollCmd)
 		}
-		return m, nil
+		return m, pollCmd
 	case CartSyncedMsg:
 		if msg.Err != nil {
 			return m, m.fetchCartCmd
@@ -130,8 +133,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Err == nil {
 			m.Orders = msg.Orders
 			m.OrdersLoaded = true
+			if !m.ordersPollStarted {
+				m.ordersPollStarted = true
+				return m, m.pollOrderCmd()
+			}
 		}
 		return m, nil
+	case OrdersPollTickMsg:
+		return m, tea.Batch(m.fetchOrdersCmd(), m.pollOrderCmd())
 	case AddressDeletedMsg:
 		if msg.Err != nil {
 			m.error = &VisibleError{message: fmt.Sprintf("failed to delete address: %v", msg.Err)}

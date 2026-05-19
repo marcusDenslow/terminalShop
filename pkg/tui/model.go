@@ -77,14 +77,15 @@ type Model struct {
 	authCmd tea.Cmd
 
 	// Shared data
-	Username       string
-	Coffees        []models.Coffee
-	Cart           map[uint]*models.CartItem
-	SavedAddresses []models.Address
-	SavedCards     []models.Card
-	Orders         []models.Order
-	OrdersLoaded   bool
-	FAQs           []FAQ
+	Username          string
+	Coffees           []models.Coffee
+	Cart              map[uint]*models.CartItem
+	SavedAddresses    []models.Address
+	SavedCards        []models.Card
+	Orders            []models.Order
+	OrdersLoaded      bool
+	ordersPollStarted bool
+	FAQs              []FAQ
 
 	// Page navigation
 	currentPage page // currently active screen
@@ -938,6 +939,16 @@ func (m Model) collectCardCmd() tea.Cmd {
 		}
 		return PollPaymentInitMsg{URL: url}
 	}
+}
+
+const ordersPollInterval = 10 * time.Second
+
+type OrdersPollTickMsg struct{}
+
+func (m Model) pollOrderCmd() tea.Cmd {
+	return tea.Tick(ordersPollInterval, func(_ time.Time) tea.Msg {
+		return OrdersPollTickMsg{}
+	})
 }
 
 func (m Model) pollCardsCmd(cardCount int) tea.Cmd {
