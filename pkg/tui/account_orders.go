@@ -196,7 +196,7 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 			b.WriteString("\n")
 		}
 		if order.TrackingURL != "" {
-			b.WriteString(dimStyle.Render(" " + order.TrackingURL))
+			b.WriteString(hyperlink(dimStyle.Render(fmt.Sprintf("  View on %s ->", order.Carrier)), order.TrackingURL))
 			b.WriteString("\n")
 		}
 	}
@@ -247,4 +247,12 @@ func (m Model) displayStyle(k models.DisplayKind) lipgloss.Style {
 		return m.theme.TextLoading()
 	}
 	return m.theme.TextHighlight()
+}
+
+// hyperlink wraps label in OSC 8 escape sequences so supporting terminals
+// render it as a clickable link to url. Uses BEL (\x07) as the string
+// terminator — some renderers in the pipeline (bubbletea/lipgloss) handled
+// the BEL form when they didn't handle the ST (\x1b\\) form.
+func hyperlink(label, url string) string {
+	return fmt.Sprintf("\x1b]8;;%s\x07%s\x1b]8;;\x07", url, label)
 }
