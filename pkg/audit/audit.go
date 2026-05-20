@@ -10,18 +10,19 @@ import (
 type eventType string
 
 const (
-	eventCardAdded       eventType = "card_added"
-	eventCardDeleted     eventType = "card_deleted"
-	eventOrderCreated    eventType = "order_created"
-	eventOrderPaid       eventType = "order_paid"
-	eventOrderShipped    eventType = "order_shipped"
-	eventOrderFailed     eventType = "order_failed"
-	eventOrderRefunded   eventType = "order_refunded"
-	eventPaymentCritical eventType = "payment_critical"
-	eventLabelPurchased  eventType = "label_purchased"
-	eventLabelOrphaned   eventType = "label_orphaned"
-	eventTrackingUpdated eventType = "tracking_updated"
-	eventOrderDelivered  eventType = "order_delivered"
+	eventCardAdded              eventType = "card_added"
+	eventCardDeleted            eventType = "card_deleted"
+	eventOrderCreated           eventType = "order_created"
+	eventOrderPaid              eventType = "order_paid"
+	eventOrderShipped           eventType = "order_shipped"
+	eventOrderFailed            eventType = "order_failed"
+	eventOrderRefunded          eventType = "order_refunded"
+	eventPaymentCritical        eventType = "payment_critical"
+	eventLabelPurchased         eventType = "label_purchased"
+	eventLabelOrphaned          eventType = "label_orphaned"
+	eventTrackingUpdated        eventType = "tracking_updated"
+	eventOrderDelivered         eventType = "order_delivered"
+	eventTrackingMarkedManually eventType = "tracking_marked_manually"
 )
 
 type event struct {
@@ -37,6 +38,7 @@ type event struct {
 	Tracking  string
 	Status    string
 	Error     string
+	Actor     string
 }
 
 func (e event) attrs() []any {
@@ -73,6 +75,9 @@ func (e event) attrs() []any {
 	}
 	if e.Error != "" {
 		a = append(a, "error", e.Error)
+	}
+	if e.Actor != "" {
+		a = append(a, "actor", e.Actor)
 	}
 	return a
 }
@@ -199,5 +204,17 @@ func OrderDelivered(orderID uint, trackingNumber string) {
 		Event:    eventOrderDelivered,
 		OrderID:  orderID,
 		Tracking: trackingNumber,
+	}.attrs()...)
+}
+
+// TrackingMarkedManually records operator made tracking status mark
+// from the slack interactivity surface. Actor is the slack username that
+// clicked the button
+func TrackingMarkedManually(orderID uint, status, actor string) {
+	slog.Info("audit", event{
+		Event:   eventTrackingMarkedManually,
+		OrderID: orderID,
+		Status:  status,
+		Actor:   actor,
 	}.attrs()...)
 }

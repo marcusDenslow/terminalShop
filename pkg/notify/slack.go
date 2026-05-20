@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"terminalShop/pkg/database"
@@ -207,6 +208,57 @@ func SlackPostToOrderThread(orderID uint, text string) {
 		"thread_ts": *order.SlackThreadTS,
 		"text":      text,
 	})
+}
+
+func SlackPostLabelPurchased(orderID uint, labelURL string, costCents int) {
+	token := os.Getenv("SLACK_BOT_TOKEN")
+	channel := os.Getenv("SLACK_CHANNEL")
+	if token == "" || channel == "" {
+		return
+	}
+
+	var order models.Order
+	if err := database.GetDB().
+		Select("id", "carrier", "tracking_number", "tracking_url", "slack_thread_ts").
+		Where("id = ?", orderID).First(&order).Error; err != nil {
+		slog.Warn("failed to look up order for label-purchased slack post", "order_id", orderID, "error", err)
+		return
+	}
+	if order.SlackThreadTS == nil || *order.SlackThreadTS == "" {
+		return
+	}
+
+	headLine := fmt.Sprintf(":white_check_mark: Labeled - %s `%s` (%s). <%s|Download label PDF>", order.Carrier, order.TrackingNumber, dollars(costCents), labelURL)
+
+	blocks := []map[string]any{
+		{
+			"type": "section",
+			"text": map[string]any{"type": "mrkdwn", "text": headLine},
+		},
+	}
+
+	if strings.EqualFold(order.Carrier, "BRING") {
+		blocks = append(blocks, markStatusActionBlock(order.ID))
+	}
+
+	_, _ = postSlackMessage(token, map[string]any{
+		"channel":   channel,
+		"thread_ts": *order.SlackThreadTS,
+		"text":      headLine,
+		"blocks":    blocks,
+	})
+}
+
+func markStatusActionBlock(orderID uint) map[string]any {
+	id := fmt.Sprintf("%d", orderID)
+	return map[string]any{
+		"type": "actions",
+		"elements": []map[string]any{
+			{"type": "button", "text": map[string]any{"type": "plain_text", "text": "Mark Pre-Transit", "emoji": true}, "value": id, "action_id": "mark_pre_transit"},
+			{"type": "button", "text": map[string]any{"type": "plain_text", "text": "Mark In Transit", "emoji": true}, "value": id, "action_id": "mark_in_transit", "style": "primary"},
+			{"type": "button", "text": map[string]any{"type": "plain_text", "text": "Mark Delivered", "emoji": true}, "value": id, "action_id": "mark_delivered"},
+		},
+	}
 }
 
 var _ = time.Second

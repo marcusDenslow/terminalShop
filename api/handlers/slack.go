@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -13,6 +14,10 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
+	"terminalShop/pkg/audit"
+	"terminalShop/pkg/database"
+	"terminalShop/pkg/models"
 	"terminalShop/pkg/notify"
 	"terminalShop/pkg/utils"
 	"time"
@@ -22,14 +27,16 @@ type SlackHandler struct {
 	signingSecret string
 	adminKey      string
 	apiPort       string
+	shippoSecret  string
 	httpClient    *http.Client
 }
 
-func NewSlackHandler(signingSecret, adminKey, apiPort string) *SlackHandler {
+func NewSlackHandler(signingSecret, adminKey, apiPort, shippoWebhookSecret string) *SlackHandler {
 	return &SlackHandler{
 		signingSecret: signingSecret,
 		adminKey:      adminKey,
 		apiPort:       apiPort,
+		shippoSecret:  shippoWebhookSecret,
 		httpClient:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
@@ -98,6 +105,12 @@ func (h *SlackHandler) dispatch(action slackAction, p slackInteractivePayload) {
 	switch action.ActionID {
 	case "buy_label":
 		h.handleBuyLabel(action.Value, p)
+	case "mark_pre_transit":
+		h.handleMarkStatus(action.Value, p, "PRE_TRANSIT")
+	case "mark_in_transit":
+		h.handleMarkStatus(action.Value, p, "TRANSIT")
+	case "mark_delivered":
+		h.handleMarkStatus(action.Value, p, "DELIVERED")
 	default:
 		slog.Warn("slack interactivity: unknown action", "action_id", action.ActionID)
 	}
@@ -142,13 +155,97 @@ func (h *SlackHandler) handleBuyLabel(orderIDStr string, p slackInteractivePaylo
 		return
 	}
 
-	notify.SlackPostToOrderThread(orderID, fmt.Sprintf(
-		":white_check_mark: Labeled — %s `%s` ($%.2f). <%s|Download label PDF>",
-		result.Data.Carrier,
-		result.Data.TrackingNumber,
-		float64(result.Data.CostCents)/100,
-		result.Data.LabelURL,
-	))
+	notify.SlackPostLabelPurchased(orderID, result.Data.LabelURL, result.Data.CostCents)
+
+}
+
+func (h *SlackHandler) handleMarkStatus(orderIDStr string, p slackInteractivePayload, status string) {
+	orderID64, err := strconv.ParseUint(orderIDStr, 10, 32)
+	if err != nil {
+		slog.Warn("slack mark_status: invalid order id", "value", orderIDStr)
+		return
+	}
+	orderID := uint(orderID64)
+
+	var order models.Order
+	if err := database.GetDB().Select("id", "tracking_number", "carrier").Where("id = ?", orderID).First(&order).Error; err != nil {
+		slog.Warn("slack mark_status: order lookup failed", "order_id", orderID, "error", err)
+		return
+	}
+	if order.TrackingNumber == "" {
+		notify.SlackPostToOrderThread(orderID, ":x: Cannot mark status, the order has no tracking number yet.")
+		return
+	}
+
+	detail := defaultDetailFor(status)
+	payload := map[string]any{
+		"event": "track_updated",
+		"data": map[string]any{
+			"tracking_number": order.TrackingNumber,
+			"carrier":         strings.ToLower(order.Carrier),
+			"tracking_status": map[string]any{
+				"status":         status,
+				"status_date":    time.Now().UTC().Format(time.RFC3339),
+				"status_details": detail,
+			},
+		},
+	}
+	body, _ := json.Marshal(payload)
+
+	webhookURL := fmt.Sprintf("http://localhost:%s/api/v1/webhooks/shippo?token=%s", h.apiPort, url.QueryEscape(h.shippoSecret))
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, webhookURL, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Mark %s failed: %v", status, err))
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Mark %s failed (HTTP %d)", status, resp.StatusCode))
+		return
+	}
+
+	audit.TrackingMarkedManually(orderID, status, p.User.Username)
+
+	h.editClearActions(p.ResponseURL, status, p.User.Username)
+}
+
+func defaultDetailFor(status string) string {
+	switch status {
+	case "PRE_TRANSIT":
+		return "Marked pre-transit by operator"
+	case "TRANSIT":
+		return "Marked transit by operator"
+	case "DELIVERED":
+		return "Marked delivered by operator"
+	}
+	return "Marked by operator"
+}
+
+func (h *SlackHandler) editClearActions(responseURL, status, actor string) {
+	if responseURL == "" {
+		return
+	}
+	stamp := fmt.Sprintf(":white_check_mark: Marked %s by @%s at %s", strings.ToLower(status), actor, time.Now().UTC().Format("15:04 MST"))
+	body, _ := json.Marshal(map[string]any{
+		"replace_original": true,
+		"text":             stamp,
+		"blocks": []map[string]any{
+			{"type": "context", "elements": []map[string]any{
+				{"type": "mrkdwn", "text": stamp},
+			}},
+		},
+	})
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, responseURL, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		slog.Warn("slack mark_status: response_url edit failed", "error", err)
+		return
+	}
+	resp.Body.Close()
 }
 
 func (h *SlackHandler) verifySignature(r *http.Request, body []byte) bool {

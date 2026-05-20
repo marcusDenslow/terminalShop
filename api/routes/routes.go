@@ -52,7 +52,7 @@ func SetupRoutes(
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)
 	viewHandler := handlers.NewViewHandler()
 	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, stripeSecretKey, shippoWebhookSecret)
-	slackHandler := handlers.NewSlackHandler(slackSigningSecret, adminAPIKey, apiPort)
+	slackHandler := handlers.NewSlackHandler(slackSigningSecret, adminAPIKey, apiPort, shippoWebhookSecret)
 
 	// Short payment redirect and success page — no auth required.
 	r.Get("/pay/{token}", handlers.PayRedirect)
