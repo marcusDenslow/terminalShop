@@ -196,7 +196,7 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 			b.WriteString("\n")
 		}
 		if order.TrackingURL != "" {
-			b.WriteString(dimStyle.Render(" " + order.TrackingURL))
+			b.WriteString(hyperlink(dimStyle.Render(fmt.Sprintf("  View on %s ->", order.Carrier)), order.TrackingURL))
 			b.WriteString("\n")
 		}
 	}
@@ -247,4 +247,8 @@ func (m Model) displayStyle(k models.DisplayKind) lipgloss.Style {
 		return m.theme.TextLoading()
 	}
 	return m.theme.TextHighlight()
+}
+
+func hyperlink(label, url string) string {
+	return fmt.Sprintf("\x1b]8;;%s\x1b\\%s\x1b]8;;\x1b\\", url, label)
 }
