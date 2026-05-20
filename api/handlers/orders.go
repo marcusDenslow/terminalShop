@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"terminalShop/pkg/bring"
+	"terminalShop/pkg/notify"
 	"terminalShop/pkg/shipping"
 	"terminalShop/pkg/shippo"
 	"time"
@@ -272,6 +273,7 @@ func (h *OrderHandler) PurchaseLabel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	audit.LabelPurchased(order.ID, result.Carrier, result.TrackingNumber, result.TransactionID, result.CostCents)
+	go notify.SlackUnpinOrder(order.ID)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"order_id":        order.ID,

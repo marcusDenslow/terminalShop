@@ -46,6 +46,39 @@ func postSlackMessage(token string, payload map[string]any) (string, bool) {
 	return parsed.TS, true
 }
 
+func pinMessage(token, channel, ts string) bool {
+	return slackPinCall(token, "https://slack.com/api/pins.add", channel, ts, "already_pinned")
+}
+
+func unpinMessage(token, channel, ts string) bool {
+	return slackPinCall(token, "https://slack.com/api/pins.remove", channel, ts, "no_pin")
+}
+
+func slackPinCall(token, endpoint, channel, ts, benignErr string) bool {
+	body, _ := json.Marshal(map[string]any{"channel": channel, "timestamp": ts})
+	req, _ := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := slackClient.Do(req)
+	if err != nil {
+		slog.Warn("slack pin call failed", "endpoint", endpoint, "error", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	var parsed struct {
+		Ok    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&parsed)
+	if !parsed.Ok && parsed.Error != benignErr {
+		slog.Warn("slack pin call non-ok", "endpoint", endpoint, "error", parsed.Error)
+		return false
+	}
+	return true
+}
+
 func buildReceiptBlocks(order *models.Order) []map[string]any {
 	blocks := []map[string]any{
 		{"type": "divider"},
@@ -121,12 +154,33 @@ func SlackOrderPaid(order *models.Order) {
 		slog.Warn("failed to save slack thread ts", "order_id", order.ID, "error", err)
 	}
 
+	pinMessage(token, channel, ts)
+
 	_, _ = postSlackMessage(token, map[string]any{
 		"channel":   channel,
 		"thread_ts": ts,
 		"text":      parentText,
 		"blocks":    buildReceiptBlocks(order),
 	})
+}
+
+func SlackUnpinOrder(orderID uint) {
+	token := os.Getenv("SLACK_BOT_TOKEN")
+	channel := os.Getenv("SLACK_CHANNEL")
+	if token == "" || channel == "" {
+		return
+	}
+
+	var order models.Order
+	if err := database.GetDB().Select("id", "slack_thread_ts").Where("id = ?", orderID).First(&order).Error; err != nil {
+		slog.Warn("failed to look up order for unpin", "order_id", orderID, "error", err)
+		return
+	}
+	if order.SlackThreadTS == nil || *order.SlackThreadTS == "" {
+		return
+	}
+
+	unpinMessage(token, channel, *order.SlackThreadTS)
 }
 
 // SlackPostToOrderThread posts a plain-text reply inside the order's thread.
