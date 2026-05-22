@@ -228,27 +228,24 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(ctx context.Context, eve
 		return
 	}
 
-	// Fingerprint deduplication. if the customer already has another card
-	// with the same fingerprint (same underlying card re-tokenized), detatch
-	// the new pm and skip the local insert. Mirrors SaveCards check.
-	if pm.Card != nil && pm.Card.Fingerprint != "" {
-		listParams := &stripe.PaymentMethodListParams{
-			Customer: stripe.String(user.StripeCustomerID),
-			Type:     stripe.String("card"),
-		}
-		iter := paymentmethod.List(listParams)
-		for iter.Next() {
-			other := iter.PaymentMethod()
-			if other.ID == pm.ID || other.Card == nil {
-				continue
+	// dedup against local cards table, matching last4 + brand + expiry means
+	// the user is re-adding the same physical card. detach the new pm from
+	// stripe and skip the local insert. Local DB is the source of truth
+	// the stripe customers paymentmethods list may contain orphans from before
+	// this fix, which would cause false-positive dedup hits
+	if pm.Card != nil {
+		var dup models.Card
+		err := db.Where(
+			"user_id = ? AND last4 = ? AND brand = ? AND exp_month = ? AND exp_year = ?",
+			user.ID, pm.Card.Last4, string(pm.Card.Brand),
+			int(pm.Card.ExpMonth), int(pm.Card.ExpYear),
+		).First(&dup).Error
+		if err == nil {
+			if _, derr := paymentmethod.Detach(pm.ID, nil); derr != nil {
+				webhookLog().Warn("failed to detach duplicate pm", "user_id", user.ID, "error", derr)
 			}
-			if other.Card.Fingerprint == pm.Card.Fingerprint {
-				if _, err := paymentmethod.Detach(pm.ID, nil); err != nil {
-					webhookLog().Warn("failed to detach duplicate pm", "user_id", user.ID, "error", err)
-				}
-				webhookLog().Info("skipped duplicate card via fingerprint", "user_id", user.ID, "fingerprint", pm.Card.Fingerprint)
-				return
-			}
+			webhookLog().Info("skipped duplicate card via local-db match", "user_id", user.ID, "existing_card_id", dup.ID)
+			return
 		}
 	}
 
