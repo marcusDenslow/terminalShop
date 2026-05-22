@@ -222,10 +222,34 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(ctx context.Context, eve
 		return
 	}
 
-	// Idempotency: skip if this payment method is already saved.
+	// Idempotency: skip if this exact PaymentMethod is already in use
 	var existing models.Card
 	if err := db.Where("user_id = ? AND stripe_payment_id = ?", user.ID, pm.ID).First(&existing).Error; err == nil {
 		return
+	}
+
+	// Fingerprint deduplication. if the customer already has another card
+	// with the same fingerprint (same underlying card re-tokenized), detatch
+	// the new pm and skip the local insert. Mirrors SaveCards check.
+	if pm.Card != nil && pm.Card.Fingerprint != "" {
+		listParams := &stripe.PaymentMethodListParams{
+			Customer: stripe.String(user.StripeCustomerID),
+			Type:     stripe.String("card"),
+		}
+		iter := paymentmethod.List(listParams)
+		for iter.Next() {
+			other := iter.PaymentMethod()
+			if other.ID == pm.ID || other.Card == nil {
+				continue
+			}
+			if other.Card.Fingerprint == pm.Card.Fingerprint {
+				if _, err := paymentmethod.Detach(pm.ID, nil); err != nil {
+					webhookLog().Warn("failed to detach duplicate pm", "user_id", user.ID, "error", err)
+				}
+				webhookLog().Info("skipped duplicate card via fingerprint", "user_id", user.ID, "fingerprint", pm.Card.Fingerprint)
+				return
+			}
+		}
 	}
 
 	card := models.Card{
