@@ -187,6 +187,11 @@ func (c *BookingClient) doJSON(ctx context.Context, url string, body any, out an
 	req.Header.Set("X-Mybring-API-Uid", c.apiUID)
 	req.Header.Set("X-Mybring-API-Key", c.apiKey)
 	req.Header.Set("X-Mybring-API-Customer-Number", c.customerNumber)
+	clientURL := os.Getenv("BRING_CLIENT_URL")
+	if clientURL == "" {
+		clientURL = "https://sshops.uk"
+	}
+	req.Header.Set("X-Bring-Client-URL", clientURL)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
