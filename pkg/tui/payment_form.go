@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -59,13 +60,15 @@ type PollPaymentInitMsg struct {
 // PollPaymentStatusMsg is sent each polling tick while waiting for the browser
 // card entry to complete.
 type PollPaymentStatusMsg struct {
-	CardCount int
+	Baseline      time.Time
+	BaselineCount int
 }
 
 // PollPaymentCompleteMsg is sent when the card count increases, meaning the
 // webhook saved the new card
 type PollPaymentCompleteMsg struct {
-	Cards []models.Card
+	Cards     []models.Card
+	Duplicate bool
 }
 
 // buildPaymentForm creates the huh form bound to state's fields.
@@ -436,13 +439,13 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case PollPaymentInitMsg:
 		url := msg.URL
 		m.payment.collectURL = &url
-		return m, m.pollCardsCmd(m.payment.collectCardCount)
+		return m, m.pollCardsCmd(m.payment.collectBaseline, m.payment.collectCardCount)
 
 	case PollPaymentStatusMsg:
 		if m.payment.view != 2 {
 			return m, nil // user navigated away, stop polling
 		}
-		return m, m.pollCardsCmd(msg.CardCount)
+		return m, m.pollCardsCmd(msg.Baseline, msg.BaselineCount)
 
 	case PollPaymentCompleteMsg:
 		if m.payment.view != 2 {
@@ -451,9 +454,19 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.SavedCards = msg.Cards
 		m.payment.view = 0
 		m.payment.collectURL = nil
-		selected := m.SavedCards[len(m.SavedCards)-1]
+		var selected models.Card
+		if msg.Duplicate {
+			for _, card := range m.SavedCards {
+				if selected.ID == 0 || card.UpdatedAt.After(selected.UpdatedAt) {
+					selected = card
+				}
+			}
+		} else {
+			selected = m.SavedCards[len(m.SavedCards)-1]
+		}
 		m.SelectedCard = &selected
 		m.review.cardJustAdded = true
+		m.review.cardWasDuplicate = msg.Duplicate
 		return m.ReviewSwitch()
 	}
 
@@ -496,6 +509,13 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.payment.view = 2
 			m.payment.collectURL = nil
 			m.payment.collectCardCount = len(m.SavedCards)
+			var maxT time.Time
+			for _, card := range m.SavedCards {
+				if card.UpdatedAt.After(maxT) {
+					maxT = card.UpdatedAt
+				}
+			}
+			m.payment.collectBaseline = maxT
 			m.footer = []footerCommand{
 				{key: "esc", value: "back"},
 			}

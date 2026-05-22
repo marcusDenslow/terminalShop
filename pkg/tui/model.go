@@ -170,6 +170,7 @@ type paymentState struct {
 	cardCursor       int
 	collectURL       *string
 	collectCardCount int
+	collectBaseline  time.Time
 	viewport         viewport.Model
 	viewportReady    bool
 }
@@ -191,8 +192,9 @@ type accountState struct {
 }
 
 type reviewState struct {
-	cardJustAdded bool
-	success       bool
+	cardJustAdded    bool
+	cardWasDuplicate bool
+	success          bool
 }
 
 type confirmState struct {
@@ -951,18 +953,24 @@ func (m Model) pollOrderCmd() tea.Cmd {
 	})
 }
 
-func (m Model) pollCardsCmd(cardCount int) tea.Cmd {
+func (m Model) pollCardsCmd(baseline time.Time, baselineCount int) tea.Cmd {
 	return tea.Tick(time.Second, func(_ time.Time) tea.Msg {
 		if m.APIClient == nil {
-			return PollPaymentStatusMsg{CardCount: cardCount}
+			return PollPaymentStatusMsg{Baseline: baseline, BaselineCount: baselineCount}
 		}
 		cards, err := m.APIClient.GetCards()
 		if err != nil {
-			return PollPaymentStatusMsg{CardCount: cardCount}
+			return PollPaymentStatusMsg{Baseline: baseline, BaselineCount: baselineCount}
 		}
-		if len(cards) > cardCount {
-			return PollPaymentCompleteMsg{Cards: cards}
+		var newest time.Time
+		for _, card := range cards {
+			if card.UpdatedAt.After(newest) {
+				newest = card.UpdatedAt
+			}
 		}
-		return PollPaymentStatusMsg{CardCount: cardCount}
+		if newest.After(baseline) {
+			return PollPaymentCompleteMsg{Cards: cards, Duplicate: len(cards) == baselineCount}
+		}
+		return PollPaymentStatusMsg{Baseline: baseline, BaselineCount: baselineCount}
 	})
 }

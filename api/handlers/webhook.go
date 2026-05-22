@@ -244,6 +244,11 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(ctx context.Context, eve
 			if _, derr := paymentmethod.Detach(pm.ID, nil); derr != nil {
 				webhookLog().Warn("failed to detach duplicate pm", "user_id", user.ID, "error", derr)
 			}
+			// Bump UpdatedAt so the TUI poll signal can detect that the webhook
+			// fired even though no new row was inserted.
+			if uerr := db.Model(&dup).Update("updated_at", time.Now()).Error; uerr != nil {
+				webhookLog().Warn("failed to bump dup card updated_at", "card_id", dup.ID, "error", uerr)
+			}
 			webhookLog().Info("skipped duplicate card via local-db match", "user_id", user.ID, "existing_card_id", dup.ID)
 			return
 		}
