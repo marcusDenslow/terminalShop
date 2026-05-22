@@ -43,6 +43,8 @@ vendor/
 .DS_Store
 .claude/
 
+.understand-anything/
+
 # ssh config
 .ssh/
 
