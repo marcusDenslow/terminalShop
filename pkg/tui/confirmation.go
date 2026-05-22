@@ -133,7 +133,7 @@ func (m Model) generateReviewContent() string {
 
 	if m.review.cardJustAdded {
 		if m.review.cardWasDuplicate {
-			view.WriteString(m.theme.TextDim().Render("identical card already saved — using existing card") + "\n\n")
+			view.WriteString(m.theme.TextDim().Render("identical card already saved... using existing card") + "\n\n")
 		} else {
 			view.WriteString(m.theme.TextSuccess().Bold(true).Render("card added successfully") + "\n\n")
 		}
