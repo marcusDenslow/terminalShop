@@ -4,7 +4,12 @@
 package audit
 
 import (
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"terminalShop/pkg/models"
+
+	"gorm.io/gorm"
 )
 
 type eventType string
@@ -84,137 +89,212 @@ func (e event) attrs() []any {
 
 // CardAdded records that a user saved a new payment method.
 func CardAdded(userID, cardID uint, brand, last4 string) {
-	slog.Info("audit", event{
+	e := event{
 		Event:     eventCardAdded,
 		UserID:    userID,
 		CardID:    cardID,
 		CardBrand: brand,
 		CardLast4: last4,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(0, eventCardAdded, e)
 }
 
 // CardDeleted records that a user removed a saved payment method.
 func CardDeleted(userID, cardID uint) {
-	slog.Info("audit", event{
+	e := event{
 		Event:  eventCardDeleted,
 		UserID: userID,
 		CardID: cardID,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(0, eventCardDeleted, e)
 }
 
 // OrderCreated records that an order record was created (before payment).
 func OrderCreated(userID, orderID uint, amountCents int) {
-	slog.Info("audit", event{
+	e := event{
 		Event:   eventOrderCreated,
 		UserID:  userID,
 		OrderID: orderID,
 		Amount:  amountCents,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventOrderCreated, e)
 }
 
 // OrderPaid records a successful charge.
 func OrderPaid(userID, orderID uint, amountCents int, stripePaymentIntentID string) {
-	slog.Info("audit", event{
+	e := event{
 		Event:    eventOrderPaid,
 		UserID:   userID,
 		OrderID:  orderID,
 		Amount:   amountCents,
 		StripeID: stripePaymentIntentID,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventOrderPaid, e)
 }
 
 // OrderShipped records that an order has been marked as shipped with carrier metadata
 func OrderShipped(userID, orderID uint, carrier, trackingNumber string) {
-	slog.Info("audit", event{
+	e := event{
 		Event:    eventOrderShipped,
 		UserID:   userID,
 		OrderID:  orderID,
 		Carrier:  carrier,
 		Tracking: trackingNumber,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventOrderShipped, e)
 }
 
 // OrderFailed records a failed charge attempt. Logged at WARN.
 func OrderFailed(userID, orderID uint, amountCents int, reason string) {
-	slog.Warn("audit", event{
+	e := event{
 		Event:   eventOrderFailed,
 		UserID:  userID,
 		OrderID: orderID,
 		Amount:  amountCents,
 		Error:   reason,
-	}.attrs()...)
+	}
+	slog.Warn("audit", e.attrs()...)
+	persist(orderID, eventOrderFailed, e)
 }
 
 // OrderRefunded records a refund.
 func OrderRefunded(userID, orderID uint, amountCents int, stripeRefundID string) {
-	slog.Info("audit", event{
+	e := event{
 		Event:    eventOrderRefunded,
 		UserID:   userID,
 		OrderID:  orderID,
 		Amount:   amountCents,
 		StripeID: stripeRefundID,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventOrderRefunded, e)
 }
 
 // PaymentCritical records the dangerous state where Stripe charged the card
 // but the local database transaction failed. This MUST be investigated and
 // manually reconciled. Logged at ERROR so monitoring can alert on it.
 func PaymentCritical(orderID uint, stripePaymentIntentID string, err error) {
-	slog.Error("audit", event{
+	e := event{
 		Event:    eventPaymentCritical,
 		OrderID:  orderID,
 		StripeID: stripePaymentIntentID,
 		Error:    err.Error(),
-	}.attrs()...)
+	}
+	slog.Error("audit", e.attrs()...)
+	persist(orderID, eventPaymentCritical, e)
 }
 
 func LabelPurchased(orderID uint, carrier, trackingNumber, shippoTxID string, costCents int) {
-	slog.Info("audit", event{
+	e := event{
 		Event:    eventLabelPurchased,
 		OrderID:  orderID,
 		Carrier:  carrier,
 		Tracking: trackingNumber,
 		StripeID: shippoTxID,
 		Amount:   costCents,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventLabelPurchased, e)
 }
 
 func LabelOrphaned(orderID uint, shippoTxID, trackingNumber string, err error) {
-	slog.Error("audit", event{
+	e := event{
 		Event:    eventLabelOrphaned,
 		OrderID:  orderID,
 		StripeID: shippoTxID,
 		Tracking: trackingNumber,
 		Error:    err.Error(),
-	}.attrs()...)
+	}
+	slog.Error("audit", e.attrs()...)
+	persist(orderID, eventLabelOrphaned, e)
 }
 
 func TrackingUpdated(orderID uint, carrier, trackingNumber, status string) {
-	slog.Info("audit", event{
+	e := event{
 		Event:    eventTrackingUpdated,
 		OrderID:  orderID,
 		Carrier:  carrier,
 		Tracking: trackingNumber,
 		Status:   status,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventTrackingUpdated, e)
 }
 
 func OrderDelivered(orderID uint, trackingNumber string) {
-	slog.Info("audit", event{
+	e := event{
 		Event:    eventOrderDelivered,
 		OrderID:  orderID,
 		Tracking: trackingNumber,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventOrderDelivered, e)
 }
 
 // TrackingMarkedManually records operator made tracking status mark
 // from the slack interactivity surface. Actor is the slack username that
 // clicked the button
 func TrackingMarkedManually(orderID uint, status, actor string) {
-	slog.Info("audit", event{
+	e := event{
 		Event:   eventTrackingMarkedManually,
 		OrderID: orderID,
 		Status:  status,
 		Actor:   actor,
-	}.attrs()...)
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventTrackingMarkedManually, e)
+}
+
+// db is the optional persistence target. nil = slog-only.
+// set once at startup with SetDB, funcs stay slog-primary regardless.
+var db *gorm.DB
+
+// SetDB wires the audit package to a database for persistent event rows.
+// call once after database.Migrate. Audit funcs still write slog when
+// db is nil, so tests don't need to wire this.
+func SetDB(d *gorm.DB) { db = d }
+
+func persist(orderID uint, t eventType, e event) {
+	if db == nil || orderID == 0 {
+		return
+	}
+	actor := e.Actor
+	if actor == "" {
+		if e.UserID > 0 {
+			actor = fmt.Sprintf("user:%d", e.UserID)
+		} else {
+			actor = "system"
+		}
+	}
+	payload, err := json.Marshal(attrsToMap(e.attrs()))
+	if err != nil {
+		slog.Error("audit persist marshal", "error", err, "event", string(t))
+		return
+	}
+	row := &models.OrderEvent{
+		OrderID: orderID,
+		Type:    string(t),
+		Payload: string(payload),
+		Actor:   actor,
+	}
+	if err := db.Create(row).Error; err != nil {
+		slog.Error("audit persist write", "error", err, "event", string(t), "order_id", orderID)
+	}
+}
+
+func attrsToMap(a []any) map[string]any {
+	m := make(map[string]any, len(a)/2)
+	for i := 0; i+1 < len(a); i += 2 {
+		k, ok := a[i].(string)
+		if !ok {
+			continue
+		}
+		m[k] = a[i+1]
+	}
+	return m
 }

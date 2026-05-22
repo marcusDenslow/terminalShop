@@ -13,6 +13,7 @@ import (
 	"terminalShop/api/handlers"
 	"terminalShop/api/middleware"
 	"terminalShop/api/routes"
+	"terminalShop/pkg/audit"
 	"terminalShop/pkg/auth"
 	"terminalShop/pkg/config"
 	"terminalShop/pkg/database"
@@ -45,6 +46,7 @@ func main() {
 	if err := database.Migrate(db); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
+	audit.SetDB(db)
 
 	// Seed database with initial data
 	if err := database.Seed(db); err != nil {
