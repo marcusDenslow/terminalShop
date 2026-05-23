@@ -22,7 +22,7 @@ const testClientSecret = "test-client-secret"
 func setupAuthHandlerTestDB(t *testing.T) (string, *auth.JWTManager, *AuthHandler) {
 	t.Helper()
 	testDB := "test_auth.db"
-	os.Remove(testDB)
+	_ = os.Remove(testDB)
 	database.ResetForTesting()
 
 	db, err := database.Connect(testDB)
@@ -62,7 +62,7 @@ func createAuthTestUser(t *testing.T, fingerprint string) models.User {
 
 func TestGetTokenSuccess(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	user := createAuthTestUser(t, "SHA256:testfingerprint123")
@@ -108,7 +108,7 @@ func TestGetTokenSuccess(t *testing.T) {
 
 func TestGetTokenBadSecret(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	body, _ := json.Marshal(map[string]string{
@@ -128,7 +128,7 @@ func TestGetTokenBadSecret(t *testing.T) {
 
 func TestGetTokenMissingFingerprint(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	body, _ := json.Marshal(map[string]string{
@@ -147,7 +147,7 @@ func TestGetTokenMissingFingerprint(t *testing.T) {
 
 func TestGetTokenUnknownFingerprint(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	body, _ := json.Marshal(map[string]string{
@@ -167,7 +167,7 @@ func TestGetTokenUnknownFingerprint(t *testing.T) {
 
 func TestGetTokenInvalidJSON(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	req := httptest.NewRequest("POST", "/api/v1/auth/token", bytes.NewBufferString("{bad json"))
@@ -185,7 +185,7 @@ func TestGetTokenInvalidJSON(t *testing.T) {
 
 func TestRegisterWithSSHKeySuccess(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	body, _ := json.Marshal(map[string]string{
@@ -207,7 +207,7 @@ func TestRegisterWithSSHKeySuccess(t *testing.T) {
 
 func TestRegisterWithSSHKeyDuplicate(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	createAuthTestUser(t, "SHA256:existingfp")
@@ -229,7 +229,7 @@ func TestRegisterWithSSHKeyDuplicate(t *testing.T) {
 
 func TestRegisterWithSSHKeyMissingFields(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	body, _ := json.Marshal(map[string]string{
@@ -250,7 +250,7 @@ func TestRegisterWithSSHKeyMissingFields(t *testing.T) {
 
 func TestGetUserBySSHKeySuccess(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	createAuthTestUser(t, "SHA256:lookupfp")
@@ -267,7 +267,7 @@ func TestGetUserBySSHKeySuccess(t *testing.T) {
 
 func TestGetUserBySSHKeyNotFound(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	req := httptest.NewRequest("GET", "/api/v1/auth/ssh?fingerprint=SHA256:nope", nil)
@@ -282,7 +282,7 @@ func TestGetUserBySSHKeyNotFound(t *testing.T) {
 
 func TestGetUserBySSHKeyMissingParam(t *testing.T) {
 	testDB, _, handler := setupAuthHandlerTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	req := httptest.NewRequest("GET", "/api/v1/auth/ssh", nil)

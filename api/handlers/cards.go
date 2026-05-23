@@ -30,14 +30,16 @@ var (
 	payRedirectsMu sync.Mutex
 )
 
-func storeRedirect(stripeURL string) string {
+func storeRedirect(stripeURL string) (string, error) {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
 	token := hex.EncodeToString(b)
 	payRedirectsMu.Lock()
 	payRedirects[token] = stripeURL
 	payRedirectsMu.Unlock()
-	return token
+	return token, nil
 }
 
 // PayRedirect resolves a short token and redirects to the Stripe checkout URL.
@@ -166,7 +168,11 @@ func (h *CardHandler) CollectCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := storeRedirect(sess.URL)
+	token, err := storeRedirect(sess.URL)
+	if err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to generate redirect token", nil)
+		return
+	}
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"url": fmt.Sprintf("%s/pay/%s", h.appURL, token),
 	})

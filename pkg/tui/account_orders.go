@@ -248,4 +248,3 @@ func (m Model) displayStyle(k models.DisplayKind) lipgloss.Style {
 	}
 	return m.theme.TextHighlight()
 }
-

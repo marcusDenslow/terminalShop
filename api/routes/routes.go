@@ -59,7 +59,7 @@ func SetupRoutes(
 	r.Get("/t/{id}", handlers.TrackingRedirect)
 	r.Get("/card-added", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`<!DOCTYPE html><html><body style="font-family:monospace;text-align:center;padding:4rem"><h2>Card added.</h2><p>You can close this tab.</p></body></html>`))
+		_, _ = w.Write([]byte(`<!DOCTYPE html><html><body style="font-family:monospace;text-align:center;padding:4rem"><h2>Card added.</h2><p>You can close this tab.</p></body></html>`))
 	})
 	r.Handle("/metrics", middleware.MetricsHandler())
 

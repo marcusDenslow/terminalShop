@@ -324,7 +324,8 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		switch selectedItem {
 		case "order history", "active orders":
 			if len(m.currentOrderList()) > 0 {
-				if m.account.orderViewState == 0 {
+				switch m.account.orderViewState {
+				case 0:
 					m.account.orderViewState = 1
 					m.account.orderCursor = 0
 					m.account.detailViewport.GotoTop()
@@ -334,8 +335,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 						{key: "esc", value: "back"},
 						{key: "q", value: "quit"},
 					}
-				} else if m.account.orderViewState == 1 {
-					// Save scroll position before entering detail view
+				case 1:
 					m.account.orderYOffset = m.account.detailViewport.YOffset
 					m.account.orderViewState = 2
 					m.account.detailViewport.GotoTop()

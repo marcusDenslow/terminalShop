@@ -20,7 +20,7 @@ import (
 func setupCartTestDB(t *testing.T) (string, models.User) {
 	t.Helper()
 	testDB := "test_cart.db"
-	os.Remove(testDB)
+	_ = os.Remove(testDB)
 	database.ResetForTesting()
 
 	db, err := database.Connect(testDB)
@@ -62,7 +62,7 @@ func authRequest(method, url string, body []byte, userID uint) *http.Request {
 
 func TestGetCartEmpty(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -101,7 +101,7 @@ func TestGetCartEmpty(t *testing.T) {
 
 func TestSetItemAndGetCart(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -157,7 +157,7 @@ func TestSetItemAndGetCart(t *testing.T) {
 
 func TestSetItemUpdateQuantity(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -190,7 +190,7 @@ func TestSetItemUpdateQuantity(t *testing.T) {
 			} `json:"cart"`
 		} `json:"data"`
 	}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp.Data.Cart.Items) != 1 {
 		t.Fatalf("Expected 1 item after update, got %d", len(resp.Data.Cart.Items))
@@ -202,7 +202,7 @@ func TestSetItemUpdateQuantity(t *testing.T) {
 
 func TestSetItemRemove(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -232,7 +232,7 @@ func TestSetItemRemove(t *testing.T) {
 			} `json:"cart"`
 		} `json:"data"`
 	}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp.Data.Cart.Items) != 0 {
 		t.Errorf("Expected 0 items after removal, got %d", len(resp.Data.Cart.Items))
@@ -241,7 +241,7 @@ func TestSetItemRemove(t *testing.T) {
 
 func TestSetItemInvalidProduct(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -258,7 +258,7 @@ func TestSetItemInvalidProduct(t *testing.T) {
 
 func TestSetItemMissingCoffeeID(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -275,7 +275,7 @@ func TestSetItemMissingCoffeeID(t *testing.T) {
 
 func TestClearCart(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -310,7 +310,7 @@ func TestClearCart(t *testing.T) {
 			} `json:"cart"`
 		} `json:"data"`
 	}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp.Data.Cart.Items) != 0 {
 		t.Errorf("Expected 0 items after clear, got %d", len(resp.Data.Cart.Items))
@@ -319,7 +319,7 @@ func TestClearCart(t *testing.T) {
 
 func TestSetAddress(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -358,7 +358,7 @@ func TestSetAddress(t *testing.T) {
 			} `json:"cart"`
 		} `json:"data"`
 	}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if resp.Data.Cart.AddressID == nil || *resp.Data.Cart.AddressID != addr.ID {
 		t.Errorf("Expected address_id %d, got %v", addr.ID, resp.Data.Cart.AddressID)
@@ -367,7 +367,7 @@ func TestSetAddress(t *testing.T) {
 
 func TestSetAddressWrongUser(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -402,7 +402,7 @@ func TestSetAddressWrongUser(t *testing.T) {
 
 func TestSetCard(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -440,7 +440,7 @@ func TestSetCard(t *testing.T) {
 			} `json:"cart"`
 		} `json:"data"`
 	}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if resp.Data.Cart.CardID == nil || *resp.Data.Cart.CardID != card.ID {
 		t.Errorf("Expected card_id %d, got %v", card.ID, resp.Data.Cart.CardID)
@@ -449,7 +449,7 @@ func TestSetCard(t *testing.T) {
 
 func TestSetCardWrongUser(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -482,7 +482,7 @@ func TestSetCardWrongUser(t *testing.T) {
 
 func TestConvertCartMissingAddress(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -505,7 +505,7 @@ func TestConvertCartMissingAddress(t *testing.T) {
 
 func TestConvertCartMissingCard(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -536,7 +536,7 @@ func TestConvertCartMissingCard(t *testing.T) {
 
 func TestConvertCartEmpty(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -553,7 +553,7 @@ func TestConvertCartEmpty(t *testing.T) {
 
 func TestMultipleItems(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewCartHandler("")
@@ -583,7 +583,7 @@ func TestMultipleItems(t *testing.T) {
 			} `json:"cart"`
 		} `json:"data"`
 	}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp.Data.Cart.Items) != 3 {
 		t.Errorf("Expected 3 items, got %d", len(resp.Data.Cart.Items))
@@ -595,7 +595,7 @@ func TestMultipleItems(t *testing.T) {
 
 func TestCartIsolation(t *testing.T) {
 	testDB, user1 := setupCartTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -638,7 +638,7 @@ func TestCartIsolation(t *testing.T) {
 			} `json:"cart"`
 		} `json:"data"`
 	}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp.Data.Cart.Items) != 1 {
 		t.Fatalf("User 1 expected 1 item, got %d", len(resp.Data.Cart.Items))
@@ -655,7 +655,7 @@ func TestCartIsolation(t *testing.T) {
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp.Data.Cart.Items) != 1 {
 		t.Fatalf("User 2 expected 1 item, got %d", len(resp.Data.Cart.Items))

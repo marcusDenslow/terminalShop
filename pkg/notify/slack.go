@@ -32,7 +32,7 @@ func postSlackMessage(token string, payload map[string]any) (string, bool) {
 		slog.Warn("slack post failed", "error", err)
 		return "", false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var parsed struct {
 		Ok    bool   `json:"ok"`
@@ -66,7 +66,7 @@ func slackPinCall(token, endpoint, channel, ts, benignErr string) bool {
 		slog.Warn("slack pin call failed", "endpoint", endpoint, "error", err)
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var parsed struct {
 		Ok    bool   `json:"ok"`

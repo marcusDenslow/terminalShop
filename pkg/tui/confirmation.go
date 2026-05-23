@@ -145,18 +145,18 @@ func (m Model) generateReviewContent() string {
 		if m.ShippingInfo.Street2 != "" {
 			view.WriteString(m.ShippingInfo.Street2 + "\n")
 		}
-		view.WriteString(fmt.Sprintf("%s,  %s %s,  %s\n", m.ShippingInfo.City, m.ShippingInfo.State, m.ShippingInfo.Zip, m.ShippingInfo.Country))
+		fmt.Fprintf(&view, "%s,  %s %s,  %s\n", m.ShippingInfo.City, m.ShippingInfo.State, m.ShippingInfo.Zip, m.ShippingInfo.Country)
 	}
 	view.WriteString("\n")
 
 	if m.SelectedCard != nil {
-		view.WriteString(fmt.Sprintf("cc: **** **** **** %s\n", m.SelectedCard.Last4))
+		fmt.Fprintf(&view, "cc: **** **** **** %s\n", m.SelectedCard.Last4)
 	}
 	view.WriteString("\n")
 
 	subtotal := m.CalculateSubtotal()
 
-	view.WriteString(fmt.Sprintf("subtotal: %s\n", formatUSD(subtotal)))
+	fmt.Fprintf(&view, "subtotal: %s\n", formatUSD(subtotal))
 	view.WriteString(m.theme.TextAccent().Render(fmt.Sprintf("total:    %s", formatUSD(subtotal))) + "\n")
 	view.WriteString("\n")
 	view.WriteString(m.theme.TextBrand().Render("press enter to confirm") + "\n")

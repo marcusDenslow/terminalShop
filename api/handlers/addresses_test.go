@@ -13,7 +13,7 @@ import (
 func setupAddressTestDB(t *testing.T) (string, models.User) {
 	t.Helper()
 	testDB := "test_addresses.db"
-	os.Remove(testDB)
+	_ = os.Remove(testDB)
 	database.ResetForTesting()
 
 	db, err := database.Connect(testDB)
@@ -42,7 +42,7 @@ func setupAddressTestDB(t *testing.T) (string, models.User) {
 
 func TestGetAddressesEmpty(t *testing.T) {
 	testDB, user := setupAddressTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewAddressHandler("", "", "")
@@ -74,7 +74,7 @@ func TestGetAddressesEmpty(t *testing.T) {
 
 func TestGetAddressesIsolation(t *testing.T) {
 	testDB, user1 := setupAddressTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -105,7 +105,7 @@ func TestGetAddressesIsolation(t *testing.T) {
 			Addresses []models.Address `json:"addresses"`
 		} `json:"data"`
 	}
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	if len(resp.Data.Addresses) != 1 {
 		t.Fatalf("expexted 1 address for user1, got %d", len(resp.Data.Addresses))
@@ -117,7 +117,7 @@ func TestGetAddressesIsolation(t *testing.T) {
 
 func TestGetAddressesWithData(t *testing.T) {
 	testDB, user := setupAddressTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
