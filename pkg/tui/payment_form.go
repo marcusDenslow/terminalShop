@@ -374,7 +374,10 @@ func (m Model) renderPaymentHttpsView() string {
 	accentStyle := m.theme.TextHighlight()
 
 	if m.payment.collectTimeOut {
-		return m.theme.TextError().Bold(true).Render("payment link timed out") + "\n\n" + baseStyle.Render("no card saved after 2 minutes.") + "\n" + baseStyle.Render("press ") + accentStyle.Render("esc") + baseStyle.Render(" to go back and try again")
+		minutes := int(cardPollTimeout / time.Minute)
+		return m.theme.TextError().Bold(true).Render("payment link timed out") + "\n\n" +
+			baseStyle.Render(fmt.Sprintf("no card saved after %d minutes.", minutes)) + "\n" +
+			baseStyle.Render("press ") + accentStyle.Render("esc") + baseStyle.Render(" to go back and try again")
 	}
 
 	if m.payment.collectURL == nil {

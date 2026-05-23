@@ -946,7 +946,7 @@ func (m Model) collectCardCmd() tea.Cmd {
 }
 
 const ordersPollInterval = 10 * time.Second
-const cardPollTimeout = 2 * time.Minute
+const cardPollTimeout = 10 * time.Minute
 
 type OrdersPollTickMsg struct{}
 
