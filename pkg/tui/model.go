@@ -400,23 +400,6 @@ func (m Model) fetchCartCmd() tea.Msg {
 	return CartFetchedMsg{Cart: cart, Err: err}
 }
 
-// fetchProductsCmd fetches products from the API
-func (m Model) fetchProductsCmd() tea.Msg {
-	if m.APIClient == nil {
-		log.Println("[TUI] APIClient is nil, using fallback products")
-		return ProductsMsg{Err: nil} // No API client, use fallback
-	}
-
-	log.Printf("[TUI] Fetching products from API at %s", m.APIClient.BaseURL)
-	products, err := m.APIClient.GetProducts()
-	if err != nil {
-		log.Printf("[TUI] Failed to fetch products: %v", err)
-	} else {
-		log.Printf("[TUI] Loaded %d products from API", len(products))
-	}
-	return ProductsMsg{Products: products, Err: err}
-}
-
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.authCmd,
@@ -666,58 +649,6 @@ func (m Model) syncCartItemCmd(coffeeID uint, quantity int) (Model, tea.Cmd) {
 			UpdateID: updateID,
 			Cart:     cart,
 			Err:      err,
-		}
-	}
-}
-
-// saveCardAndConvert tokenizes the card locally using the Stripe publishable
-// key (raw card data never reaches the backend), saves the token, then converts the cart
-func (m Model) saveCardAndConvert(form PaymentFormCompleteMsg) tea.Cmd {
-	return func() tea.Msg {
-		if m.APIClient == nil {
-			return CheckoutResultMsg{Err: fmt.Errorf("API client not available")}
-		}
-
-		stripe.Key = m.StripePublicKey
-		tok, err := stripetoken.New(&stripe.TokenParams{
-			Card: &stripe.CardParams{
-				Name:       stripe.String(form.CardName),
-				Number:     stripe.String(form.CardNumber),
-				ExpMonth:   stripe.String(form.ExpiryMonth),
-				ExpYear:    stripe.String(form.ExpiryYear),
-				CVC:        stripe.String(form.CVC),
-				AddressZip: stripe.String(form.BillingZip),
-			},
-		})
-		if err != nil {
-			if stripeErr, ok := err.(*stripe.Error); ok {
-				return CheckoutResultMsg{Err: fmt.Errorf("%s", stripeErr.Msg)}
-			}
-			return CheckoutResultMsg{Err: fmt.Errorf("failed to tokenize card: %w", err)}
-		}
-		card, err := m.APIClient.SaveCard(api.SaveCardRequest{Token: tok.ID})
-		if err != nil {
-			return CheckoutResultMsg{Err: fmt.Errorf("failed to save card: %w", err)}
-		}
-
-		if err := m.resolveCartAddress(); err != nil {
-			return CheckoutResultMsg{Err: err}
-		}
-
-		// 3. Set the card on the cart
-		if err := m.APIClient.SetCartCard(card.ID); err != nil {
-			return CheckoutResultMsg{Err: fmt.Errorf("failed to set card: %w", err)}
-		}
-
-		// 4. Convert the cart to an order
-		order, err := m.APIClient.ConvertCart()
-		if err != nil {
-			return CheckoutResultMsg{Err: err}
-		}
-
-		return CheckoutResultMsg{
-			OrderID: order.ID,
-			Total:   order.Total,
 		}
 	}
 }

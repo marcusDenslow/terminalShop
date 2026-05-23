@@ -16,7 +16,7 @@ func setupTestDB(t *testing.T) string {
 	testDB := "test_products.db"
 
 	// Remove if exists
-	os.Remove(testDB)
+	_ = os.Remove(testDB)
 
 	// Reset singleton
 	database.ResetForTesting()
@@ -39,7 +39,7 @@ func setupTestDB(t *testing.T) string {
 
 func TestGetProduct(t *testing.T) {
 	testDB := setupTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewProductHandler()
@@ -78,7 +78,7 @@ func TestGetProduct(t *testing.T) {
 
 func TestGetProductNotFound(t *testing.T) {
 	testDB := setupTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	handler := NewProductHandler()
@@ -98,7 +98,7 @@ func TestGetProductNotFound(t *testing.T) {
 
 func TestGetProductsEmptyDatabase(t *testing.T) {
 	testDB := "test_empty.db"
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	// Create database but don't seed

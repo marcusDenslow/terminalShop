@@ -10,7 +10,7 @@ import (
 func TestConnect(t *testing.T) {
 	// Use a temporary test database
 	testDB := "test_terminalshop.db"
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer ResetForTesting()
 
 	db, err := Connect(testDB)
@@ -35,7 +35,7 @@ func TestConnect(t *testing.T) {
 
 func TestMigrate(t *testing.T) {
 	testDB := "test_migrate.db"
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer ResetForTesting()
 
 	db, err := Connect(testDB)
@@ -57,7 +57,7 @@ func TestMigrate(t *testing.T) {
 
 func TestSeed(t *testing.T) {
 	testDB := "test_seed.db"
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer ResetForTesting()
 
 	db, err := Connect(testDB)
@@ -115,7 +115,7 @@ func TestSeed(t *testing.T) {
 
 func TestGetDB(t *testing.T) {
 	testDB := "test_getdb.db"
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer ResetForTesting()
 
 	// Initialize connection

@@ -35,7 +35,7 @@ func RespondSuccess(w http.ResponseWriter, statusCode int, data interface{}) {
 		Data:    data,
 	}
 
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // RespondError sends an error JSON response
@@ -52,7 +52,7 @@ func RespondError(w http.ResponseWriter, statusCode int, code, message string, d
 		},
 	}
 
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // HealthData represents health check data

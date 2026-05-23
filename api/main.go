@@ -40,7 +40,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	defer database.Close()
+
+	defer func() { _ = database.Close() }()
 
 	// Run migrations
 	if err := database.Migrate(db); err != nil {
@@ -61,7 +62,7 @@ func main() {
 	if err != nil {
 		log.Printf("tracing init failed (non-fatal): %v", err)
 	} else {
-		defer shutdown(context.Background())
+		defer func() { _ = shutdown(context.Background()) }()
 	}
 
 	stripeclient.InitOTel()

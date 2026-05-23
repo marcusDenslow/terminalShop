@@ -133,7 +133,7 @@ func (h *SlackHandler) handleBuyLabel(orderIDStr string, p slackInteractivePaylo
 		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Label purchase failed: %v", err))
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		Data struct {
@@ -201,7 +201,7 @@ func (h *SlackHandler) handleMarkStatus(orderIDStr string, p slackInteractivePay
 		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Mark %s failed: %v", status, err))
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Mark %s failed (HTTP %d)", status, resp.StatusCode))
 		return
@@ -245,7 +245,7 @@ func (h *SlackHandler) editClearActions(responseURL, status, actor string) {
 		slog.Warn("slack mark_status: response_url edit failed", "error", err)
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }
 
 func (h *SlackHandler) verifySignature(r *http.Request, body []byte) bool {
@@ -264,7 +264,7 @@ func (h *SlackHandler) verifySignature(r *http.Request, body []byte) bool {
 	}
 
 	mac := hmac.New(sha256.New, []byte(h.signingSecret))
-	fmt.Fprintf(mac, "v0:%d:%s", ts, body)
+	_, _ = fmt.Fprintf(mac, "v0:%d:%s", ts, body)
 	expected := "v0=" + hex.EncodeToString(mac.Sum(nil))
 
 	return hmac.Equal([]byte(expected), []byte(sigHeader))

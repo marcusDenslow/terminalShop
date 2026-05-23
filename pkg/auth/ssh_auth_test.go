@@ -17,7 +17,7 @@ import (
 func setupAuthTestDB(t *testing.T) string {
 	t.Helper()
 	testDB := "test_ssh_auth.db"
-	os.Remove(testDB)
+	_ = os.Remove(testDB)
 	database.ResetForTesting()
 
 	db, err := database.Connect(testDB)
@@ -47,7 +47,7 @@ func newTestSSHKey(t *testing.T) gossh.PublicKey {
 
 func TestAuthenticateSSHKeyNewUser(t *testing.T) {
 	testDB := setupAuthTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -72,7 +72,7 @@ func TestAuthenticateSSHKeyNewUser(t *testing.T) {
 
 func TestAuthenticateSSHKeyExistingUser(t *testing.T) {
 	testDB := setupAuthTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -96,7 +96,7 @@ func TestAuthenticateSSHKeyExistingUser(t *testing.T) {
 
 func TestRegisterWithSSHKey(t *testing.T) {
 	testDB := setupAuthTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -121,7 +121,7 @@ func TestRegisterWithSSHKey(t *testing.T) {
 
 func TestRegisterWithSSHKeyDuplicate(t *testing.T) {
 	testDB := setupAuthTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -145,7 +145,7 @@ func TestRegisterWithSSHKeyDuplicate(t *testing.T) {
 
 func TestIsSSHKeyRegistered(t *testing.T) {
 	testDB := setupAuthTestDB(t)
-	defer os.Remove(testDB)
+	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
@@ -164,7 +164,7 @@ func TestIsSSHKeyRegistered(t *testing.T) {
 	}
 
 	// After authentication (which auto-creates)
-	svc.AuthenticateSSHKey(key)
+	_, _, _ = svc.AuthenticateSSHKey(key)
 
 	registered, err = svc.IsSSHKeyRegistered(key)
 	if err != nil {

@@ -80,7 +80,7 @@ func (c *Client) GetOrCreateToken(fingerprint, pubKeyStr, clientSecret string) (
 	if err != nil {
 		return "", models.PublicUser{}, fmt.Errorf("token refresh request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", models.PublicUser{}, fmt.Errorf("token refresh returned status %d", resp.StatusCode)
@@ -137,7 +137,7 @@ func (c *Client) GetProducts() ([]models.Coffee, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch products: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
@@ -167,7 +167,7 @@ func (c *Client) Health() error {
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("API returned status %d", resp.StatusCode)
@@ -217,7 +217,7 @@ func (c *Client) RegisterUser(username, sshPublicKey, sshKeyFingerprint string) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to register user: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var registerResp RegisterResponse
 	if err := json.NewDecoder(resp.Body).Decode(&registerResp); err != nil {
@@ -302,7 +302,7 @@ func (c *Client) GetCart() (*CartData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch cart: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var cartResp CartResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cartResp); err != nil {
@@ -342,7 +342,7 @@ func (c *Client) SetCartItem(coffeeID uint, quantity int) (*CartData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to set cart item: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var cartResp CartResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cartResp); err != nil {
@@ -381,7 +381,7 @@ func (c *Client) SetCartAddress(addressID uint) error {
 	if err != nil {
 		return fmt.Errorf("failed to set cart address: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result APIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -420,7 +420,7 @@ func (c *Client) SetCartCard(cardID uint) error {
 	if err != nil {
 		return fmt.Errorf("failed to set cart card: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result APIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -450,7 +450,7 @@ func (c *Client) ClearCart() error {
 	if err != nil {
 		return fmt.Errorf("failed to clear cart: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result APIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
@@ -480,7 +480,7 @@ func (c *Client) ConvertCart() (*models.Order, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert cart: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var convertResp ConvertCartResponse
 	if err := json.NewDecoder(resp.Body).Decode(&convertResp); err != nil {
@@ -510,7 +510,7 @@ func (c *Client) GetCards() ([]models.Card, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch cards: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var cardsResp CardsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cardsResp); err != nil {
@@ -553,7 +553,7 @@ func (c *Client) SaveCard(params SaveCardRequest) (*models.Card, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to save card: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var cardResp CardResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cardResp); err != nil {
@@ -590,7 +590,7 @@ func (c *Client) CollectCard() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to collect card: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var collectResp CollectCardResponse
 	if err := json.NewDecoder(resp.Body).Decode(&collectResp); err != nil {
@@ -619,7 +619,7 @@ func (c *Client) DeleteCard(id uint) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete card: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("delete card failed with status %d", resp.StatusCode)
@@ -648,7 +648,7 @@ func (c *Client) GetOrders() ([]models.Order, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch orders: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var ordersResp OrderResponse
 	if err := json.NewDecoder(resp.Body).Decode(&ordersResp); err != nil {
@@ -686,7 +686,7 @@ func (c *Client) GetAddresses() ([]models.Address, error) {
 		return nil, fmt.Errorf("failed to fetch addresses: %w", err)
 	}
 
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var addrResp AddressResponse
 	if err := json.NewDecoder(resp.Body).Decode(&addrResp); err != nil {
@@ -732,7 +732,7 @@ func (c *Client) CreateAddress(addrReq CreateAddressRequest) (*models.Address, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to create address: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	var result struct {
 		Success bool `json:"success"`
@@ -769,7 +769,7 @@ func (c *Client) DeleteAddress(id uint) error {
 	if err != nil {
 		return fmt.Errorf("failed to delete address: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("delete address failed with status %d", resp.StatusCode)
@@ -804,7 +804,7 @@ func (c *Client) GetViewInit() (ViewInitData, error) {
 	if err != nil {
 		return ViewInitData{}, fmt.Errorf("view init request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return ViewInitData{}, fmt.Errorf("view init returned status: %d", resp.StatusCode)
 	}

@@ -110,7 +110,7 @@ func (c *Client) ValidateAddress(ctx context.Context, addr Address) (*Address, e
 	if err != nil {
 		return nil, fmt.Errorf("bring request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

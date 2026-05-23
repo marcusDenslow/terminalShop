@@ -66,7 +66,7 @@ func CcnValidator(cardNumber string) error {
 func IsDigits(name string) ErrorHandler {
 	return func(str string) error {
 		for _, c := range str {
-			if !(c >= '0' && c <= '9') {
+			if c < '0' || c > '9' {
 				return fmt.Errorf("[%s] expected only digits but got %s", name, str)
 			}
 		}
