@@ -62,6 +62,7 @@ type PollPaymentInitMsg struct {
 type PollPaymentStatusMsg struct {
 	Baseline      time.Time
 	BaselineCount int
+	Deadline      time.Time
 }
 
 // PollPaymentCompleteMsg is sent when the card count increases, meaning the
@@ -70,6 +71,8 @@ type PollPaymentCompleteMsg struct {
 	Cards     []models.Card
 	Duplicate bool
 }
+
+type PollPaymentTimeoutMsg struct{}
 
 // buildPaymentForm creates the huh form bound to state's fields.
 // No field-level validators so Tab/Enter move freely.
@@ -370,6 +373,10 @@ func (m Model) renderPaymentHttpsView() string {
 	baseStyle := m.theme.TextLabel()
 	accentStyle := m.theme.TextHighlight()
 
+	if m.payment.collectTimeOut {
+		return m.theme.TextError().Bold(true).Render("payment link timed out") + "\n\n" + baseStyle.Render("no card saved after 2 minutes.") + "\n" + baseStyle.Render("press ") + accentStyle.Render("esc") + baseStyle.Render(" to go back and try again")
+	}
+
 	if m.payment.collectURL == nil {
 		return baseStyle.Render("  generating payment link...")
 	}
@@ -439,13 +446,19 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case PollPaymentInitMsg:
 		url := msg.URL
 		m.payment.collectURL = &url
-		return m, m.pollCardsCmd(m.payment.collectBaseline, m.payment.collectCardCount)
+		return m, m.pollCardsCmd(m.payment.collectBaseline, m.payment.collectCardCount, m.payment.collectDeadline)
 
 	case PollPaymentStatusMsg:
 		if m.payment.view != 2 {
 			return m, nil // user navigated away, stop polling
 		}
-		return m, m.pollCardsCmd(msg.Baseline, msg.BaselineCount)
+		return m, m.pollCardsCmd(msg.Baseline, msg.BaselineCount, msg.Deadline)
+	case PollPaymentTimeoutMsg:
+		if m.payment.view != 2 {
+			return m, nil
+		}
+		m.payment.collectTimeOut = true
+		return m, nil
 
 	case PollPaymentCompleteMsg:
 		if m.payment.view != 2 {
@@ -508,6 +521,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			// Browser payment
 			m.payment.view = 2
 			m.payment.collectURL = nil
+			m.payment.collectTimeOut = false
 			m.payment.collectCardCount = len(m.SavedCards)
 			var maxT time.Time
 			for _, card := range m.SavedCards {
@@ -516,6 +530,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				}
 			}
 			m.payment.collectBaseline = maxT
+			m.payment.collectDeadline = time.Now().Add(cardPollTimeout)
 			m.footer = []footerCommand{
 				{key: "esc", value: "back"},
 			}
@@ -544,11 +559,12 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// HTTPS/browser view avigation
+	// HTTPS/browser view navigation
 	if m.payment.view == 2 {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.String() == "esc" {
 			m.payment.view = 0
 			m.payment.collectURL = nil
+			m.payment.collectTimeOut = false
 			m.footer = []footerCommand{
 				{key: "j/k", value: "cards"},
 				{key: "enter", value: "select"},

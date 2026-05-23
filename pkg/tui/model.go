@@ -171,6 +171,8 @@ type paymentState struct {
 	collectURL       *string
 	collectCardCount int
 	collectBaseline  time.Time
+	collectDeadline  time.Time
+	collectTimeOut   bool
 	viewport         viewport.Model
 	viewportReady    bool
 }
@@ -944,6 +946,7 @@ func (m Model) collectCardCmd() tea.Cmd {
 }
 
 const ordersPollInterval = 10 * time.Second
+const cardPollTimeout = 2 * time.Minute
 
 type OrdersPollTickMsg struct{}
 
@@ -953,14 +956,17 @@ func (m Model) pollOrderCmd() tea.Cmd {
 	})
 }
 
-func (m Model) pollCardsCmd(baseline time.Time, baselineCount int) tea.Cmd {
-	return tea.Tick(time.Second, func(_ time.Time) tea.Msg {
+func (m Model) pollCardsCmd(baseline time.Time, baselineCount int, deadline time.Time) tea.Cmd {
+	return tea.Tick(time.Second, func(now time.Time) tea.Msg {
+		if now.After(deadline) {
+			return PollPaymentTimeoutMsg{}
+		}
 		if m.APIClient == nil {
-			return PollPaymentStatusMsg{Baseline: baseline, BaselineCount: baselineCount}
+			return PollPaymentStatusMsg{Baseline: baseline, BaselineCount: baselineCount, Deadline: deadline}
 		}
 		cards, err := m.APIClient.GetCards()
 		if err != nil {
-			return PollPaymentStatusMsg{Baseline: baseline, BaselineCount: baselineCount}
+			return PollPaymentStatusMsg{Baseline: baseline, BaselineCount: baselineCount, Deadline: deadline}
 		}
 		var newest time.Time
 		for _, card := range cards {
@@ -971,6 +977,6 @@ func (m Model) pollCardsCmd(baseline time.Time, baselineCount int) tea.Cmd {
 		if newest.After(baseline) {
 			return PollPaymentCompleteMsg{Cards: cards, Duplicate: len(cards) == baselineCount}
 		}
-		return PollPaymentStatusMsg{Baseline: baseline, BaselineCount: baselineCount}
+		return PollPaymentStatusMsg{Baseline: baseline, BaselineCount: baselineCount, Deadline: deadline}
 	})
 }
