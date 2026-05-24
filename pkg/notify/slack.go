@@ -16,6 +16,7 @@ import (
 
 var slackClient = &http.Client{Timeout: 5 * time.Second}
 
+// dollars converts cents to dollars
 func dollars(cents int) string {
 	return fmt.Sprintf("$%.2f", float64(cents)/100)
 }
