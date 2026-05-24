@@ -7,6 +7,8 @@ import (
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/utils"
+
+	"gorm.io/gorm"
 )
 
 type ViewHandler struct{}
@@ -38,7 +40,10 @@ func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
 	db.Where("user_id = ?", userID).Find(&cards)
 
 	var orders []models.Order
-	db.Where("user_id = ?", userID).Preload("Items").Order("created_at DESC").Find(&orders)
+	db.Where("user_id = ?", userID).
+		Preload("Items").
+		Preload("Events", func(tx *gorm.DB) *gorm.DB { return tx.Order("created_at ASC") }).
+		Order("created_at DESC").Find(&orders)
 	var cartItems []models.CartItem
 	if cart.ID != 0 {
 		db.Where("cart_id = ? AND quantity > 0", cart.ID).Preload("Coffee").Find(&cartItems)

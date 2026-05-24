@@ -5,11 +5,12 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
+
 	"terminalShop/pkg/bring"
 	"terminalShop/pkg/notify"
 	"terminalShop/pkg/shipping"
 	"terminalShop/pkg/shippo"
-	"time"
 
 	"terminalShop/api/middleware"
 	"terminalShop/pkg/audit"
@@ -20,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stripe/stripe-go/v78"
 	"github.com/stripe/stripe-go/v78/refund"
+	"gorm.io/gorm"
 )
 
 type OrderHandler struct {
@@ -43,7 +45,10 @@ func (h *OrderHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
 	var orders []models.Order
-	db.Where("user_id = ?", userID).Preload("Items").Order("created_at desc").Find(&orders)
+	db.Where("user_id = ?", userID).
+		Preload("Items").
+		Preload("Events", func(tx *gorm.DB) *gorm.DB { return tx.Order("created_at ASC") }).
+		Order("created_at desc").Find(&orders)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"orders": orders,

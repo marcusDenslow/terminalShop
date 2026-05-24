@@ -71,9 +71,10 @@ type Order struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"` // GORM soft-delete sentinel
 
 	// Associations
-	User  User        `gorm:"foreignKey:UserID" json:"-"`
-	Card  Card        `gorm:"foreignKey:CardID" json:"-"`
-	Items []OrderItem `gorm:"foreignKey:OrderID" json:"items"`
+	User   User         `gorm:"foreignKey:UserID" json:"-"`
+	Card   Card         `gorm:"foreignKey:CardID" json:"-"`
+	Items  []OrderItem  `gorm:"foreignKey:OrderID" json:"items"`
+	Events []OrderEvent `gorm:"foreignKey:OrderID" json:"events,omitempty"`
 }
 
 // TableName specifies the table name for the Order model.
