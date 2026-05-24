@@ -180,7 +180,7 @@ func (h *CardHandler) CollectCard(w http.ResponseWriter, r *http.Request) {
 
 // SaveCardRequest holds the raw card fields submitted by the TUI.
 // Tokenization happens server-side so the Stripe secret key never
-// touches the SSH client or TUI layer..
+// touches the SSH client or TUI layer.
 type SaveCardRequest struct {
 	Token string `json:"token"`
 }
