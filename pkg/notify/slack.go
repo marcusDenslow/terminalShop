@@ -15,6 +15,7 @@ import (
 	"terminalShop/pkg/models"
 )
 
+// slack client
 var slackClient = &http.Client{Timeout: 5 * time.Second}
 
 // dollars converts cents to dollars
