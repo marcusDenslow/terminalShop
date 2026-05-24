@@ -1,3 +1,4 @@
+// Package notify provides a simple interface to send notifications to Slack.
 package notify
 
 import (
