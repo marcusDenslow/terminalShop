@@ -201,6 +201,24 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 		}
 	}
 
+	visible := make([]models.OrderEvent, 0, len(order.Events))
+	for _, event := range order.Events {
+		if _, ok := event.DisplayLabel(); ok {
+			visible = append(visible, event)
+		}
+	}
+	if len(visible) > 0 {
+		b.WriteString(labelStyle.Render("Timeline"))
+		b.WriteString("\n")
+		for _, event := range visible {
+			label, _ := event.DisplayLabel()
+			when := event.CreatedAt.Format("Jan 02 3:04 PM")
+			b.WriteString(valueStyle.Render(fmt.Sprintf("  %-20s %s", label, dimStyle.Render(when))))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+
 	// Shipping address
 	b.WriteString(labelStyle.Render("Ship To"))
 	b.WriteString("\n")
