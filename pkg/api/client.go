@@ -636,6 +636,20 @@ type OrderResponse struct {
 	Error *APIError `json:"error,omitempty"`
 }
 
+// RefundRequest is the customer-facing refund request payload.
+type RefundRequest struct {
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
+}
+
+type refundRequestResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Status string `json:"status"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
 func (c *Client) GetOrders() ([]models.Order, error) {
 	url := fmt.Sprintf("%s/api/v1/orders", c.BaseURL)
 
@@ -662,6 +676,42 @@ func (c *Client) GetOrders() ([]models.Order, error) {
 		return nil, fmt.Errorf("failed to fetch orders")
 	}
 	return ordersResp.Data.Orders, nil
+}
+
+// CreateRefundRequest posts a refund request for an order.
+func (c *Client) CreateRefundRequest(orderID uint, params RefundRequest) error {
+	url := fmt.Sprintf("%s/api/v1/orders/%d/refund-request", c.BaseURL, orderID)
+
+	jsonData, err := json.Marshal(params)
+	if err != nil {
+		return fmt.Errorf("failed to marshal refund request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create refund request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to send refund request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var refundResp refundRequestResponse
+	if err := json.NewDecoder(resp.Body).Decode(&refundResp); err != nil {
+		return fmt.Errorf("failed to decode refund response: %w", err)
+	}
+
+	if !refundResp.Success {
+		if refundResp.Error != nil {
+			return fmt.Errorf("%s: %s", refundResp.Error.Code, refundResp.Error.Message)
+		}
+		return fmt.Errorf("failed to send refund request")
+	}
+
+	return nil
 }
 
 // The Addresses API response

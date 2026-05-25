@@ -66,6 +66,10 @@ type Order struct {
 	// Slack parent message ts for this order's thread (NULL if Slack notify disabled).
 	SlackThreadTS *string `gorm:"size:64" json:"-"`
 
+	// LastRefundRequestAt timestamps the most recent customer-initiated refund
+	// request for this order. Used to rate-limit repeat submissions.
+	LastRefundRequestAt *time.Time `json:"-"`
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"` // GORM soft-delete sentinel
@@ -112,4 +116,36 @@ func (o *Order) TotalInDollars() float64 {
 // or shipped but not yet delivered.
 func (o *Order) IsActive() bool {
 	return o.Status == OrderStatusPaid || o.Status == OrderStatusShipped
+}
+
+// RefundRequestReasons is the canonical list of customer-facing refund reasons
+// accepted by both the API and the TUI.
+var RefundRequestReasons = []string{
+	"Wrong item received",
+	"Item damaged in transit",
+	"Item never arrived",
+	"Quality issue",
+	"Other",
+}
+
+// RefundRequestReasonOther is the sentinel reason that requires a free-form message.
+const RefundRequestReasonOther = "Other"
+
+// IsValidRefundReason reports whether r is one of the accepted refund reasons.
+func IsValidRefundReason(r string) bool {
+	for _, reason := range RefundRequestReasons {
+		if reason == r {
+			return true
+		}
+	}
+	return false
+}
+
+// CanRequestRefund reports whether a customer is allowed to request a refund
+// for this order. Paid, shipped, and delivered orders qualify; everything else
+// is either still unpaid or already in a terminal state.
+func (o *Order) CanRequestRefund() bool {
+	return o.Status == OrderStatusPaid ||
+		o.Status == OrderStatusShipped ||
+		o.Status == OrderStatusDelivered
 }

@@ -130,7 +130,7 @@ func (h *SlackHandler) handleBuyLabel(orderIDStr string, p slackInteractivePaylo
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Label purchase failed: %v", err))
+		_ = notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Label purchase failed: %v", err))
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -151,7 +151,7 @@ func (h *SlackHandler) handleBuyLabel(orderIDStr string, p slackInteractivePaylo
 	_ = json.Unmarshal(bodyBytes, &result)
 
 	if resp.StatusCode >= 300 {
-		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Label purchase failed: `%s` %s", result.Error.Code, result.Error.Message))
+		_ = notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Label purchase failed: `%s` %s", result.Error.Code, result.Error.Message))
 		return
 	}
 
@@ -173,7 +173,7 @@ func (h *SlackHandler) handleMarkStatus(orderIDStr string, p slackInteractivePay
 		return
 	}
 	if order.TrackingNumber == "" {
-		notify.SlackPostToOrderThread(orderID, ":x: Cannot mark status, the order has no tracking number yet.")
+		_ = notify.SlackPostToOrderThread(orderID, ":x: Cannot mark status, the order has no tracking number yet.")
 		return
 	}
 
@@ -198,12 +198,12 @@ func (h *SlackHandler) handleMarkStatus(orderIDStr string, p slackInteractivePay
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Mark %s failed: %v", status, err))
+		_ = notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Mark %s failed: %v", status, err))
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
-		notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Mark %s failed (HTTP %d)", status, resp.StatusCode))
+		_ = notify.SlackPostToOrderThread(orderID, fmt.Sprintf(":x: Mark %s failed (HTTP %d)", status, resp.StatusCode))
 		return
 	}
 

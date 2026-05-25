@@ -288,6 +288,13 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.account.detailViewport, cmd = m.account.detailViewport.Update(msg)
 		return m, cmd
 
+	case "r":
+		if m.account.orderViewState == 2 {
+			if order, ok := m.selectedRefundableOrder(); ok {
+				return m.OpenRefundComposer(order.ID)
+			}
+		}
+
 	case "x", "d":
 		if m.account.addressListFocused && m.account.addressDeleting == nil && m.account.addressCursor < len(m.SavedAddresses) {
 			m.account.addressDeleting = &m.account.addressCursor
@@ -339,11 +346,15 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 					m.account.orderYOffset = m.account.detailViewport.YOffset()
 					m.account.orderViewState = 2
 					m.account.detailViewport.GotoTop()
-					m.footer = []footerCommand{
+					footer := []footerCommand{
 						{key: "esc", value: "back"},
 						{key: "s", value: "shop"},
 						{key: "q", value: "quit"},
 					}
+					if _, ok := m.selectedRefundableOrder(); ok {
+						footer = append([]footerCommand{{key: "r", value: "refund"}}, footer...)
+					}
+					m.footer = footer
 				}
 			}
 		case "addresses":
