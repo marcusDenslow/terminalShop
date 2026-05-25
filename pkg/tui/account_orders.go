@@ -278,10 +278,9 @@ func (m Model) displayStyle(k models.DisplayKind) lipgloss.Style {
 	case models.DisplayKindError:
 		return m.theme.TextError()
 	case models.DisplayKindWarning:
-		// !TODO add refunds and change this
-		// No warning color in theme yet, reuse loading pink as visual flag
-		// for now
 		return m.theme.TextLoading()
+	case models.DisplayKindRefund:
+		return m.theme.TextBrand()
 	}
 	return m.theme.TextHighlight()
 }

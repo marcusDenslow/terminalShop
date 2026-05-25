@@ -164,10 +164,8 @@ func (m Model) newRefundTextarea() textarea.Model {
 	ta.Placeholder = "Describe the issue (optional)..."
 	ta.ShowLineNumbers = true
 	ta.CharLimit = 65536
-	ta.DynamicHeight = true
-	ta.MinHeight = refundMinTextareaRows
-	ta.MaxHeight = max(refundMinTextareaRows, min(refundMaxTextareaRows, m.heightContainer-refundModalChrome))
-	ta.SetHeight(refundMinTextareaRows)
+	ta.DynamicHeight = false
+	ta.SetHeight(m.refundTextareaHeight())
 	ta.SetWidth(m.refundTextareaWidth())
 
 	base := lipgloss.NewStyle()
@@ -200,8 +198,7 @@ func (m Model) newRefundTextarea() textarea.Model {
 }
 
 func (m Model) resizeRefundTextarea(state *refundState) {
-	state.textarea.MinHeight = refundMinTextareaRows
-	state.textarea.MaxHeight = max(refundMinTextareaRows, min(refundMaxTextareaRows, m.heightContainer-refundModalChrome))
+	state.textarea.SetHeight(m.refundTextareaHeight())
 	state.textarea.SetWidth(m.refundTextareaWidth())
 }
 
@@ -323,22 +320,26 @@ func (m Model) renderRefundTextarea(state *refundState) string {
 		border = m.theme.Highlight()
 	}
 
+	wrapper := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(border)
+
+	contentWidth := m.refundContentWidth()
+	state.textarea.SetWidth(contentWidth - wrapper.GetHorizontalFrameSize())
+	state.textarea.SetHeight(m.refundTextareaHeight())
+
+	textareaBox := wrapper.Render(state.textarea.View())
+
 	counter := m.theme.TextDim().
-		Width(m.refundTextareaWidth()).
+		Width(contentWidth).
 		Align(lipgloss.Right).
 		Render(fmt.Sprintf("%d chars", state.textarea.Length()))
-
-	box := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(border).
-		Padding(0, 1).
-		Width(m.refundContentWidth()).
-		Render(state.textarea.View() + "\n" + counter)
 
 	out := lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.theme.TextLabel().Render(label),
-		box,
+		textareaBox,
+		counter,
 	)
 	if state.messageErr != "" {
 		out += "\n" + m.theme.TextError().Render(state.messageErr)
@@ -366,4 +367,8 @@ func (m Model) refundContentWidth() int {
 
 func (m Model) refundTextareaWidth() int {
 	return max(1, m.refundContentWidth()-refundTextareaHPad)
+}
+
+func (m Model) refundTextareaHeight() int {
+	return max(refundMinTextareaRows, min(refundMaxTextareaRows, m.heightContainer-refundModalChrome))
 }

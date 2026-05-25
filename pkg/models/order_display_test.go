@@ -1,8 +1,12 @@
 package models
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestOrderDisplayState(t *testing.T) {
+	now := time.Now()
 	tests := []struct {
 		name  string
 		order Order
@@ -23,6 +27,10 @@ func TestOrderDisplayState(t *testing.T) {
 		{"cancelled", Order{Status: OrderStatusCancelled}, "Cancelled", DisplayKindError},
 		{"refunded", Order{Status: OrderStatusRefunded}, "Refunded", DisplayKindError},
 		{"failed", Order{Status: OrderStatusFailed}, "Payment failed", DisplayKindError},
+		{"paid with open refund request", Order{Status: OrderStatusPaid, LastRefundRequestAt: &now}, "Refund Requested", DisplayKindRefund},
+		{"delivered with open refund request", Order{Status: OrderStatusDelivered, LastRefundRequestAt: &now}, "Refund Requested", DisplayKindRefund},
+		{"refunded order ignores prior request", Order{Status: OrderStatusRefunded, LastRefundRequestAt: &now}, "Refunded", DisplayKindError},
+		{"cancelled order ignores prior request", Order{Status: OrderStatusCancelled, LastRefundRequestAt: &now}, "Cancelled", DisplayKindError},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

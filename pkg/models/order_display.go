@@ -11,10 +11,27 @@ const (
 	DisplayKindBrand   DisplayKind = "brand"   // shipped / in transit
 	DisplayKindSuccess DisplayKind = "success" // delivered
 	DisplayKindError   DisplayKind = "error"   // cancelled, failed, refunded
-	DisplayKindWarning DisplayKind = "warning" // refund pending, delivery issue
+	DisplayKindWarning DisplayKind = "warning" // delivery issue, returned
+	DisplayKindRefund  DisplayKind = "refund"  // refund requested, awaiting review
 )
 
+// refundPending reports whether the order has an open customer refund request
+// that has not yet been resolved by a terminal status change.
+func (order *Order) refundPending() bool {
+	if order.LastRefundRequestAt == nil {
+		return false
+	}
+	switch order.Status {
+	case OrderStatusRefunded, OrderStatusCancelled, OrderStatusFailed:
+		return false
+	}
+	return true
+}
+
 func (order *Order) DisplayState() string {
+	if order.refundPending() {
+		return "Refund Requested"
+	}
 	switch order.Status {
 	case OrderStatusPending:
 		return "Awaiting payment"
@@ -54,6 +71,9 @@ func (order *Order) DisplayState() string {
 }
 
 func (order *Order) DisplayKind() DisplayKind {
+	if order.refundPending() {
+		return DisplayKindRefund
+	}
 	switch order.Status {
 	case OrderStatusPending:
 		return DisplayKindNeutral
