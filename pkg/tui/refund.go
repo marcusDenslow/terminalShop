@@ -18,9 +18,9 @@ const (
 	refundMinTextareaRows = 5
 	refundMaxTextareaRows = 10
 	// chrome above the textarea inside the modal (title, label, padding, footer).
-	refundModalChrome = 12
-	refundModalMaxWidth  = 58
-	refundModalMinWidth  = 24
+	refundModalChrome   = 12
+	refundModalMaxWidth = 58
+	refundModalMinWidth = 24
 	// horizontal chrome the modal subtracts from m.widthContent.
 	refundModalHGutter = 6
 	// inner padding around the textarea inside the modal body.
