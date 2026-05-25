@@ -64,6 +64,11 @@ type VisibleError struct {
 	message string
 }
 
+// VisibleNotice is a typed success message displayed to the user as a banner.
+type VisibleNotice struct {
+	message string
+}
+
 type Model struct {
 	// User authentication
 	User               *models.User
@@ -110,6 +115,7 @@ type Model struct {
 
 	Loading   bool // true when fetching data from API
 	error     *VisibleError
+	notice    *VisibleNotice
 	APIClient *api.Client
 
 	// Rendering
@@ -128,6 +134,7 @@ type Model struct {
 	shipping shippingState
 	payment  paymentState
 	account  accountState
+	refund   refundState
 	review   reviewState
 	confirm  confirmState
 
@@ -217,6 +224,7 @@ func (m Model) SwitchPage(p page) Model {
 	m.currentPage = p
 	m.switched = true
 	m.error = nil
+	m.notice = nil
 	return m
 }
 

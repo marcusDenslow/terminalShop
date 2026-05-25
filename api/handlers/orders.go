@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"terminalShop/pkg/bring"
@@ -31,6 +34,16 @@ type OrderHandler struct {
 	bringCustomerNumber string
 }
 
+type refundRequestPayload struct {
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
+}
+
+// refundRequestCooldown is the minimum interval between customer-initiated
+// refund requests for the same order. Prevents accidental double-clicks and
+// repeated submissions from spamming the operator's Slack channel.
+const refundRequestCooldown = 15 * time.Minute
+
 func NewOrderHandler(stripeSecretKey, bringAPIUID, bringAPIKey, bringCustomerNumber string) *OrderHandler {
 	return &OrderHandler{
 		stripeKey:           stripeSecretKey,
@@ -38,6 +51,83 @@ func NewOrderHandler(stripeSecretKey, bringAPIUID, bringAPIKey, bringCustomerNum
 		bringAPIKey:         bringAPIKey,
 		bringCustomerNumber: bringCustomerNumber,
 	}
+}
+
+// CreateRefundRequest posts a customer refund request into the order's Slack
+// thread. It does not issue a Stripe refund.
+func (h *OrderHandler) CreateRefundRequest(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB().WithContext(r.Context())
+	userID := middleware.UserIDFromContext(r.Context())
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_ID", "invalid order id", nil)
+		return
+	}
+
+	var req refundRequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body", nil)
+		return
+	}
+
+	req.Reason = strings.TrimSpace(req.Reason)
+	req.Message = strings.TrimSpace(req.Message)
+
+	if !models.IsValidRefundReason(req.Reason) {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_REASON", "invalid refund reason", nil)
+		return
+	}
+	if req.Reason == models.RefundRequestReasonOther && req.Message == "" {
+		utils.RespondError(w, http.StatusBadRequest, "MESSAGE_REQUIRED", "message is required when reason is other", nil)
+		return
+	}
+
+	var order models.Order
+	if err := db.Preload("User").Where("id = ? AND user_id = ?", id, userID).First(&order).Error; err != nil {
+		utils.RespondError(w, http.StatusNotFound, "ORDER_NOT_FOUND", "order not found", nil)
+		return
+	}
+	if !order.CanRequestRefund() {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_STATE",
+			"only paid, shipped, or delivered orders can request refunds", nil)
+		return
+	}
+
+	if order.LastRefundRequestAt != nil {
+		elapsed := time.Since(*order.LastRefundRequestAt)
+		if elapsed < refundRequestCooldown {
+			retryAfter := int((refundRequestCooldown - elapsed).Seconds()) + 1
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			utils.RespondError(w, http.StatusTooManyRequests, "RATE_LIMITED",
+				fmt.Sprintf("another refund request was submitted recently; try again in %d min", retryAfter/60+1),
+				nil)
+			return
+		}
+	}
+
+	text := fmt.Sprintf(":money_with_wings: *Refund request* — %s\n*From:* %s <%s>\n*Total:* $%.2f",
+		req.Reason, order.User.Name, order.User.Email, order.TotalInDollars())
+	if req.Message != "" {
+		quoted := "> " + strings.ReplaceAll(req.Message, "\n", "\n> ")
+		text += "\n\n" + quoted
+	}
+
+	if err := notify.SlackPostToOrderThread(order.ID, text); err != nil {
+		utils.RespondError(w, http.StatusBadGateway, "SLACK_ERROR", "failed to send refund request", nil)
+		return
+	}
+
+	// Record the timestamp after a successful Slack post so a Slack outage
+	// doesn't consume the user's cooldown — they can retry immediately.
+	if err := db.Model(&order).Update("last_refund_request_at", time.Now()).Error; err != nil {
+		slog.Warn("refund request: failed to record timestamp", "order_id", order.ID, "error", err)
+	}
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
+		"status": "sent",
+	})
 }
 
 func (h *OrderHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
@@ -50,7 +140,7 @@ func (h *OrderHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 		Preload("Events", func(tx *gorm.DB) *gorm.DB { return tx.Order("created_at ASC") }).
 		Order("created_at desc").Find(&orders)
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"orders": orders,
 	})
 }

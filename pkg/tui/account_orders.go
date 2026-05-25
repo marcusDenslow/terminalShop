@@ -37,6 +37,21 @@ func (m Model) HistoryOrders() []models.Order {
 	return out
 }
 
+// selectedRefundableOrder returns the order under the cursor in the active
+// order-detail view, paired with ok=true, when the user is allowed to file a
+// refund request for it. Returns (zero, false) otherwise.
+func (m Model) selectedRefundableOrder() (models.Order, bool) {
+	orders := m.currentOrderList()
+	if m.account.orderCursor < 0 || m.account.orderCursor >= len(orders) {
+		return models.Order{}, false
+	}
+	order := orders[m.account.orderCursor]
+	if !order.CanRequestRefund() {
+		return models.Order{}, false
+	}
+	return order, true
+}
+
 func (m Model) currentOrderList() []models.Order {
 	if m.account.cursor < 0 || m.account.cursor >= len(models.AccountMenuItems) {
 		return nil
@@ -241,7 +256,11 @@ func (m Model) buildOrderDetailView(order models.Order, _ int) string {
 	b.WriteString("\n\n")
 
 	// Footer hint
-	b.WriteString(dimStyle.Render("esc: back to orders"))
+	if order.CanRequestRefund() {
+		b.WriteString(dimStyle.Render("r: refund  esc: back to orders"))
+	} else {
+		b.WriteString(dimStyle.Render("esc: back to orders"))
+	}
 
 	return b.String()
 }

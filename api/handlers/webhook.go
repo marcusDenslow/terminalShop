@@ -373,7 +373,9 @@ func (h *WebhookHandler) HandleShippo(w http.ResponseWriter, r *http.Request) {
 
 	if previousTrackingStatus != newStatus {
 		audit.TrackingUpdated(order.ID, order.Carrier, payload.Data.TrackingNumber, string(newStatus))
-		go notify.SlackPostToOrderThread(order.ID, formatTrackingUpdate(newStatus, payload.Data.TrackingStatus.StatusDetails))
+		go func() {
+			_ = notify.SlackPostToOrderThread(order.ID, formatTrackingUpdate(newStatus, payload.Data.TrackingStatus.StatusDetails))
+		}()
 	}
 	if deliveredTransition {
 		audit.OrderDelivered(order.ID, payload.Data.TrackingNumber)

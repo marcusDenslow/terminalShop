@@ -2,11 +2,12 @@ package tui
 
 import (
 	"fmt"
-	"terminalShop/pkg/api"
-	"terminalShop/pkg/models"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"terminalShop/pkg/api"
+	"terminalShop/pkg/models"
 )
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -36,6 +37,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.payment.form != nil {
 				m.payment.form.form = m.buildPaymentForm(m.payment.form)
 			}
+			if m.refund.open {
+				m.refund.form = m.buildRefundForm(&m.refund)
+				m.resizeRefundTextarea(&m.refund)
+			}
 		}
 		return m, nil
 	}
@@ -51,9 +56,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case VisibleError:
 		m.error = &msg
+		m.notice = nil
+		return m, nil
+	case VisibleNotice:
+		m.notice = &msg
+		m.error = nil
 		return m, nil
 	case error:
 		m.error = &VisibleError{message: msg.Error()}
+		m.notice = nil
 		if m.currentPage == shopPage || m.currentPage == cartPage {
 			return m, m.fetchCartCmd
 		}
@@ -167,9 +178,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.shipping.form != nil || m.payment.form != nil {
 			break
 		}
-		// Dismiss error banner with ESC
-		if msg.String() == "esc" && m.error != nil {
+		// Refund overlay owns input when open; dispatched below before page handlers.
+		if m.refund.open {
+			break
+		}
+		// Dismiss banners with ESC.
+		if msg.String() == "esc" && (m.error != nil || m.notice != nil) {
 			m.error = nil
+			m.notice = nil
 			return m, nil
 		}
 		// Global navigation
@@ -192,6 +208,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// non-globals. fall through to page dispatch below
 	}
+
+	// Refund overlay intercepts all input after global handling.
+	if m.refund.open {
+		return m.RefundUpdate(msg)
+	}
+
 	// Page-specifics
 	switch m.currentPage {
 	case shopPage:

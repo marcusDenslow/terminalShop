@@ -188,29 +188,33 @@ func SlackUnpinOrder(orderID uint) {
 }
 
 // SlackPostToOrderThread posts a plain-text reply inside the order's thread.
-// Looks up the thread ts from the database. Silent no-op if the order has no
-// saved thread (Slack was disabled when it was created, or post failed earlier).
-func SlackPostToOrderThread(orderID uint, text string) {
+// It looks up the thread ts from the database and returns an error when the
+// reply cannot be posted.
+func SlackPostToOrderThread(orderID uint, text string) error {
 	token := os.Getenv("SLACK_BOT_TOKEN")
 	channel := os.Getenv("SLACK_CHANNEL")
 	if token == "" || channel == "" {
-		return
+		return fmt.Errorf("slack is not configured")
 	}
 
 	var order models.Order
 	if err := database.GetDB().Select("id", "slack_thread_ts").Where("id = ?", orderID).First(&order).Error; err != nil {
 		slog.Warn("failed to look up order for thread post", "order_id", orderID, "error", err)
-		return
+		return fmt.Errorf("failed to look up order thread: %w", err)
 	}
 	if order.SlackThreadTS == nil || *order.SlackThreadTS == "" {
-		return
+		return fmt.Errorf("order has no slack thread")
 	}
 
-	_, _ = postSlackMessage(token, map[string]any{
+	if _, ok := postSlackMessage(token, map[string]any{
 		"channel":   channel,
 		"thread_ts": *order.SlackThreadTS,
 		"text":      text,
-	})
+	}); !ok {
+		slog.Warn("failed to post slack thread reply", "order_id", orderID)
+		return fmt.Errorf("failed to post slack thread reply")
+	}
+	return nil
 }
 
 func SlackPostLabelPurchased(orderID uint, labelURL string, costCents int) {

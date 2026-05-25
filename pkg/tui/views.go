@@ -84,6 +84,10 @@ func (m Model) renderString() string {
 		errorStyle := m.theme.PanelError().Padding(0, 1).MarginBottom(1)
 		errorBanner := errorStyle.Render(m.error.message)
 		content = errorBanner + "\n" + m.buildPageContent(availableContentHeight)
+	} else if m.notice != nil {
+		noticeStyle := m.theme.TextSuccess().Border(lipgloss.NormalBorder()).BorderForeground(m.theme.Success()).Padding(0, 1).MarginBottom(1)
+		noticeBanner := noticeStyle.Render(m.notice.message)
+		content = noticeBanner + "\n" + m.buildPageContent(availableContentHeight)
 	} else {
 		content = m.buildPageContent(availableContentHeight)
 	}
@@ -114,6 +118,10 @@ func (m Model) renderString() string {
 		MaxWidth(m.widthContainer).
 		MaxHeight(m.heightContainer).
 		Render(child)
+
+	if m.refund.open {
+		constrained = m.RenderRefundOverlay()
+	}
 
 	// Center the entire container in the terminal viewport
 	return lipgloss.Place(
