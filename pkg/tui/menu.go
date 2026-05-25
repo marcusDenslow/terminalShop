@@ -1,9 +1,9 @@
 package tui
 
 import (
-	"fmt"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"fmt"
 )
 
 func (m Model) BuildMenuView() string {
