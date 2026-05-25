@@ -113,6 +113,21 @@ func main() {
 		}
 	}()
 
+	go func() {
+		time.Sleep(30 * time.Second)
+		handlers.ReconcileUnshipped()
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				handlers.ReconcileUnshipped()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	log.Println("API server started. Press Ctrl+C to shutdown.")
 
 	// Block until signal received
