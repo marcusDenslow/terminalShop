@@ -191,6 +191,17 @@ func SlackUnpinOrder(orderID uint) {
 // It looks up the thread ts from the database and returns an error when the
 // reply cannot be posted.
 func SlackPostToOrderThread(orderID uint, text string) error {
+	return slackPostToOrderThread(orderID, text, false)
+}
+
+// SlackPostToOrderThreadBroadcast posts a thread reply that is also surfaced
+// to the channel (reply_broadcast=true) so channel members get a normal
+// notification. Use for messages that need immediate operator attention.
+func SlackPostToOrderThreadBroadcast(orderID uint, text string) error {
+	return slackPostToOrderThread(orderID, text, true)
+}
+
+func slackPostToOrderThread(orderID uint, text string, broadcast bool) error {
 	token := os.Getenv("SLACK_BOT_TOKEN")
 	channel := os.Getenv("SLACK_CHANNEL")
 	if token == "" || channel == "" {
@@ -206,11 +217,16 @@ func SlackPostToOrderThread(orderID uint, text string) error {
 		return fmt.Errorf("order has no slack thread")
 	}
 
-	if _, ok := postSlackMessage(token, map[string]any{
+	payload := map[string]any{
 		"channel":   channel,
 		"thread_ts": *order.SlackThreadTS,
 		"text":      text,
-	}); !ok {
+	}
+	if broadcast {
+		payload["reply_broadcast"] = true
+	}
+
+	if _, ok := postSlackMessage(token, payload); !ok {
 		slog.Warn("failed to post slack thread reply", "order_id", orderID)
 		return fmt.Errorf("failed to post slack thread reply")
 	}

@@ -114,7 +114,7 @@ func (h *OrderHandler) CreateRefundRequest(w http.ResponseWriter, r *http.Reques
 		text += "\n\n" + quoted
 	}
 
-	if err := notify.SlackPostToOrderThread(order.ID, text); err != nil {
+	if err := notify.SlackPostToOrderThreadBroadcast(order.ID, text); err != nil {
 		utils.RespondError(w, http.StatusBadGateway, "SLACK_ERROR", "failed to send refund request", nil)
 		return
 	}
