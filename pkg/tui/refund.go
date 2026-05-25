@@ -27,6 +27,15 @@ const (
 	refundTextareaHPad = 4
 )
 
+// Nerd-font glyphs used in the refund composer. Requires a Nerd Font in the
+// SSH client terminal; renders as tofu otherwise.
+const (
+	refundIconUndo    = "\uf0e2" // nf-fa-undo
+	refundIconTag     = "\uf02b" // nf-oct-tag
+	refundIconComment = "\uf41f" // nf-oct-comment
+	refundIconKey     = "\uf11c" // nf-fa-keyboard_o
+)
+
 // refundFocus identifies which field in the refund composer has keyboard focus.
 type refundFocus int
 
@@ -161,7 +170,7 @@ func (m Model) buildRefundForm(state *refundState) *huh.Form {
 func (m Model) newRefundTextarea() textarea.Model {
 	ta := textarea.New()
 	ta.Prompt = ""
-	ta.Placeholder = "Describe the issue (optional)..."
+	ta.Placeholder = "Describe the issue"
 	ta.ShowLineNumbers = true
 	ta.CharLimit = 65536
 	ta.DynamicHeight = false
@@ -169,12 +178,15 @@ func (m Model) newRefundTextarea() textarea.Model {
 	ta.SetWidth(m.refundTextareaWidth())
 
 	base := lipgloss.NewStyle()
+	// Cursor-line uses a darker grey than theme.Border() so the active line
+	// reads as a subtle wash, not a bright bar competing with the highlight.
+	cursorLineBG := lipgloss.Color("236")
 	ta.SetStyles(textarea.Styles{
 		Focused: textarea.StyleState{
 			Base:             base,
 			Text:             base.Foreground(m.theme.Accent()),
 			LineNumber:       base.Foreground(m.theme.Dim()),
-			CursorLine:       base.Background(m.theme.Border()).Foreground(m.theme.Accent()),
+			CursorLine:       base.Background(cursorLineBG).Foreground(m.theme.Accent()),
 			CursorLineNumber: base.Foreground(m.theme.Body()),
 			Placeholder:      base.Foreground(m.theme.Dim()),
 			EndOfBuffer:      base.Foreground(m.theme.Dim()),
@@ -248,14 +260,19 @@ func (m Model) createRefundRequestCmd(orderID uint, gen uint64, reason string, m
 }
 
 // RenderRefundOverlay renders the refund composer as a centered modal.
+// The modal has no border or background fill — only padding for breathing
+// room. lipgloss.Place handles centering against the container.
 func (m Model) RenderRefundOverlay() string {
 	state := &m.refund
 	contentWidth := m.refundContentWidth()
 
+	titleText := fmt.Sprintf("%s  Refund request — Order #%d", refundIconUndo, state.orderID)
 	title := m.theme.TextAccent().
 		Bold(true).
 		Width(contentWidth).
-		Render(fmt.Sprintf("Refund request - Order #%d", state.orderID))
+		Border(lipgloss.NormalBorder(), false, false, true, false).
+		BorderForeground(m.theme.Highlight()).
+		Render(titleText)
 
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -269,9 +286,6 @@ func (m Model) RenderRefundOverlay() string {
 	)
 
 	modal := lipgloss.NewStyle().
-		Width(contentWidth).
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(m.theme.Border()).
 		Padding(1, 2).
 		Render(body)
 
@@ -292,7 +306,7 @@ func (m Model) renderRefundReason(state *refundState) string {
 		value = "Select a reason"
 	}
 
-	label := m.theme.TextLabel().Render("Reason")
+	label := m.theme.TextLabel().Render(refundIconTag + "  Reason")
 	selected := m.theme.TextAccent().
 		Border(lipgloss.HiddenBorder()).
 		PaddingLeft(1).
@@ -308,7 +322,7 @@ func (m Model) renderRefundReason(state *refundState) string {
 
 func (m Model) renderRefundTextarea(state *refundState) string {
 	label := "Message (optional)"
-	placeholder := "Describe the issue (optional)..."
+	placeholder := "Describe the issue"
 	if state.reason == models.RefundRequestReasonOther {
 		label = "Message (required)"
 		placeholder = "Describe the issue..."
@@ -321,7 +335,7 @@ func (m Model) renderRefundTextarea(state *refundState) string {
 	}
 
 	wrapper := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
+		Border(lipgloss.ThickBorder()).
 		BorderForeground(border)
 
 	contentWidth := m.refundContentWidth()
@@ -337,7 +351,7 @@ func (m Model) renderRefundTextarea(state *refundState) string {
 
 	out := lipgloss.JoinVertical(
 		lipgloss.Left,
-		m.theme.TextLabel().Render(label),
+		m.theme.TextLabel().Render(refundIconComment+"  "+label),
 		textareaBox,
 		counter,
 	)
@@ -354,7 +368,14 @@ func (m Model) renderRefundFooter(state *refundState) string {
 	if state.err != "" {
 		return m.theme.TextError().Render(state.err)
 	}
-	return m.theme.TextDim().Render("tab next field | shift+tab prev | ctrl+s submit | esc cancel")
+	key := m.theme.TextHighlight().Bold(true)
+	sep := m.theme.TextDim().Render("  ·  ")
+	dim := m.theme.TextDim()
+	return dim.Render(refundIconKey+"  ") +
+		key.Render("tab") + dim.Render(" next") + sep +
+		key.Render("shift+tab") + dim.Render(" prev") + sep +
+		key.Render("ctrl+s") + dim.Render(" submit") + sep +
+		key.Render("esc") + dim.Render(" cancel")
 }
 
 func (m Model) refundContentWidth() int {
