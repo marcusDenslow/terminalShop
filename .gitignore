@@ -98,6 +98,8 @@ docs/
 # Migration state (if using a migration tool that creates state files)
 migrations/*.state
 
+gh-dash/
+
 
 
 loadtest/run.pid

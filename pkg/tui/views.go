@@ -1,7 +1,8 @@
 package tui
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // ResizeView renders a message when the terminal is too small.
@@ -19,7 +20,13 @@ func (m Model) ResizeView() string {
 	)
 }
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	v := tea.NewView(m.renderString())
+	v.AltScreen = true
+	return v
+}
+
+func (m Model) renderString() string {
 	if m.viewportWidth == 0 {
 		m.updateLayout(120, 30)
 	}

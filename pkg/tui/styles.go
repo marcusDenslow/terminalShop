@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 func (m Model) createBoxInner(content string, selected bool, position lipgloss.Position, paddingH int, paddingV int, totalWidth int) string {

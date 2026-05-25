@@ -6,7 +6,7 @@ import (
 
 	"terminalShop/pkg/models"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 func (m Model) OrdersView(width int) string {

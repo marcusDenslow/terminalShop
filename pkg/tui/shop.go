@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"terminalShop/pkg/models"
 )
@@ -55,10 +55,10 @@ func (m Model) updateShopViewports() Model {
 		m.shop.detailViewport.KeyMap = modifiedKeyMap
 		m.shop.viewportsReady = true
 	} else {
-		m.shop.menuViewport.Width = menuWidth
-		m.shop.menuViewport.Height = availableHeight
-		m.shop.detailViewport.Width = detailWidth
-		m.shop.detailViewport.Height = availableHeight
+		m.shop.menuViewport.SetWidth(menuWidth)
+		m.shop.menuViewport.SetHeight(availableHeight)
+		m.shop.detailViewport.SetWidth(detailWidth)
+		m.shop.detailViewport.SetHeight(availableHeight)
 	}
 	return m
 }
@@ -226,7 +226,7 @@ func (m Model) shopMoveSelected(previous bool) Model {
 
 	if m.shop.viewportsReady {
 		targetY := (m.shop.selected + 2) * 1
-		m.shop.menuViewport.SetYOffset(targetY - m.shop.menuViewport.Height/2)
+		m.shop.menuViewport.SetYOffset(targetY - m.shop.menuViewport.Height()/2)
 		m.shop.detailViewport.GotoTop()
 	}
 	return m

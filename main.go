@@ -11,11 +11,11 @@ import (
 
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/ssh"
-	"github.com/charmbracelet/wish"
-	"github.com/charmbracelet/wish/bubbletea"
-	"github.com/charmbracelet/wish/logging"
+	"charm.land/wish/v2"
+	"charm.land/wish/v2/bubbletea"
+	"charm.land/wish/v2/logging"
 
 	"terminalShop/pkg/auth"
 	"terminalShop/pkg/config"
@@ -36,9 +36,6 @@ var (
 )
 
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
-	renderer := bubbletea.MakeRenderer(s)
-
-	// Extract SSH public key from session
 	pubKey := s.PublicKey()
 
 	var fingerprint, pubKeyStr string
@@ -47,9 +44,8 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 		pubKeyStr = auth.FormatSSHPublicKey(pubKey)
 	}
 
-	// Create TUI model with user context (no registration screen needed!)
-	m := tui.NewModelWithAuth(renderer, fingerprint, pubKeyStr, apiURL, authFingerprintKey, stripePublicKey)
-	return m, []tea.ProgramOption{tea.WithAltScreen()}
+	m := tui.NewModelWithAuth(fingerprint, pubKeyStr, apiURL, authFingerprintKey, stripePublicKey)
+	return m, nil
 }
 
 func main() {

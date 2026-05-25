@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/tui/qrfefe"
@@ -280,12 +280,12 @@ func (m Model) updatePaymentViewport() Model {
 		availH = 1
 	}
 	if !m.payment.viewportReady {
-		m.payment.viewport = viewport.New(m.widthContent, availH)
+		m.payment.viewport = viewport.New(viewport.WithWidth(m.widthContent), viewport.WithHeight(availH))
 		m.payment.viewport.KeyMap = viewport.KeyMap{}
 		m.payment.viewportReady = true
 	} else {
-		m.payment.viewport.Width = m.widthContent
-		m.payment.viewport.Height = availH
+		m.payment.viewport.SetWidth(m.widthContent)
+		m.payment.viewport.SetHeight(availH)
 	}
 	return m
 }
@@ -301,7 +301,7 @@ func (m Model) PaymentPageView() string {
 		// Bypass viewport — it strips the raw ANSI codes qrfefe emits.
 		return lipgloss.Place(
 			m.widthContainer,
-			m.payment.viewport.Height,
+			m.payment.viewport.Height(),
 			lipgloss.Center, lipgloss.Center,
 			m.renderPaymentHttpsView(),
 		)
@@ -310,11 +310,11 @@ func (m Model) PaymentPageView() string {
 		m.payment.viewport.SetContent(content)
 		itemHeight := 3
 		targetY := m.payment.cardCursor * itemHeight
-		if targetY < m.payment.viewport.YOffset {
+		if targetY < m.payment.viewport.YOffset() {
 			m.payment.viewport.SetYOffset(targetY)
 		}
-		if targetY+itemHeight > m.payment.viewport.YOffset+m.payment.viewport.Height {
-			m.payment.viewport.SetYOffset(targetY - m.payment.viewport.Height + itemHeight + 1)
+		if targetY+itemHeight > m.payment.viewport.YOffset()+m.payment.viewport.Height() {
+			m.payment.viewport.SetYOffset(targetY - m.payment.viewport.Height() + itemHeight + 1)
 		}
 		if m.payment.cardCursor == len(m.SavedCards) {
 			m.payment.viewport.GotoBottom()
