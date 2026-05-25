@@ -264,4 +264,44 @@ func markStatusActionBlock(orderID uint) map[string]any {
 	}
 }
 
-var _ = time.Second
+func SlackUnshippedReminder(orders []models.Order) {
+	token := os.Getenv("SLACK_BOT_TOKEN")
+	channel := os.Getenv("SLACK_CHANNEL")
+	if token == "" || channel == "" || len(orders) == 0 {
+		return
+	}
+
+	workspace := os.Getenv("SLACK_WORKSPACE_SUBDOMAIN")
+
+	lines := []string{fmt.Sprintf(":hourglass_flowing_sand: %d order(s) awaiting label", len(orders))}
+	for _, order := range orders {
+		lines = append(lines, " "+unshippedOrderLine(order, channel, workspace))
+	}
+
+	_, _ = postSlackMessage(token, map[string]any{
+		"channel": channel,
+		"text":    strings.Join(lines, "\n"),
+	})
+}
+
+func unshippedOrderLine(order models.Order, channel, workspace string) string {
+	age := time.Since(order.CreatedAt).Round(time.Hour)
+	location := order.ShippingCountry
+	if order.ShippingCity != "" {
+		location = order.ShippingCity + ", " + order.ShippingCountry
+	}
+
+	label := fmt.Sprintf("Order #%d", order.ID)
+	if order.SlackThreadTS != nil && *order.SlackThreadTS != "" && workspace != "" {
+		ts := strings.ReplaceAll(*order.SlackThreadTS, ".", "")
+		permalink := fmt.Sprintf("https://%s.slack.com/archives/%s/p%s", workspace, channel, ts)
+		label = fmt.Sprintf("<%s|Order #%d>", permalink, order.ID)
+	}
+
+	tag := ""
+	if order.ShippingCountry == "NO" {
+		tag = " _(NO * Bring blocked)_"
+	}
+
+	return fmt.Sprintf("%s * %s old * %s * %s%s", label, age, dollars(order.Total), location, tag)
+}

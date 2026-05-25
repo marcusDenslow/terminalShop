@@ -7,6 +7,7 @@ import (
 
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
+	"terminalShop/pkg/notify"
 
 	"github.com/stripe/stripe-go/v78"
 	"github.com/stripe/stripe-go/v78/paymentintent"
@@ -74,4 +75,27 @@ func ReconcileOrders(stripeKey string) {
 			reconcileLog().Error("stripe search error", "order_id", order.ID, "error", err)
 		}
 	}
+}
+
+// ReconcileUnshipped finds paid order orlder than 24h with no tracking
+// number and posts single Slack reminder. Pure read + notif
+func ReconcileUnshipped() {
+	db := database.GetDB()
+
+	var orders []models.Order
+	cutoff := time.Now().Add(-24 * time.Hour)
+	err := db.Where(
+		"status = ? AND (tracking_number = '' OR tracking_number IS NULL) AND created_at < ?",
+		models.OrderStatusPaid, cutoff,
+	).Order("created_at ASC").Find(&orders).Error
+	if err != nil {
+		reconcileLog().Error("unshipped query failed", "error", err)
+		return
+	}
+	if len(orders) == 0 {
+		return
+	}
+
+	reconcileLog().Info("unshipped orders found", "count", len(orders))
+	notify.SlackUnshippedReminder(orders)
 }
