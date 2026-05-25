@@ -6,10 +6,10 @@ import (
 
 	"terminalShop/pkg/models"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // countries defines the available countries with their dial codes.
@@ -262,12 +262,12 @@ func (m Model) updateShippingViewport() Model {
 		availH = 1
 	}
 	if !m.shipping.viewportReady {
-		m.shipping.viewport = viewport.New(m.widthContent, availH)
+		m.shipping.viewport = viewport.New(viewport.WithWidth(m.widthContent), viewport.WithHeight(availH))
 		m.shipping.viewport.KeyMap = viewport.KeyMap{}
 		m.shipping.viewportReady = true
 	} else {
-		m.shipping.viewport.Width = m.widthContent
-		m.shipping.viewport.Height = availH
+		m.shipping.viewport.SetWidth(m.widthContent)
+		m.shipping.viewport.SetHeight(availH)
 	}
 	return m
 }
@@ -281,11 +281,11 @@ func (m Model) ShippingPageView() string {
 		m.shipping.viewport.SetContent(content)
 		itemHeight := 4
 		targetY := m.shipping.addressCursor * itemHeight
-		if targetY < m.shipping.viewport.YOffset {
+		if targetY < m.shipping.viewport.YOffset() {
 			m.shipping.viewport.SetYOffset(targetY)
 		}
-		if targetY+itemHeight > m.shipping.viewport.YOffset+m.shipping.viewport.Height {
-			m.shipping.viewport.SetYOffset(targetY - m.shipping.viewport.Height + itemHeight + 1)
+		if targetY+itemHeight > m.shipping.viewport.YOffset()+m.shipping.viewport.Height() {
+			m.shipping.viewport.SetYOffset(targetY - m.shipping.viewport.Height() + itemHeight + 1)
 		}
 		if m.shipping.addressCursor == len(m.SavedAddresses) {
 			m.shipping.viewport.GotoBottom()

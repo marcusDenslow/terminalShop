@@ -1,9 +1,9 @@
 package tui
 
 import (
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"terminalShop/pkg/models"
 )
@@ -33,12 +33,12 @@ func (m Model) updateAccountViewport() Model {
 	}
 
 	if !m.account.viewportReady {
-		m.account.detailViewport = viewport.New(detailWidth, availableHeight)
+		m.account.detailViewport = viewport.New(viewport.WithWidth(detailWidth), viewport.WithHeight(availableHeight))
 		m.account.detailViewport.KeyMap = modifiedKeyMap
 		m.account.viewportReady = true
 	} else {
-		m.account.detailViewport.Width = detailWidth
-		m.account.detailViewport.Height = availableHeight
+		m.account.detailViewport.SetWidth(detailWidth)
+		m.account.detailViewport.SetHeight(availableHeight)
 	}
 
 	return m
@@ -128,8 +128,8 @@ func (m Model) scrollToAccountDetailItem() Model {
 	}
 
 	targetY := headerOffset + (selectedIndex * itemHeight)
-	vpH := m.account.detailViewport.Height
-	offset := m.account.detailViewport.YOffset
+	vpH := m.account.detailViewport.Height()
+	offset := m.account.detailViewport.YOffset()
 
 	// 1-item buffer: scroll when the NEXT item would be off-screen,
 	// not when the current item hits the very edge
@@ -336,7 +336,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 						{key: "q", value: "quit"},
 					}
 				case 1:
-					m.account.orderYOffset = m.account.detailViewport.YOffset
+					m.account.orderYOffset = m.account.detailViewport.YOffset()
 					m.account.orderViewState = 2
 					m.account.detailViewport.GotoTop()
 					m.footer = []footerCommand{

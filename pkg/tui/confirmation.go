@@ -5,9 +5,9 @@ import (
 	"strings"
 	"terminalShop/pkg/models"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // RenderConfirmation renders the order confirmation view
@@ -73,12 +73,12 @@ func (m Model) updateConfirmViewport() Model {
 		availH = 1
 	}
 	if !m.confirm.viewportReady {
-		m.confirm.viewport = viewport.New(m.widthContent, availH)
+		m.confirm.viewport = viewport.New(viewport.WithWidth(m.widthContent), viewport.WithHeight(availH))
 		m.confirm.viewport.KeyMap = viewport.DefaultKeyMap()
 		m.confirm.viewportReady = true
 	} else {
-		m.confirm.viewport.Width = m.widthContent
-		m.confirm.viewport.Height = availH
+		m.confirm.viewport.SetWidth(m.widthContent)
+		m.confirm.viewport.SetHeight(availH)
 	}
 	return m
 }

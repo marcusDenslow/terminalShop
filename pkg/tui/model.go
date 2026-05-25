@@ -7,10 +7,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stripe/stripe-go/v78"
 	stripetoken "github.com/stripe/stripe-go/v78/token"
 
@@ -114,8 +113,7 @@ type Model struct {
 	APIClient *api.Client
 
 	// Rendering
-	renderer *lipgloss.Renderer
-	theme    theme.Theme
+	theme theme.Theme
 
 	// Checkout flow state (spans multiple pages)
 	CheckingOut      bool
@@ -240,7 +238,6 @@ func (m Model) CartSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(cartPage)
 	m = m.updateCartViewport()
 	if m.IsCartEmpty() {
-
 		m.footer = []footerCommand{
 			{key: "j/k", value: "items"},
 			{key: "+/-", value: "qty"},
@@ -755,18 +752,12 @@ func (m Model) SavedCardsIsEmpty() bool {
 	return len(m.SavedCards) == 0
 }
 
-// NewModel creates a new model using the default renderer.
+// NewModel creates a new model.
 func NewModel(username string) Model {
-	return newModelWithRenderer(username, lipgloss.DefaultRenderer())
-}
-
-// newModelWithRenderer creates a new model with the given renderer.
-func newModelWithRenderer(username string, renderer *lipgloss.Renderer) Model {
 	m := Model{
 		Username:    username,
 		currentPage: splashPage,
-		renderer:    renderer,
-		theme:       theme.BasicTheme(renderer),
+		theme:       theme.BasicTheme(),
 		Coffees: []models.Coffee{
 			{
 				Name:        "Espresso",
@@ -833,8 +824,8 @@ func newModelWithRenderer(username string, renderer *lipgloss.Renderer) Model {
 }
 
 // NewModelWithAuth creates a new model with user authentication context.
-func NewModelWithAuth(renderer *lipgloss.Renderer, fingerprint string, pubKeyStr string, apiURL string, clientSecret string, stripePublicKey string) Model {
-	m := newModelWithRenderer("", renderer)
+func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clientSecret string, stripePublicKey string) Model {
+	m := NewModel("")
 	m.Fingerprint = fingerprint
 	m.AuthFingerprintKey = clientSecret
 	m.StripePublicKey = stripePublicKey
@@ -860,7 +851,7 @@ func NewModelWithAuth(renderer *lipgloss.Renderer, fingerprint string, pubKeyStr
 }
 
 func newViewport(w, h int) viewport.Model {
-	return viewport.New(w, h)
+	return viewport.New(viewport.WithWidth(w), viewport.WithHeight(h))
 }
 
 func (m Model) collectCardCmd() tea.Cmd {
@@ -876,8 +867,10 @@ func (m Model) collectCardCmd() tea.Cmd {
 	}
 }
 
-const ordersPollInterval = 10 * time.Second
-const cardPollTimeout = 10 * time.Minute
+const (
+	ordersPollInterval = 10 * time.Second
+	cardPollTimeout    = 10 * time.Minute
+)
 
 type OrdersPollTickMsg struct{}
 

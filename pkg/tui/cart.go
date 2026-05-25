@@ -3,9 +3,9 @@ package tui
 import (
 	"fmt"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func (m Model) updateCartViewport() Model {
@@ -17,12 +17,12 @@ func (m Model) updateCartViewport() Model {
 		availH = 1
 	}
 	if !m.cart.viewportReady {
-		m.cart.viewport = viewport.New(m.widthContent, availH)
+		m.cart.viewport = viewport.New(viewport.WithWidth(m.widthContent), viewport.WithHeight(availH))
 		m.cart.viewport.KeyMap = viewport.KeyMap{}
 		m.cart.viewportReady = true
 	} else {
-		m.cart.viewport.Width = m.widthContent
-		m.cart.viewport.Height = availH
+		m.cart.viewport.SetWidth(m.widthContent)
+		m.cart.viewport.SetHeight(availH)
 	}
 	return m
 }
@@ -116,11 +116,11 @@ func (m Model) CartView() string {
 		}
 		itemHeight := 4 + 2*boxPadding + 1
 		targetY := m.cart.cursor * itemHeight
-		if targetY < m.cart.viewport.YOffset {
+		if targetY < m.cart.viewport.YOffset() {
 			m.cart.viewport.SetYOffset(targetY)
 		}
-		if targetY+itemHeight > m.cart.viewport.YOffset+m.cart.viewport.Height {
-			m.cart.viewport.SetYOffset(targetY - m.cart.viewport.Height + itemHeight)
+		if targetY+itemHeight > m.cart.viewport.YOffset()+m.cart.viewport.Height() {
+			m.cart.viewport.SetYOffset(targetY - m.cart.viewport.Height() + itemHeight)
 		}
 	}
 	return lipgloss.Place(

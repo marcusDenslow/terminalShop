@@ -3,8 +3,8 @@ package tui
 import (
 	"fmt"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 )
 
 func (m Model) BuildHeader() string {
@@ -44,7 +44,7 @@ func (m Model) BuildHeader() string {
 		tabs = []string{logo, shop, account, cart}
 	}
 
-	tbl := table.New().Border(lipgloss.NormalBorder()).BorderStyle(m.renderer.NewStyle().Foreground(m.theme.Border())).Row(tabs...).Width(m.widthContent).StyleFunc(func(row, col int) lipgloss.Style {
+	tbl := table.New().Border(lipgloss.NormalBorder()).BorderStyle(lipgloss.NewStyle().Foreground(m.theme.Border())).Row(tabs...).Width(m.widthContent).StyleFunc(func(row, col int) lipgloss.Style {
 		return m.theme.Base().Padding(0, 1).AlignHorizontal(lipgloss.Center)
 	}).Render()
 
