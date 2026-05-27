@@ -395,6 +395,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		Currency:      stripe.String(string(stripe.CurrencyUSD)),
 		Customer:      stripe.String(user.StripeCustomerID),
 		PaymentMethod: stripe.String(paymentMethodID),
+		OffSession:    stripe.Bool(true),
 		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
 			Enabled:        stripe.Bool(true),
 			AllowRedirects: stripe.String("never"),
