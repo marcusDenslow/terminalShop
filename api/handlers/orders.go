@@ -145,6 +145,29 @@ func (h *OrderHandler) GetOrders(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *OrderHandler) GetOrderStatus(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB().WithContext(r.Context())
+	userID := middleware.UserIDFromContext(r.Context())
+
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_ID", "invalid order id", nil)
+		return
+	}
+
+	var order models.Order
+	if err := db.Where("id = ? AND user_id = ?", id, userID).First(&order).Error; err != nil {
+		utils.RespondError(w, http.StatusNotFound, "ORDER_NOT_FOUND", "order not found", nil)
+		return
+	}
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
+		"id":     order.ID,
+		"status": string(order.Status),
+	})
+}
+
 // RefundOrder issues a full refund for an order via Stripe and marks it as
 // refunded. Only orders in paid or shipped status can be refunded.
 func (h *OrderHandler) RefundOrder(w http.ResponseWriter, r *http.Request) {
