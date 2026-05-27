@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+
 	"terminalShop/pkg/models"
 
 	"gorm.io/gorm"
@@ -21,6 +22,7 @@ const (
 	eventOrderPaid              eventType = "order_paid"
 	eventOrderShipped           eventType = "order_shipped"
 	eventOrderFailed            eventType = "order_failed"
+	eventOrderRequiresAction    eventType = "order_requires_action"
 	eventOrderRefunded          eventType = "order_refunded"
 	eventPaymentCritical        eventType = "payment_critical"
 	eventLabelPurchased         eventType = "label_purchased"
@@ -297,4 +299,15 @@ func attrsToMap(a []any) map[string]any {
 		m[k] = a[i+1]
 	}
 	return m
+}
+
+func OrderRequiresAction(userID, orderID uint, paymentIntentID string) {
+	e := event{
+		Event:    eventOrderRequiresAction,
+		UserID:   userID,
+		OrderID:  orderID,
+		StripeID: paymentIntentID,
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventOrderRequiresAction, e)
 }

@@ -56,7 +56,6 @@ type TokenResponse struct {
 }
 
 func (c *Client) GetOrCreateToken(fingerprint, pubKeyStr, clientSecret string) (string, models.PublicUser, error) {
-
 	url := fmt.Sprintf("%s/api/v1/auth/token", c.BaseURL)
 
 	reqBody := TokenRequest{
@@ -495,6 +494,40 @@ func (c *Client) ConvertCart() (*models.Order, error) {
 	}
 
 	return &convertResp.Data.Order, nil
+}
+
+type OrderStatusResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		ID     uint   `json:"id"`
+		Status string `json:"status"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+func (c *Client) GetOrderStatus(id uint) (string, error) {
+	url := fmt.Sprintf("%s/api/v1/orders/%d/status", c.BaseURL, id)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch order status: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var sResp OrderStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sResp); err != nil {
+		return "", fmt.Errorf("failed to decode order status response: %w", err)
+	}
+	if !sResp.Success {
+		if sResp.Error != nil {
+			return "", fmt.Errorf("%s: %s", sResp.Error.Code, sResp.Error.Message)
+		}
+		return "", fmt.Errorf("failed to fetch order status")
+	}
+	return sResp.Data.Status, nil
 }
 
 // GetCards fetches all saved cards for the user.

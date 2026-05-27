@@ -126,6 +126,7 @@ func SetupRoutes(
 
 			// Orders
 			r.Get("/orders", orderHandler.GetOrders)
+			r.Get("/orders/{id}/status", orderHandler.GetOrderStatus)
 			r.Post("/orders/{id}/refund-request", orderHandler.CreateRefundRequest)
 			r.Post("/orders/{id}/refund", orderHandler.RefundOrder)
 

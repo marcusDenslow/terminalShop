@@ -430,7 +430,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 			case stripe.ErrorTypeCard:
 				middleware.RecordCartConversion("card_declined")
 				audit.OrderFailed(userID, order.ID, total, stripeErr.Msg)
-				utils.RespondError(w, http.StatusPaymentRequired, "CARD_DECLINED", stripeErr.Msg, nil)
+				utils.RespondError(w, http.StatusPaymentRequired, mapStripeCardErrCode(stripeErr.Code), stripeErr.Msg, nil)
 			case stripe.ErrorTypeInvalidRequest:
 				middleware.RecordCartConversion("stripe_invalid_request")
 				audit.OrderFailed(userID, order.ID, total, stripeErr.Msg)
@@ -489,4 +489,36 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"order": order,
 	})
+}
+
+func mapStripeCardErrCode(code stripe.ErrorCode) string {
+	switch code {
+	case stripe.ErrorCodeAuthenticationRequired:
+		return "AUTHENTICATION_REQUIRED"
+	case "authentication_not_supported":
+		return "AUTHENTICATION_NOT_SUPPORTED"
+	case "card_declined", "":
+		return "CARD_DECLINED"
+	case "expired_card":
+		return "CARD_EXPIRED"
+	case "incorrect_cvc":
+		return "CARD_CVC_FAILED"
+	case "insufficient_funds":
+		return "CARD_INSUFFICIENT_FUNDS"
+	case "processing_error":
+		return "CARD_PROCESSING_ERROR"
+	}
+	return "CARD_DECLINED"
+}
+
+func appURLForHandler(r *http.Request) string {
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := r.Host
+	if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
+		host = fh
+	}
+	return fmt.Sprintf("%s://%s", scheme, host)
 }
