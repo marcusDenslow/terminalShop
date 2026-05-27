@@ -301,6 +301,7 @@ func attrsToMap(a []any) map[string]any {
 	return m
 }
 
+//nolint:unused // called from ConvertCart in the next update
 func OrderRequiresAction(userID, orderID uint, paymentIntentID string) {
 	e := event{
 		Event:    eventOrderRequiresAction,

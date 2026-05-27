@@ -511,6 +511,7 @@ func mapStripeCardErrCode(code stripe.ErrorCode) string {
 	return "CARD_DECLINED"
 }
 
+//nolint:unused // wired into Convert cart later
 func appURLForHandler(r *http.Request) string {
 	scheme := "http"
 	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
