@@ -5,6 +5,9 @@
 .env.example
 .env.prod
 
+docs/sca-psd2-compliance.md
+accept-a-payment/
+
 
 FULFILLMENT.md
 .tmp-gocache/
