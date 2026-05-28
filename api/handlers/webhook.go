@@ -167,6 +167,16 @@ func (h *WebhookHandler) handlePaymentIntentFailed(ctx context.Context, event st
 		return
 	}
 
+	// authentication_required is recoverable — the cart handler re-confirms the
+	// PI on-session and the customer completes 3DS via redirect. Marking the
+	// order failed here would race with the recovery path and surface a
+	// momentarily-broken state in the TUI.
+	if pi.LastPaymentError != nil && string(pi.LastPaymentError.Code) == "authentication_required" {
+		webhookLog().Info("ignoring authentication_required payment_failed; handled via 3ds redirect",
+			"order_id", orderIDStr, "pi", pi.ID)
+		return
+	}
+
 	db := database.GetDB().WithContext(ctx)
 	if err := db.Model(&models.Order{}).Where("id = ? AND status = ?", orderIDStr, models.OrderStatusPending).
 		Update("status", models.OrderStatusFailed).Error; err != nil {

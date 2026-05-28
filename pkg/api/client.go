@@ -280,12 +280,29 @@ type CardResponse struct {
 }
 
 // ConvertCartResponse represents the cart conversion (checkout) API response.
+// 200 carries Order populated; 202 (requires_action / 3DS) carries the
+// redirect fields and OrderID instead.
 type ConvertCartResponse struct {
 	Success bool `json:"success"`
 	Data    struct {
-		Order models.Order `json:"order"`
+		Order           *models.Order `json:"order,omitempty"`
+		OrderID         uint          `json:"order_id,omitempty"`
+		PaymentIntentID string        `json:"payment_intent_id,omitempty"`
+		Status          string        `json:"status,omitempty"`
+		RedirectToken   string        `json:"redirect_token,omitempty"`
+		RedirectURL     string        `json:"redirect_url,omitempty"`
 	} `json:"data"`
 	Error *APIError `json:"error,omitempty"`
+}
+
+// CheckoutOutcome is the unified result of ConvertCart. RequiresAction=true
+// means the customer needs to complete 3DS at RedirectURL; poll
+// GetOrderStatus(OrderID) until the webhook flips the order to paid or failed.
+type CheckoutOutcome struct {
+	Order          *models.Order
+	OrderID        uint
+	RequiresAction bool
+	RedirectURL    string
 }
 
 // GetCart fetches the user's current cart.
@@ -467,7 +484,9 @@ func (c *Client) ClearCart() error {
 }
 
 // ConvertCart converts the cart into an order, charging the saved card.
-func (c *Client) ConvertCart() (*models.Order, error) {
+// Returns a CheckoutOutcome that either carries the completed Order or
+// indicates the customer must complete 3DS authentication via RedirectURL.
+func (c *Client) ConvertCart() (*CheckoutOutcome, error) {
 	url := fmt.Sprintf("%s/api/v1/cart/convert", c.BaseURL)
 
 	req, err := http.NewRequest("POST", url, nil)
@@ -493,7 +512,21 @@ func (c *Client) ConvertCart() (*models.Order, error) {
 		return nil, fmt.Errorf("failed to convert cart")
 	}
 
-	return &convertResp.Data.Order, nil
+	if convertResp.Data.Status == "requires_action" {
+		return &CheckoutOutcome{
+			OrderID:        convertResp.Data.OrderID,
+			RequiresAction: true,
+			RedirectURL:    convertResp.Data.RedirectURL,
+		}, nil
+	}
+
+	if convertResp.Data.Order == nil {
+		return nil, fmt.Errorf("malformed convert response: missing order")
+	}
+	return &CheckoutOutcome{
+		Order:   convertResp.Data.Order,
+		OrderID: convertResp.Data.Order.ID,
+	}, nil
 }
 
 type OrderStatusResponse struct {
