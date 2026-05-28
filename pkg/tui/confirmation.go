@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+
 	"terminalShop/pkg/models"
 
 	"charm.land/bubbles/v2/viewport"
@@ -192,7 +193,7 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.CheckingOut = false
 		if msg.Err != nil {
 			m = m.SwitchPage(paymentPage)
-			m.error = &VisibleError{message: fmt.Sprintf("checkout failed: %v", msg.Err)}
+			m.error = &VisibleError{message: friendlyCheckoutError(msg.Err)}
 			m.review.cardJustAdded = false
 			m.payment.view = 0
 			m.payment.form = nil
@@ -233,4 +234,25 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func friendlyCheckoutError(raw error) string {
+	s := raw.Error()
+	switch {
+	case strings.Contains(s, "AUTHENTICATION_REQUIRED"):
+		return "your bank wants to verify this charge, authentication step coming soon."
+	case strings.Contains(s, "AUTHENTICATION_NOT_SUPPORTED"):
+		return "this card doesn't support online authentication. Try another card"
+	case strings.Contains(s, "CARD_EXPIRED"):
+		return "card expired. Add a new card and try again"
+	case strings.Contains(s, "CARD_CVC_FAILED"):
+		return "card cvc incorrect. Check the back of the card and try again"
+	case strings.Contains(s, "CARD_INSUFFICIENT_FUNDS"):
+		return "insufficient funds on this card"
+	case strings.Contains(s, "CARD_PROCESSING_ERROR"):
+		return "card processing error. Try again in a moment"
+	case strings.Contains(s, "CARD_DECLINED"):
+		return "card declined"
+	}
+	return "checkout failed, try again."
 }

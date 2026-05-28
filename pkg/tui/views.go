@@ -82,6 +82,10 @@ func (m Model) renderString() string {
 		content = loadingStyle.Render("Loading products from API...")
 	} else if m.error != nil {
 		errorStyle := m.theme.PanelError().Padding(0, 1).MarginBottom(1)
+		// soft-wrap long messages instead of clipping.
+		if m.widthContent > 4 {
+			errorStyle = errorStyle.Width(m.widthContent - 4)
+		}
 		errorBanner := errorStyle.Render(m.error.message)
 		content = errorBanner + "\n" + m.buildPageContent(availableContentHeight)
 	} else if m.notice != nil {
