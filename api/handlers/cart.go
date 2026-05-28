@@ -506,13 +506,18 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models.Order, pi *stripe.PaymentIntent) {
 	db := database.GetDB()
 
-	// PaymentIntents returned inside a *stripe.Error are partial — next_action
-	// is often nil. Re-fetch from Stripe to get the canonical PI with the 3DS
-	// challenge URL populated.
+	// After an off-session authentication_required decline, the PI sits in
+	// status=requires_payment_method, not requires_action — there is no
+	// next_action to read. Re-confirm on-session so Stripe pushes the PI into
+	// requires_action and populates next_action.redirect_to_url with the 3DS
+	// challenge URL.
 	if pi.NextAction == nil || pi.NextAction.RedirectToURL == nil || pi.NextAction.RedirectToURL.URL == "" {
-		fresh, ferr := paymentintent.Get(pi.ID, nil)
-		if ferr == nil && fresh != nil {
-			pi = fresh
+		confirmed, cerr := paymentintent.Confirm(pi.ID, &stripe.PaymentIntentConfirmParams{
+			OffSession: stripe.Bool(false),
+			ReturnURL:  stripe.String(h.appURL + "/post-3ds"),
+		})
+		if cerr == nil && confirmed != nil {
+			pi = confirmed
 		}
 	}
 
