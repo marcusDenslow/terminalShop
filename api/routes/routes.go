@@ -61,6 +61,10 @@ func SetupRoutes(
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte(`<!DOCTYPE html><html><body style="font-family:monospace;text-align:center;padding:4rem"><h2>Card added.</h2><p>You can close this tab.</p></body></html>`))
 	})
+	r.Get("/post-3ds", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!DOCTYPE html><html><body style="font-family:monospace;text-align:center;padding:4rem"><h2>Authentication complete.</h2><p>Return to your terminal.</p></body></html>`))
+	})
 	r.Handle("/metrics", middleware.MetricsHandler())
 
 	r.Route("/api/v1", func(r chi.Router) {
