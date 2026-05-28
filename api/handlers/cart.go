@@ -425,7 +425,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		middleware.ObserveStripeRequest("payment_intent_create", "error", stripeDur)
 		if stripeErr, ok := err.(*stripe.Error); ok {
 			if stripeErr.Code == stripe.ErrorCodeAuthenticationRequired && stripeErr.PaymentIntent != nil {
-				h.respondRequiresAction(w, &order, stripeErr.PaymentIntent)
+				h.respondRequiresAction(w, &order, paymentMethodID, stripeErr.PaymentIntent)
 				return
 			}
 			db.Model(&order).Update("status", models.OrderStatusFailed)
@@ -454,7 +454,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	middleware.ObserveStripeRequest("payment_intent_create", "success", stripeDur)
 
 	if pi.Status == stripe.PaymentIntentStatusRequiresAction {
-		h.respondRequiresAction(w, &order, pi)
+		h.respondRequiresAction(w, &order, paymentMethodID, pi)
 		return
 	}
 
@@ -503,18 +503,18 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 // respondRequiresAction handles a PaymentIntent that needs 3DS auth
 // The order stays pending. the webhook flips it to paid once the customer
 // completes the bank-hosted challenge, the tui polls /api/v1/orders/{id}/status
-func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models.Order, pi *stripe.PaymentIntent) {
+func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models.Order, paymentMethodID string, pi *stripe.PaymentIntent) {
 	db := database.GetDB()
 
 	// After an off-session authentication_required decline, the PI sits in
-	// status=requires_payment_method, not requires_action — there is no
-	// next_action to read. Re-confirm on-session so Stripe pushes the PI into
-	// requires_action and populates next_action.redirect_to_url with the 3DS
-	// challenge URL.
+	// status=requires_payment_method with payment_method detached. Re-confirm
+	// on-session with the same PM so Stripe pushes the PI into requires_action
+	// and populates next_action.redirect_to_url with the 3DS challenge URL.
 	if pi.NextAction == nil || pi.NextAction.RedirectToURL == nil || pi.NextAction.RedirectToURL.URL == "" {
 		confirmed, cerr := paymentintent.Confirm(pi.ID, &stripe.PaymentIntentConfirmParams{
-			OffSession: stripe.Bool(false),
-			ReturnURL:  stripe.String(h.appURL + "/post-3ds"),
+			PaymentMethod: stripe.String(paymentMethodID),
+			OffSession:    stripe.Bool(false),
+			ReturnURL:     stripe.String(h.appURL + "/post-3ds"),
 		})
 		if cerr == nil && confirmed != nil {
 			pi = confirmed
