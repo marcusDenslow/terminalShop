@@ -46,7 +46,7 @@ func SetupRoutes(
 	healthHandler := handlers.NewHealthHandler(version)
 	productHandler := handlers.NewProductHandler()
 	authHandler := handlers.NewAuthHandler(jwtManager, authFingerprintKey)
-	cartHandler := handlers.NewCartHandler(stripeSecretKey)
+	cartHandler := handlers.NewCartHandler(stripeSecretKey, appURL)
 	cardHandler := handlers.NewCardHandler(stripeSecretKey, appURL)
 	orderHandler := handlers.NewOrderHandler(stripeSecretKey, bringAPIUID, bringAPIKey, bringCustomerNumber)
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)

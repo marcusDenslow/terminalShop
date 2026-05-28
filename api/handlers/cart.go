@@ -24,11 +24,12 @@ import (
 
 type CartHandler struct {
 	stripeKey string
+	appURL    string
 }
 
 // NewCartHandler creates a new cart handler with the Stripe secret key
-func NewCartHandler(stripeSecretKey string) *CartHandler {
-	return &CartHandler{stripeKey: stripeSecretKey}
+func NewCartHandler(stripeSecretKey, appURL string) *CartHandler {
+	return &CartHandler{stripeKey: stripeSecretKey, appURL: appURL}
 }
 
 // getOrCreateCart finds the users cart or creates one.
@@ -424,8 +425,12 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	stripeDur := time.Since(stripeStart).Seconds()
 	if err != nil {
 		middleware.ObserveStripeRequest("payment_intent_create", "error", stripeDur)
-		db.Model(&order).Update("status", models.OrderStatusFailed)
 		if stripeErr, ok := err.(*stripe.Error); ok {
+			if stripeErr.Code == stripe.ErrorCodeAuthenticationRequired && stripeErr.PaymentIntent != nil {
+				h.respondRequiresAction(w, &order, stripeErr.PaymentIntent)
+				return
+			}
+			db.Model(&order).Update("status", models.OrderStatusFailed)
 			switch stripeErr.Type {
 			case stripe.ErrorTypeCard:
 				middleware.RecordCartConversion("card_declined")
@@ -442,12 +447,18 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		db.Model(&order).Update("status", models.OrderStatusFailed)
 		middleware.RecordCartConversion("stripe_error")
 		audit.OrderFailed(userID, order.ID, total, err.Error())
 		utils.RespondError(w, http.StatusInternalServerError, "PAYMENT_FAILED", "payment failed", nil)
 		return
 	}
 	middleware.ObserveStripeRequest("payment_intent_create", "success", stripeDur)
+
+	if pi.Status == stripe.PaymentIntentStatusRequiresAction {
+		h.respondRequiresAction(w, &order, pi)
+		return
+	}
 
 	// Commit payment ID and clear cart in a single transaction.
 	txErr := db.Transaction(func(tx *gorm.DB) error {
@@ -488,6 +499,46 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"order": order,
+	})
+}
+
+// respondRequiresAction handles a PaymentIntent that needs 3DS auth
+// The order stays pending. the webhook flips it to paid once the customer
+// completes the bank-hosted challenge, the tui polls /api/v1/orders/{id}/status
+func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models.Order, pi *stripe.PaymentIntent) {
+	db := database.GetDB()
+
+	if pi.NextAction == nil || pi.NextAction.RedirectToURL == nil || pi.NextAction.RedirectToURL.URL == "" {
+		middleware.RecordCartConversion("sca_missing_next_action")
+		db.Model(order).Update("status", models.OrderStatusFailed)
+		audit.OrderFailed(order.UserID, order.ID, order.Total, "stripe returned requires_action without redirect url")
+		utils.RespondError(w, http.StatusBadGateway, "PAYMENT_FAILED", "stripe did not return a 3ds url", nil)
+		return
+	}
+
+	// persist the paymentIntent id before responding so the reconciliation jon
+	// and webhook can match the eventual succeeded/failed event to this order
+	// even if the customer drops off mid-auth
+	if err := db.Model(order).Update("stripe_payment_id", pi.ID).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to save payment id", nil)
+		return
+	}
+
+	token, err := storeRedirect(pi.NextAction.RedirectToURL.URL)
+	if err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to allocate redirect token", nil)
+		return
+	}
+
+	middleware.RecordCartConversion("requires_action")
+	audit.OrderRequiresAction(order.UserID, order.ID, pi.ID)
+
+	utils.RespondSuccess(w, http.StatusAccepted, map[string]any{
+		"order_id":          order.ID,
+		"payment_intent_id": pi.ID,
+		"status":            "requires_action",
+		"redirect_token":    token,
+		"redirect_url":      fmt.Sprintf("%s/pay/%s", h.appURL, token),
 	})
 }
 
