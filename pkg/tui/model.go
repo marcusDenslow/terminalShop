@@ -667,22 +667,8 @@ func (m Model) checkoutWithSavedCard() tea.Cmd {
 	}
 }
 
-// pollOrderStatusCmd queries the order status once and emits OrderStatusMsg.
-// The caller schedules the next tick when the status is still pending.
-func (m Model) pollOrderStatusCmd(orderID uint) tea.Cmd {
-	return func() tea.Msg {
-		if m.APIClient == nil {
-			return OrderStatusMsg{OrderID: orderID, Err: fmt.Errorf("api client unavailable")}
-		}
-		status, err := m.APIClient.GetOrderStatus(orderID)
-		if err != nil {
-			return OrderStatusMsg{OrderID: orderID, Err: err}
-		}
-		return OrderStatusMsg{OrderID: orderID, Status: status}
-	}
-}
-
-// schedulePollOrderStatus sleeps 2s then re-polls. Used when status is still pending.
+// schedulePollOrderStatus sleeps 2s then polls /orders/{id}/status. Used while
+// waiting for the customer to complete 3DS authentication.
 func (m Model) schedulePollOrderStatus(orderID uint) tea.Cmd {
 	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
 		if m.APIClient == nil {
