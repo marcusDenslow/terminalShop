@@ -392,17 +392,15 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	// Charge the card. The idempotency key is tied to the order ID so retries
 	// never produce a double charge.
 	piParams := &stripe.PaymentIntentParams{
-		Amount:        stripe.Int64(int64(total)),
-		Currency:      stripe.String(string(stripe.CurrencyUSD)),
-		Customer:      stripe.String(user.StripeCustomerID),
-		PaymentMethod: stripe.String(paymentMethodID),
-		OffSession:    stripe.Bool(true),
-		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
-			Enabled:        stripe.Bool(true),
-			AllowRedirects: stripe.String("never"),
-		},
-		Confirm:     stripe.Bool(true),
-		Description: stripe.String(fmt.Sprintf("terminal.shop order #%d", order.ID)),
+		Amount:             stripe.Int64(int64(total)),
+		Currency:           stripe.String(string(stripe.CurrencyUSD)),
+		Customer:           stripe.String(user.StripeCustomerID),
+		PaymentMethod:      stripe.String(paymentMethodID),
+		OffSession:         stripe.Bool(true),
+		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
+		ReturnURL:          stripe.String(h.appURL + "/post-3ds"),
+		Confirm:            stripe.Bool(true),
+		Description:        stripe.String(fmt.Sprintf("terminal.shop order #%d", order.ID)),
 		Shipping: &stripe.ShippingDetailsParams{
 			Name: stripe.String(address.Name),
 			Address: &stripe.AddressParams{
