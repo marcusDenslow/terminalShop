@@ -202,6 +202,15 @@ type reviewState struct {
 	cardJustAdded    bool
 	cardWasDuplicate bool
 	success          bool
+
+	// 3DS / SCA flow: when the backend returns 202 requires_action,
+	// requiresAction is true and redirectURL is the Stripe-hosted challenge
+	// page. The TUI shows a QR and polls GetOrderStatus(orderID) until the
+	// order flips to paid or failed.
+	requiresAction bool
+	redirectURL    string
+	orderID        uint
+	authFailed     bool
 }
 
 type confirmState struct {
@@ -418,8 +427,18 @@ func (m Model) Init() tea.Cmd {
 }
 
 type CheckoutResultMsg struct {
+	OrderID        uint
+	Total          int
+	RequiresAction bool
+	RedirectURL    string
+	Err            error
+}
+
+// OrderStatusMsg carries the result of a poll against /orders/{id}/status.
+// Emitted on the 2s tick while waiting for 3DS authentication to complete.
+type OrderStatusMsg struct {
 	OrderID uint
-	Total   int
+	Status  string
 	Err     error
 }
 
@@ -631,13 +650,36 @@ func (m Model) checkoutWithSavedCard() tea.Cmd {
 		}
 
 		// 3. Convert the cart to an order
-		order, err := m.APIClient.ConvertCart()
+		outcome, err := m.APIClient.ConvertCart()
 		if err != nil {
 			return CheckoutResultMsg{Err: err}
 		}
 
-		return CheckoutResultMsg{OrderID: order.ID, Total: order.Total}
+		if outcome.RequiresAction {
+			return CheckoutResultMsg{
+				OrderID:        outcome.OrderID,
+				RequiresAction: true,
+				RedirectURL:    outcome.RedirectURL,
+			}
+		}
+
+		return CheckoutResultMsg{OrderID: outcome.Order.ID, Total: outcome.Order.Total}
 	}
+}
+
+// schedulePollOrderStatus sleeps 2s then polls /orders/{id}/status. Used while
+// waiting for the customer to complete 3DS authentication.
+func (m Model) schedulePollOrderStatus(orderID uint) tea.Cmd {
+	return tea.Tick(2*time.Second, func(time.Time) tea.Msg {
+		if m.APIClient == nil {
+			return OrderStatusMsg{OrderID: orderID, Err: fmt.Errorf("api client unavailable")}
+		}
+		status, err := m.APIClient.GetOrderStatus(orderID)
+		if err != nil {
+			return OrderStatusMsg{OrderID: orderID, Err: err}
+		}
+		return OrderStatusMsg{OrderID: orderID, Status: status}
+	})
 }
 
 func (m Model) syncCartItemCmd(coffeeID uint, quantity int) (Model, tea.Cmd) {

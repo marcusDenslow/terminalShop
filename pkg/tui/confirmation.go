@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"terminalShop/pkg/models"
+	"terminalShop/pkg/tui/qrfefe"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -169,6 +170,18 @@ func (m Model) ReviewView() string {
 	if m.CheckingOut {
 		return m.theme.TextAccent().Bold(true).Padding(1).Render("  submitting order...")
 	}
+	if m.review.authFailed {
+		content := m.theme.TextError().Bold(true).Padding(1).Render("authentication failed — press esc to try again")
+		return lipgloss.Place(
+			m.widthContainer,
+			lipgloss.Height(content),
+			lipgloss.Center, lipgloss.Center,
+			content,
+		)
+	}
+	if m.review.requiresAction {
+		return m.renderRequiresActionView()
+	}
 	if m.review.success {
 		content := m.theme.TextSuccess().Bold(true).Padding(1).Render("order placed successfully!")
 		return lipgloss.Place(
@@ -187,6 +200,34 @@ func (m Model) ReviewView() string {
 	)
 }
 
+// renderRequiresActionView shows a QR for the 3DS challenge URL while the TUI
+// polls the order status. Mirrors the add-card QR layout in payment_form.go.
+func (m Model) renderRequiresActionView() string {
+	base := m.theme.TextLabel()
+	accent := m.theme.TextHighlight()
+	header := m.theme.TextAccent().Bold(true).Render("your bank wants to verify this charge")
+
+	if m.review.redirectURL == "" {
+		return base.Render("  waiting for authentication link...")
+	}
+
+	qr, qrSize, err := qrfefe.Generate(m.review.redirectURL)
+	if err != nil || qrSize > m.widthContent {
+		body := header + "\n\n" +
+			base.Render("open this url on your phone to authenticate:") + "\n\n" +
+			accent.Render(m.review.redirectURL) + "\n\n" +
+			base.Render("waiting for completion...")
+		return lipgloss.Place(m.widthContainer, lipgloss.Height(body), lipgloss.Center, lipgloss.Center, body)
+	}
+
+	// Same gotcha as payment_form.go: lipgloss layout helpers corrupt qrfefe ANSI.
+	return qr +
+		header + "\n" +
+		base.Render("scan or visit to complete authentication") + "\n" +
+		accent.Render(m.review.redirectURL) + "\n\n" +
+		base.Render("waiting for completion...")
+}
+
 func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case CheckoutResultMsg:
@@ -199,6 +240,12 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.payment.form = nil
 			return m, nil
 		}
+		if msg.RequiresAction {
+			m.review.requiresAction = true
+			m.review.redirectURL = msg.RedirectURL
+			m.review.orderID = msg.OrderID
+			return m, m.schedulePollOrderStatus(msg.OrderID)
+		}
 		m.Cart = make(map[uint]*models.CartItem)
 		m.cart.cursor = 0
 		m.ShippingInfo = nil
@@ -206,8 +253,55 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.review.success = true
 		return m, nil
 
+	case OrderStatusMsg:
+		if !m.review.requiresAction || msg.OrderID != m.review.orderID {
+			return m, nil
+		}
+		if msg.Err != nil {
+			// Transient — keep polling.
+			return m, m.schedulePollOrderStatus(msg.OrderID)
+		}
+		switch msg.Status {
+		case "paid", "shipped", "delivered":
+			m.Cart = make(map[uint]*models.CartItem)
+			m.cart.cursor = 0
+			m.ShippingInfo = nil
+			m.OrdersLoaded = false
+			m.review.requiresAction = false
+			m.review.redirectURL = ""
+			m.review.success = true
+			return m, nil
+		case "failed", "cancelled":
+			m.review.requiresAction = false
+			m.review.redirectURL = ""
+			m.review.authFailed = true
+			return m, nil
+		default:
+			return m, m.schedulePollOrderStatus(msg.OrderID)
+		}
+
 	case tea.KeyMsg:
 		if m.CheckingOut {
+			return m, nil
+		}
+		if m.review.authFailed {
+			if msg.String() == "esc" || msg.String() == "enter" {
+				m.review.authFailed = false
+				m = m.SwitchPage(paymentPage)
+				m.payment.view = 0
+				m.payment.form = nil
+				return m, nil
+			}
+			return m, nil
+		}
+		if m.review.requiresAction {
+			if msg.String() == "esc" {
+				m.review.requiresAction = false
+				m.review.redirectURL = ""
+				m = m.SwitchPage(paymentPage)
+				m.payment.view = 0
+				return m, nil
+			}
 			return m, nil
 		}
 		if m.review.success {

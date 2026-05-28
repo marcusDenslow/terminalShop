@@ -529,10 +529,14 @@ func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models
 		return
 	}
 
-	// persist the paymentIntent id before responding so the reconciliation jon
-	// and webhook can match the eventual succeeded/failed event to this order
-	// even if the customer drops off mid-auth
-	if err := db.Model(order).Update("stripe_payment_id", pi.ID).Error; err != nil {
+	// Persist the paymentIntent id AND reset status to pending. The
+	// payment_intent.payment_failed webhook from the initial off-session decline
+	// often arrives before this response and flips the order to failed —
+	// override it back so the 3DS-in-flight order shows the correct state.
+	if err := db.Model(order).Updates(map[string]any{
+		"stripe_payment_id": pi.ID,
+		"status":            models.OrderStatusPending,
+	}).Error; err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to save payment id", nil)
 		return
 	}
