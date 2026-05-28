@@ -65,7 +65,7 @@ func TestGetCartEmpty(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	req := authRequest("GET", "/api/v1/cart", nil, user.ID)
 	w := httptest.NewRecorder()
@@ -104,7 +104,7 @@ func TestSetItemAndGetCart(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	// Add item (CoffeeID=1, Quantity=2)
 	body, _ := json.Marshal(map[string]interface{}{
@@ -160,7 +160,7 @@ func TestSetItemUpdateQuantity(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	// Add item
 	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 2})
@@ -205,7 +205,7 @@ func TestSetItemRemove(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	// Add item
 	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 3})
@@ -244,7 +244,7 @@ func TestSetItemInvalidProduct(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 999, "quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
@@ -261,7 +261,7 @@ func TestSetItemMissingCoffeeID(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	body, _ := json.Marshal(map[string]interface{}{"quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
@@ -278,7 +278,7 @@ func TestClearCart(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	// Add two items
 	for _, coffeeID := range []uint{1, 2} {
@@ -334,7 +334,7 @@ func TestSetAddress(t *testing.T) {
 	}
 	db.Create(&addr)
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	body, _ := json.Marshal(map[string]interface{}{"address_id": addr.ID})
 	req := authRequest("PUT", "/api/v1/cart/address", body, user.ID)
@@ -388,7 +388,7 @@ func TestSetAddressWrongUser(t *testing.T) {
 	}
 	db.Create(&addr)
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	body, _ := json.Marshal(map[string]interface{}{"address_id": addr.ID})
 	req := authRequest("PUT", "/api/v1/cart/address", body, user.ID)
@@ -416,7 +416,7 @@ func TestSetCard(t *testing.T) {
 	}
 	db.Create(&card)
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	body, _ := json.Marshal(map[string]interface{}{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
@@ -468,7 +468,7 @@ func TestSetCardWrongUser(t *testing.T) {
 	}
 	db.Create(&card)
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	body, _ := json.Marshal(map[string]interface{}{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
@@ -485,7 +485,7 @@ func TestConvertCartMissingAddress(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	// Add item but no address or card
 	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 1})
@@ -508,7 +508,7 @@ func TestConvertCartMissingCard(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 	db := database.GetDB()
 
 	// Add item and address
@@ -539,7 +539,7 @@ func TestConvertCartEmpty(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	// Empty cart convert
 	req := authRequest("POST", "/api/v1/cart/convert", nil, user.ID)
@@ -556,7 +556,7 @@ func TestMultipleItems(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 
 	// Add three different items
 	for i := uint(1); i <= 3; i++ {
@@ -605,7 +605,7 @@ func TestCartIsolation(t *testing.T) {
 	}
 	db.Create(&user2)
 
-	handler := NewCartHandler("")
+	handler := NewCartHandler("", "")
 	r := chi.NewRouter()
 	r.Put("/cart/item", handler.SetItem)
 	r.Get("/cart", handler.GetCart)
