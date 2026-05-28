@@ -506,6 +506,16 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models.Order, pi *stripe.PaymentIntent) {
 	db := database.GetDB()
 
+	// PaymentIntents returned inside a *stripe.Error are partial — next_action
+	// is often nil. Re-fetch from Stripe to get the canonical PI with the 3DS
+	// challenge URL populated.
+	if pi.NextAction == nil || pi.NextAction.RedirectToURL == nil || pi.NextAction.RedirectToURL.URL == "" {
+		fresh, ferr := paymentintent.Get(pi.ID, nil)
+		if ferr == nil && fresh != nil {
+			pi = fresh
+		}
+	}
+
 	if pi.NextAction == nil || pi.NextAction.RedirectToURL == nil || pi.NextAction.RedirectToURL.URL == "" {
 		middleware.RecordCartConversion("sca_missing_next_action")
 		db.Model(order).Update("status", models.OrderStatusFailed)
