@@ -30,6 +30,7 @@ jobs:
           fi
 
       - name: Lint
+        if: ${{ !env.ACT }}
         uses: golangci/golangci-lint-action@v7
         with:
           version: v2.4.0
