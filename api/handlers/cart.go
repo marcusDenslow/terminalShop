@@ -541,7 +541,7 @@ func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models
 		return
 	}
 
-	token, err := storeRedirect(pi.NextAction.RedirectToURL.URL)
+	token, err := storeRedirect(pi.NextAction.RedirectToURL.URL, models.RedirectPurposeCheckout3DS)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to allocate redirect token", nil)
 		return
