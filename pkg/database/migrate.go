@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"log"
+
 	"terminalShop/pkg/models"
 
 	"gorm.io/gorm"
@@ -24,6 +25,7 @@ func Migrate(db *gorm.DB) error {
 		&models.OrderItem{}, // Line items within orders
 		&models.Address{},   // Saved addresses
 		&models.OrderEvent{},
+		&models.PayRedirect{}, // short-token -> stripe url store (10 min TTL)
 	); err != nil {
 		return fmt.Errorf("migration failed: %w", err)
 	}

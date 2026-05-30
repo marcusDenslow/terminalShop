@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/stripe/stripe-go/v78"
@@ -24,35 +24,43 @@ import (
 	stripeSession "github.com/stripe/stripe-go/v78/checkout/session"
 )
 
-// payRedirects maps short tokens to full Stripe checkout URLs.
-var (
-	payRedirects   = map[string]string{}
-	payRedirectsMu sync.Mutex
-)
+const RedirectTTL = 10 * time.Minute
 
-func storeRedirect(stripeURL string) (string, error) {
+func storeRedirect(stripeURL, purpose string) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	token := hex.EncodeToString(b)
-	payRedirectsMu.Lock()
-	payRedirects[token] = stripeURL
-	payRedirectsMu.Unlock()
+	now := time.Now()
+	rec := models.PayRedirect{
+		Token:     token,
+		URL:       stripeURL,
+		Purpose:   purpose,
+		CreatedAt: now,
+		ExpiresAt: now.Add(RedirectTTL),
+	}
+	if err := database.GetDB().Create(&rec).Error; err != nil {
+		return "", err
+	}
 	return token, nil
 }
 
 // PayRedirect resolves a short token and redirects to the Stripe checkout URL.
 func PayRedirect(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
-	payRedirectsMu.Lock()
-	url, ok := payRedirects[token]
-	payRedirectsMu.Unlock()
-	if !ok {
+	db := database.GetDB().WithContext(r.Context())
+	var rec models.PayRedirect
+	if err := db.Where("token = ?", token).First(&rec).Error; err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	http.Redirect(w, r, url, http.StatusFound)
+	if time.Now().After(rec.ExpiresAt) {
+		db.Where("token = ?", rec.Token).Delete(&models.PayRedirect{})
+		http.NotFound(w, r)
+		return
+	}
+	http.Redirect(w, r, rec.URL, http.StatusFound)
 }
 
 // CardHandler handles saved payment method CRUD.
@@ -168,7 +176,7 @@ func (h *CardHandler) CollectCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := storeRedirect(sess.URL)
+	token, err := storeRedirect(sess.URL, models.RedirectPurposeAddCard)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to generate redirect token", nil)
 		return
