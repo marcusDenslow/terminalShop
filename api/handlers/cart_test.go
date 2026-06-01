@@ -65,7 +65,7 @@ func TestGetCartEmpty(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	req := authRequest("GET", "/api/v1/cart", nil, user.ID)
 	w := httptest.NewRecorder()
@@ -104,7 +104,7 @@ func TestSetItemAndGetCart(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	// Add item (CoffeeID=1, Quantity=2)
 	body, _ := json.Marshal(map[string]interface{}{
@@ -160,7 +160,7 @@ func TestSetItemUpdateQuantity(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	// Add item
 	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 2})
@@ -205,7 +205,7 @@ func TestSetItemRemove(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	// Add item
 	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 3})
@@ -244,7 +244,7 @@ func TestSetItemInvalidProduct(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 999, "quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
@@ -261,7 +261,7 @@ func TestSetItemMissingCoffeeID(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	body, _ := json.Marshal(map[string]interface{}{"quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
@@ -278,7 +278,7 @@ func TestClearCart(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	// Add two items
 	for _, coffeeID := range []uint{1, 2} {
@@ -334,7 +334,7 @@ func TestSetAddress(t *testing.T) {
 	}
 	db.Create(&addr)
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	body, _ := json.Marshal(map[string]interface{}{"address_id": addr.ID})
 	req := authRequest("PUT", "/api/v1/cart/address", body, user.ID)
@@ -388,7 +388,7 @@ func TestSetAddressWrongUser(t *testing.T) {
 	}
 	db.Create(&addr)
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	body, _ := json.Marshal(map[string]interface{}{"address_id": addr.ID})
 	req := authRequest("PUT", "/api/v1/cart/address", body, user.ID)
@@ -416,7 +416,7 @@ func TestSetCard(t *testing.T) {
 	}
 	db.Create(&card)
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	body, _ := json.Marshal(map[string]interface{}{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
@@ -468,7 +468,7 @@ func TestSetCardWrongUser(t *testing.T) {
 	}
 	db.Create(&card)
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	body, _ := json.Marshal(map[string]interface{}{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
@@ -485,7 +485,7 @@ func TestConvertCartMissingAddress(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	// Add item but no address or card
 	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 1})
@@ -508,7 +508,7 @@ func TestConvertCartMissingCard(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 	db := database.GetDB()
 
 	// Add item and address
@@ -539,7 +539,7 @@ func TestConvertCartEmpty(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	// Empty cart convert
 	req := authRequest("POST", "/api/v1/cart/convert", nil, user.ID)
@@ -556,7 +556,7 @@ func TestMultipleItems(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 
 	// Add three different items
 	for i := uint(1); i <= 3; i++ {
@@ -605,7 +605,7 @@ func TestCartIsolation(t *testing.T) {
 	}
 	db.Create(&user2)
 
-	handler := NewCartHandler("", "")
+	handler := NewCartHandler("", "", 0)
 	r := chi.NewRouter()
 	r.Put("/cart/item", handler.SetItem)
 	r.Get("/cart", handler.GetCart)
@@ -662,5 +662,105 @@ func TestCartIsolation(t *testing.T) {
 	}
 	if resp.Data.Cart.Items[0].CoffeeID != 2 {
 		t.Errorf("User 2 expected coffee_id 2, got %d", resp.Data.Cart.Items[0].CoffeeID)
+	}
+}
+
+func TestConvertCartLimit(t *testing.T) {
+	cases := []struct {
+		name          string
+		capCents      int
+		quantity      int
+		expectOverCap bool
+	}{
+		{"over cap rejects", 20000, 41, true},   // $205
+		{"at cap accepts", 20000, 40, false},    // $200 boundary
+		{"under cap accepts", 20000, 39, false}, // $195
+		{"zero cap disables", 0, 1000, false},   // explicit off-switch
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testDB, user := setupCartTestDB(t)
+			defer func() { _ = os.Remove(testDB) }()
+			defer database.ResetForTesting()
+
+			db := database.GetDB()
+			user.StripeCustomerID = "cus_test_overlimit"
+			if err := db.Save(&user).Error; err != nil {
+				t.Fatalf("saved user: %v", err)
+			}
+
+			addr := models.Address{
+				UserID: user.ID, Name: "Test", Street: "1 Main St",
+				City: "PDX", State: "OR", Zip: "97201", Country: "US",
+			}
+			if err := db.Create(&addr).Error; err != nil {
+				t.Fatalf("seed address: %v", err)
+			}
+
+			card := models.Card{
+				UserID: user.ID, StripePaymentID: "pm_test_overlimit",
+				Last4: "4242", Brand: "Visa", ExpMonth: 12, ExpYear: 2030,
+			}
+			if err := db.Create(&card).Error; err != nil {
+				t.Fatalf("seed card: %v", err)
+			}
+
+			handler := NewCartHandler("", "", tc.capCents)
+
+			body, _ := json.Marshal(map[string]interface{}{"coffee_id": 4, "quantity": tc.quantity})
+			req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
+			w := httptest.NewRecorder()
+			handler.SetItem(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("SetItem: %d %s", w.Code, w.Body.String())
+			}
+
+			// set address
+			body, _ = json.Marshal(map[string]interface{}{"address_id": addr.ID})
+			req = authRequest("PUT", "/api/v1/cart/address", body, user.ID)
+			w = httptest.NewRecorder()
+			handler.SetAddress(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("SetAddress: %d %s", w.Code, w.Body.String())
+			}
+
+			// set card
+			body, _ = json.Marshal(map[string]interface{}{"card_id": card.ID})
+			req = authRequest("PUT", "/api/v1/cart/card", body, user.ID)
+			w = httptest.NewRecorder()
+			handler.SetCard(w, req)
+			if w.Code != http.StatusOK {
+				t.Fatalf("SetCard: %d %s", w.Code, w.Body.String())
+			}
+
+			// Convert
+			req = authRequest("POST", "/api/v1/cart/convert", nil, user.ID)
+			w = httptest.NewRecorder()
+			handler.ConvertCart(w, req)
+
+			var resp struct {
+				Success bool `json:"success"`
+				Error   struct {
+					Code    string                 `json:"code"`
+					Message string                 `json:"message"`
+					Details map[string]interface{} `json:"details"`
+				} `json:"error"`
+			}
+			_ = json.NewDecoder(w.Body).Decode(&resp)
+
+			isOverCap := w.Code == http.StatusBadRequest && resp.Error.Code == "CART_OVER_LIMIT"
+			if isOverCap != tc.expectOverCap {
+				t.Fatalf("expectOverCap=%v got code=%d errCode=%q msg=%q", tc.expectOverCap, w.Code, resp.Error.Code, resp.Error.Message)
+			}
+			if tc.expectOverCap {
+				if got, _ := resp.Error.Details["limit_cents"].(float64); int(got) != tc.capCents {
+					t.Errorf("limit_cents in details: want %d, got %v", tc.capCents, resp.Error.Details["limit_cents"])
+				}
+				if got, _ := resp.Error.Details["total_cents"].(float64); int(got) != tc.quantity*500 {
+					t.Errorf("total_cents in details: want %d, got %v", tc.quantity*500, resp.Error.Details["total_cents"])
+				}
+			}
+		})
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/joho/godotenv"
@@ -30,6 +31,7 @@ type Config struct {
 	ShippoWebhookSecret string
 	SlackSigningSecret  string
 	AdminAPIKey         string
+	MaxOrderCents       int
 }
 
 // Load reads configuration from environment variables and validates required secrets.
@@ -66,6 +68,7 @@ func Load() (*Config, error) {
 		ShippoWebhookSecret: os.Getenv("SHIPPO_WEBHOOK_SECRET"),
 		SlackSigningSecret:  os.Getenv("SLACK_SIGNING_SECRET"),
 		AdminAPIKey:         os.Getenv("ADMIN_API_KEY"),
+		MaxOrderCents:       loadMaxOrderCents(),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -129,4 +132,21 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// loadMaxOrderCents reads MAX_ORDER_CENTS. Default $200. Explicit 0 disables
+// the cap. Garbage or negative values fall back to the default with a warning
+// so an operator typo cannot silently disable a fraud control.
+func loadMaxOrderCents() int {
+	const defaultCap = 20000
+	raw := os.Getenv("MAX_ORDER_CENTS")
+	if raw == "" {
+		return defaultCap
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		fmt.Printf("WARNING: MAX_ORDER_CENTS=%q invalid, falling back to default %d\n", raw, defaultCap)
+		return defaultCap
+	}
+	return n
 }

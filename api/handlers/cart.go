@@ -23,13 +23,14 @@ import (
 )
 
 type CartHandler struct {
-	stripeKey string
-	appURL    string
+	stripeKey     string
+	appURL        string
+	maxOrderCents int
 }
 
 // NewCartHandler creates a new cart handler with the Stripe secret key
-func NewCartHandler(stripeSecretKey, appURL string) *CartHandler {
-	return &CartHandler{stripeKey: stripeSecretKey, appURL: appURL}
+func NewCartHandler(stripeSecretKey, appURL string, maxOrderCents int) *CartHandler {
+	return &CartHandler{stripeKey: stripeSecretKey, appURL: appURL, maxOrderCents: maxOrderCents}
 }
 
 // getOrCreateCart finds the users cart or creates one.
@@ -353,6 +354,17 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	total := subtotal + cart.ShippingCost
+
+	if h.maxOrderCents > 0 && total > h.maxOrderCents {
+		middleware.RecordCartConversion("validation_over_limit")
+		utils.RespondError(w, http.StatusBadRequest, "CART_OVER_LIMIT",
+			fmt.Sprintf("order total must be at most $%.2f", float64(h.maxOrderCents)/100),
+			map[string]interface{}{
+				"total_cents": total,
+				"limit_cents": h.maxOrderCents,
+			})
+		return
+	}
 
 	if total < 50 {
 		middleware.RecordCartConversion("validation_min_amount")
