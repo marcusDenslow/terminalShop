@@ -333,6 +333,8 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 func friendlyCheckoutError(raw error) string {
 	s := raw.Error()
 	switch {
+	case strings.Contains(s, "CART_OVER_LIMIT"):
+		return "order total is over the per-order limit. remove items and try again."
 	case strings.Contains(s, "AUTHENTICATION_REQUIRED"):
 		return "your bank wants to verify this charge, authentication step coming soon."
 	case strings.Contains(s, "AUTHENTICATION_NOT_SUPPORTED"):
