@@ -114,3 +114,6 @@ ROADMAP.md
 
 *.bak
 terminalshop.prod.*
+
+# Backup verification config (real values; example file is committed)
+scripts/backups/config.env
