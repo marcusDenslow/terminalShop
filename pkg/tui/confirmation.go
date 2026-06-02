@@ -233,12 +233,11 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case CheckoutResultMsg:
 		m.CheckingOut = false
 		if msg.Err != nil {
-			m = m.SwitchPage(paymentPage)
+			var cmd tea.Cmd
+			m, cmd = m.switchForCheckoutError(msg.Err)
 			m.error = &VisibleError{message: friendlyCheckoutError(msg.Err)}
 			m.review.cardJustAdded = false
-			m.payment.view = 0
-			m.payment.form = nil
-			return m, nil
+			return m, cmd
 		}
 		if msg.RequiresAction {
 			m.review.requiresAction = true
@@ -328,6 +327,18 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m Model) switchForCheckoutError(err error) (Model, tea.Cmd) {
+	switch {
+	case strings.Contains(err.Error(), "CART_OVER_LIMIT"):
+		return m.CartSwitch()
+	default:
+		m = m.SwitchPage(paymentPage)
+		m.payment.view = 0
+		m.payment.form = nil
+		return m, nil
+	}
 }
 
 func friendlyCheckoutError(raw error) string {
