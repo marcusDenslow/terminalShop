@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-
 	"time"
 
 	tea "charm.land/bubbletea/v2"
