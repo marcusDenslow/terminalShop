@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -762,5 +763,107 @@ func TestConvertCartLimit(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestSetCard_ExpiredReturns410 verifies that selecting an already-expired
+// card on the cart returns 410 + CARD_STORAGE_EXPIRED and soft-deletes the
+// card. Exercises cart.go SetCard expired-card branch
+func TestSetCard_ExpiredReturns410(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+	past := time.Now().Add(-1 * time.Hour)
+	card := models.Card{
+		UserID: user.ID, StripePaymentID: "pm_expired", Last4: "1111",
+		Brand: "Visa", ExpMonth: 1, ExpYear: 2030, StorageExpiresAt: &past,
+	}
+	if err := db.Create(&card).Error; err != nil {
+		t.Fatalf("seed card: %v", err)
+	}
+
+	handler := NewCartHandler("", "", 0)
+	body, _ := json.Marshal(map[string]interface{}{"card_id": card.ID})
+	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
+	w := httptest.NewRecorder()
+	handler.SetCard(w, req)
+
+	if w.Code != http.StatusGone {
+		t.Fatalf("want 410, got %d, body: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Error.Code != "CARD_STORAGE_EXPIRED" {
+		t.Fatalf("want CARD_STORAGE_EXPIRED, got %q", resp.Error.Code)
+	}
+
+	var soft models.Card
+	if err := db.Unscoped().First(&soft, card.ID).Error; err != nil {
+		t.Fatalf("reload card unscoped: %v", err)
+	}
+	if !soft.DeletedAt.Valid {
+		t.Fatalf("expired card was not soft-deleted")
+	}
+}
+
+// TestConvertCart_ExpiredReturns410 verifies that attempting checkout with an
+// expired saved card shor-circuits at the validation step with 410 +
+// CARD_STORAGE_EXPIRED before any stripe interaction
+func TestConvertCart_ExpiredReturns410(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+
+	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 1})
+	req := authRequest("PUT", "/api/v1/vart/item", body, user.ID)
+	w := httptest.NewRecorder()
+	NewCartHandler("", "", 0).SetItem(w, req)
+
+	addr := models.Address{
+		UserID: user.ID, Name: "Test", Street: "123 St",
+		City: "PDX", State: "OR", Zip: "97201", Country: "US",
+	}
+	db.Create(&addr)
+	body, _ = json.Marshal(map[string]interface{}{"address_id": addr.ID})
+	req = authRequest("PUT", "/api/v1/cart/address", body, user.ID)
+	w = httptest.NewRecorder()
+	NewCartHandler("", "", 0).SetAddress(w, req)
+
+	past := time.Now().Add(-1 * time.Hour)
+	card := models.Card{
+		UserID: user.ID, StripePaymentID: "pm_expired", Last4: "1111",
+		Brand: "Visa", ExpMonth: 1, ExpYear: 2030, StorageExpiresAt: &past,
+	}
+	if err := db.Create(&card).Error; err != nil {
+		t.Fatalf("seed card: %v", err)
+	}
+	if err := db.Model(&models.Cart{}).Where("user_id = ?", user.ID).Update("card_id", card.ID).Error; err != nil {
+		t.Fatalf("attach card to card: %v", err)
+	}
+
+	req = authRequest("POST", "/api/v1/cart/convert", nil, user.ID)
+	w = httptest.NewRecorder()
+	NewCartHandler("", "", 0).ConvertCart(w, req)
+
+	if w.Code != http.StatusGone {
+		t.Fatalf("want 410, got %d, body: %s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	_ = json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Error.Code != "CARD_STORAGE_EXPIRED" {
+		t.Fatalf("want CARD_STORAGE_EXPIRED, got %q", resp.Error.Code)
 	}
 }
