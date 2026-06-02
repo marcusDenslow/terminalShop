@@ -150,8 +150,10 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(ctx context.Context, event
 		return
 	}
 
-	if err := refreshCardStorageTTL(db, order.CardID, time.Now()); err != nil {
-		webhookLog().Warn("failed to refresh card storage ttl", "card_id", order.CardID, "error", err)
+	if order.CardID != 0 {
+		if err := refreshCardStorageTTL(db, order.CardID, time.Now()); err != nil {
+			webhookLog().Warn("failed to refresh card storage ttl", "card_id", order.CardID, "error", err)
+		}
 	}
 
 	audit.OrderPaid(order.UserID, order.ID, int(pi.Amount), pi.ID)
@@ -259,7 +261,9 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(ctx context.Context, eve
 				webhookLog().Warn("failed to detach duplicate pm", "user_id", user.ID, "error", derr)
 			}
 			// Bump UpdatedAt so the TUI poll signal can detect that the webhook
-			// fired even though no new row was inserted.
+			// fired even though no new row was inserted. storage_expires_at is
+			// reset because the user just re-added the card; this is a card-add
+			// path, not a payment-success refresh, so last_used_at stays as-is.
 			now := time.Now()
 			if uerr := db.Model(&dup).Updates(map[string]any{
 				"updated_at":         now,

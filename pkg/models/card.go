@@ -47,12 +47,6 @@ func (c *Card) InitializeStorageTTL(now time.Time) {
 	c.StorageExpiresAt = CardStorageExpiresAt(now)
 }
 
-// RefreshStorageTTL records successful payment use and extends card retention
-func (c *Card) RefreshStorageTTL(now time.Time) {
-	c.LastUsedAt = &now
-	c.StorageExpiresAt = CardStorageExpiresAt(now)
-}
-
 // IsStorageExpired reports whether the saved card retention deadline elapsed
 func (c *Card) IsStorageExpired(now time.Time) bool {
 	return c.StorageExpiresAt != nil && !c.StorageExpiresAt.After(now)
