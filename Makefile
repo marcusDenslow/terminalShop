@@ -23,7 +23,7 @@ test-pretty:
 		-- -count=1; \
 	rc=$$?; \
 	echo; \
-	tparse -all -file=$(JSON_OUT) || true; \
+	tparse -all -notests -file=$(JSON_OUT) || true; \
 	exit $$rc
 
 # TDD loop: re-runs affected packages on file save.
@@ -43,12 +43,12 @@ test-ci:
 		-- -count=1 -race -covermode=atomic -coverprofile=$(COVER); \
 	rc=$$?; \
 	echo; \
-	tparse -all -slow 10 -file=$(JSON_OUT) || true; \
+	tparse -all -notests -slow 10 -file=$(JSON_OUT) || true; \
 	exit $$rc
 
 # Replay last summary without re-running tests
 test-summary:
-	tparse -all -file=$(JSON_OUT)
+	tparse -all -notests -file=$(JSON_OUT)
 
 # Open HTML coverage report from last `test-ci` run
 cover:

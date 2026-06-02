@@ -51,7 +51,7 @@ jobs:
             -- -count=1 -race -covermode=atomic -coverprofile=coverage.out
           rc=$?
           echo
-          tparse -all -slow 10 -file=test-output.json || true
+          tparse -all -notests -slow 10 -file=test-output.json || true
           exit $rc
 
       - name: Upload test report 
