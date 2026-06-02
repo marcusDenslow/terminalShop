@@ -77,6 +77,33 @@ func ReconcileOrders(stripeKey string) {
 	}
 }
 
+// ReconcileExpiredCards removes saved cards whose retention deadline elapsed.
+// Read paths filter out expired rows so users never see them; this job drives
+// the Stripe detach + audit + physical row delete out of band so request
+// handlers never block on Stripe API calls during a card sweep.
+func ReconcileExpiredCards(stripeKey string) {
+	db := database.GetDB()
+
+	var cards []models.Card
+	if err := db.Where(
+		"storage_expires_at IS NOT NULL AND storage_expires_at <= ?",
+		time.Now(),
+	).Find(&cards).Error; err != nil {
+		reconcileLog().Error("expired card scan failed", "error", err)
+		return
+	}
+	if len(cards) == 0 {
+		return
+	}
+
+	reconcileLog().Info("expiring inactive saved cards", "count", len(cards))
+	for i := range cards {
+		if err := expireStoredCard(db, &cards[i], stripeKey); err != nil {
+			reconcileLog().Error("expire card failed", "card_id", cards[i].ID, "error", err)
+		}
+	}
+}
+
 // ReconcileUnshipped finds paid order orlder than 24h with no tracking
 // number and posts single Slack reminder. Pure read + notif
 func ReconcileUnshipped() {

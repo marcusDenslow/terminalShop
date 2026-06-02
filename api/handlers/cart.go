@@ -210,6 +210,15 @@ func (h *CartHandler) SetCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if card.IsStorageExpired(time.Now()) {
+		if err := expireStoredCard(db, &card, h.stripeKey); err != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
+			return
+		}
+		respondCardStorageExpired(w)
+		return
+	}
+
 	cart, err := getOrCreateCart(r.Context(), userID)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "CART_ERROR", "failed to get cart", nil)
@@ -293,6 +302,16 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	if err := db.First(&card, *cart.CardID).Error; err != nil {
 		middleware.RecordCartConversion("validation_invalid_card")
 		utils.RespondError(w, http.StatusBadRequest, "INVALID_CARD", "payment card not found", nil)
+		return
+	}
+
+	if card.IsStorageExpired(time.Now()) {
+		middleware.RecordCartConversion("validation_card_expired")
+		if err := expireStoredCard(db, &card, h.stripeKey); err != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
+			return
+		}
+		respondCardStorageExpired(w)
 		return
 	}
 

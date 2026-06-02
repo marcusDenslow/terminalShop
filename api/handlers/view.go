@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"terminalShop/api/middleware"
 	"terminalShop/pkg/database"
@@ -11,6 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// ViewHandler handles bulk TUI bootstrap data
 type ViewHandler struct{}
 
 func NewViewHandler() *ViewHandler {
@@ -37,7 +39,10 @@ func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
 	db.Where("user_id = ?", userID).Find(&addresses)
 
 	var cards []models.Card
-	db.Where("user_id = ?", userID).Find(&cards)
+	db.Where(
+		"user_id = ? AND (storage_expires_at IS NULL OR storage_expires_at > ?)",
+		userID, time.Now(),
+	).Order("is_default DESC, created_at DESC").Find(&cards)
 
 	var orders []models.Order
 	db.Where("user_id = ?", userID).

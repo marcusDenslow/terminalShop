@@ -350,6 +350,8 @@ func friendlyCheckoutError(raw error) string {
 		return "your bank wants to verify this charge, authentication step coming soon."
 	case strings.Contains(s, "AUTHENTICATION_NOT_SUPPORTED"):
 		return "this card doesn't support online authentication. Try another card"
+	case strings.Contains(s, "CARD_STORAGE_EXPIRED"):
+		return "saved card expired. Add it again to verify the card is still yours"
 	case strings.Contains(s, "CARD_EXPIRED"):
 		return "card expired. Add a new card and try again"
 	case strings.Contains(s, "CARD_CVC_FAILED"):
