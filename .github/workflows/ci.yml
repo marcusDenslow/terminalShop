@@ -35,5 +35,31 @@ jobs:
         with:
           version: v2.4.0
 
+      - name: Install tparse
+        run: go install github.com/mfridman/tparse@v0.18.0
+
       - name: Test (race detector)
-        run: go test -race ./...
+        run: |
+          set +e
+          go tool gotestsum \
+            --format pkgname \
+            --format-icons hivis \
+            --hide-summary=skipped,output,errors,failed \
+            --jsonfile test-output.json \
+            --junitfile test-report.xml \
+            --packages="./..." \
+            -- -count=1 -race -covermode=atomic -coverprofile=coverage.out
+          rc=$?
+          echo
+          tparse -all -notests -slow 10 -file=test-output.json || true
+          exit $rc
+
+      - name: Upload test report 
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: |
+            test-output.json
+            test-report.xml
+            coverage.out

@@ -33,6 +33,8 @@ api/api-server
 *.out
 coverage.txt
 coverage.html
+test-output.json
+test-report.xml
 
 # Dependency directories
 vendor/
