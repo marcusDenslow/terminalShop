@@ -18,6 +18,7 @@ type eventType string
 const (
 	eventCardAdded              eventType = "card_added"
 	eventCardDeleted            eventType = "card_deleted"
+	eventCardExpired            eventType = "card_expired"
 	eventOrderCreated           eventType = "order_created"
 	eventOrderPaid              eventType = "order_paid"
 	eventOrderShipped           eventType = "order_shipped"
@@ -111,6 +112,17 @@ func CardDeleted(userID, cardID uint) {
 	}
 	slog.Info("audit", e.attrs()...)
 	persist(0, eventCardDeleted, e)
+}
+
+// CardExpired records that a saved payment method expired from inactivity
+func CardExpired(userID, cardID uint) {
+	e := event{
+		Event:  eventCardExpired,
+		UserID: userID,
+		CardID: cardID,
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(0, eventCardExpired, e)
 }
 
 // OrderCreated records that an order record was created (before payment).

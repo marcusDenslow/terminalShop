@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -210,6 +211,15 @@ func (h *CartHandler) SetCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if card.IsStorageExpired(time.Now()) {
+		if err := expireStoredCard(db, &card, h.stripeKey); err != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
+			return
+		}
+		respondCardStorageExpired(w)
+		return
+	}
+
 	cart, err := getOrCreateCart(r.Context(), userID)
 	if err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "CART_ERROR", "failed to get cart", nil)
@@ -293,6 +303,16 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	if err := db.First(&card, *cart.CardID).Error; err != nil {
 		middleware.RecordCartConversion("validation_invalid_card")
 		utils.RespondError(w, http.StatusBadRequest, "INVALID_CARD", "payment card not found", nil)
+		return
+	}
+
+	if card.IsStorageExpired(time.Now()) {
+		middleware.RecordCartConversion("validation_expired_at")
+		if err := expireStoredCard(db, &card, h.stripeKey); err != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
+			return
+		}
+		respondCardStorageExpired(w)
 		return
 	}
 
@@ -500,6 +520,10 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	middleware.RecordOrderCreated(string(order.Status))
 	middleware.RecordCartConversion("success")
 	middleware.ObserveOrderValueCents(total)
+
+	if err := refreshCardStorageTTL(db, card.ID, time.Now()); err != nil {
+		slog.Warn("failed to refresh card storage ttl", "card_id", card.ID, "error", err)
+	}
 
 	if err := db.Preload("Items").First(&order, order.ID).Error; err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to preload items", nil)

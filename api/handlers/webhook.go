@@ -150,6 +150,10 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(ctx context.Context, event
 		return
 	}
 
+	if err := refreshCardStorageTTL(db, order.CardID, time.Now()); err != nil {
+		webhookLog().Warn("failed to refresh card storage ttl", "card_id", order.CardID, "error", err)
+	}
+
 	audit.OrderPaid(order.UserID, order.ID, int(pi.Amount), pi.ID)
 	go notify.SlackOrderPaid(&order)
 	webhookLog().Info("order marked paid", "order_id", orderIDStr, "pi", pi.ID)
@@ -256,7 +260,11 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(ctx context.Context, eve
 			}
 			// Bump UpdatedAt so the TUI poll signal can detect that the webhook
 			// fired even though no new row was inserted.
-			if uerr := db.Model(&dup).Update("updated_at", time.Now()).Error; uerr != nil {
+			now := time.Now()
+			if uerr := db.Model(&dup).Updates(map[string]any{
+				"updated_at":         now,
+				"storage_expires_at": models.CardStorageExpiresAt(now),
+			}).Error; uerr != nil {
 				webhookLog().Warn("failed to bump dup card updated_at", "card_id", dup.ID, "error", uerr)
 			}
 			webhookLog().Info("skipped duplicate card via local-db match", "user_id", user.ID, "existing_card_id", dup.ID)
@@ -272,6 +280,7 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(ctx context.Context, eve
 		ExpMonth:        int(pm.Card.ExpMonth),
 		ExpYear:         int(pm.Card.ExpYear),
 	}
+	card.InitializeStorageTTL(time.Now())
 
 	if err := db.Create(&card).Error; err != nil {
 		webhookLog().Error("failed to save card", "user_id", user.ID, "error", err)

@@ -51,7 +51,7 @@ func SetupRoutes(
 	cardHandler := handlers.NewCardHandler(stripeSecretKey, appURL)
 	orderHandler := handlers.NewOrderHandler(stripeSecretKey, bringAPIUID, bringAPIKey, bringCustomerNumber)
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)
-	viewHandler := handlers.NewViewHandler()
+	viewHandler := handlers.NewViewHandler(stripeSecretKey)
 	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, stripeSecretKey, shippoWebhookSecret)
 	slackHandler := handlers.NewSlackHandler(slackSigningSecret, adminAPIKey, apiPort, shippoWebhookSecret)
 

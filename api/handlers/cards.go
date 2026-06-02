@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -79,6 +81,11 @@ func (h *CardHandler) GetCards(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
+	if err := expireStoredCards(db, userID, h.stripeKey, time.Now()); err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed toe expire old cards", nil)
+		return
+	}
+
 	var cards []models.Card
 	db.Where("user_id = ?", userID).Order("is_default DESC, created_at DESC").Find(&cards)
 
@@ -126,6 +133,15 @@ func (h *CardHandler) SetDefaultCard(w http.ResponseWriter, r *http.Request) {
 	var card models.Card
 	if err := db.Where("id = ? AND user_id = ?", id, userID).First(&card).Error; err != nil {
 		utils.RespondError(w, http.StatusNotFound, "CARD_NOT_FOUND", "card not found", nil)
+		return
+	}
+
+	if card.IsStorageExpired(time.Now()) {
+		if err := expireStoredCard(db, &card, h.stripeKey); err != nil {
+			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
+			return
+		}
+		respondCardStorageExpired(w)
 		return
 	}
 
@@ -334,6 +350,60 @@ func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"message": "card deleted",
 	})
+}
+
+func expireStoredCards(db *gorm.DB, userID uint, stripeKey string, now time.Time) error {
+	var cards []models.Card
+	if err := db.Where(
+		"used_id = ? AND storage_expires_at IS NOT NULL AND storage_expires_at <= ?",
+		userID,
+		now,
+	).Find(&cards).Error; err != nil {
+		return err
+	}
+	for i := range cards {
+		if err := expireStoredCard(db, &cards[i], stripeKey); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func expireStoredCard(db *gorm.DB, card *models.Card, stripeKey string) error {
+	if err := db.Model(&models.Cart{}).Where("card_id = ? AND user_id = ?", card.ID, card.UserID).Update("card_id", nil).Error; err != nil {
+		return fmt.Errorf("failed to clear expired card from cart: %w", err)
+	}
+
+	if stripeKey != "" && strings.HasPrefix(card.StripePaymentID, "pm_") {
+		stripe.Key = stripeKey
+		if _, err := paymentmethod.Detach(card.StripePaymentID, &stripe.PaymentMethodDetachParams{}); err != nil {
+			slog.Warn("failed to detach expired card", "card_id", card.ID, "error", err)
+		}
+	}
+
+	if err := db.Delete(card).Error; err != nil {
+		return fmt.Errorf("failed to delete expired card: %w", err)
+	}
+
+	audit.CardExpired(card.UserID, card.ID)
+	return nil
+}
+
+func refreshCardStorageTTL(db *gorm.DB, cardID uint, now time.Time) error {
+	return db.Model(&models.Card{}).Where("id = ?", cardID).Updates(map[string]any{
+		"last_used_at":       now,
+		"storage_expires_at": models.CardStorageExpiresAt(now),
+	}).Error
+}
+
+func respondCardStorageExpired(w http.ResponseWriter) {
+	utils.RespondError(
+		w,
+		http.StatusGone,
+		"CARD_STORAGE_EXPIRED",
+		"saved card expired, add it again",
+		nil,
+	)
 }
 
 // ensureStripeCustomer creates a Stripe Customer for the user if they don't
