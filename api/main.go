@@ -128,6 +128,22 @@ func main() {
 		}
 	}()
 
+	// Sweep saved cards whose retention deadline elapsed. Read paths filter
+	// expired rows from query results, so this sweeper only drives the Stripe
+	// detach + audit + physical row delete asynchronously.
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				handlers.ReconcileExpiredCards(cfg.StripeSecretKey)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	log.Println("API server started. Press Ctrl+C to shutdown.")
 
 	// Block until signal received

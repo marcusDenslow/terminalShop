@@ -13,12 +13,10 @@ import (
 )
 
 // ViewHandler handles bulk TUI bootstrap data
-type ViewHandler struct {
-	stripeKey string
-}
+type ViewHandler struct{}
 
-func NewViewHandler(stripeSecretKey string) *ViewHandler {
-	return &ViewHandler{stripeKey: stripeSecretKey}
+func NewViewHandler() *ViewHandler {
+	return &ViewHandler{}
 }
 
 func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
@@ -40,13 +38,11 @@ func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
 	var addresses []models.Address
 	db.Where("user_id = ?", userID).Find(&addresses)
 
-	if err := expireStoredCards(db, userID, h.stripeKey, time.Now()); err != nil {
-		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire old cards", nil)
-		return
-	}
-
 	var cards []models.Card
-	db.Where("user_id = ?", userID).Order("is_default DESC, created_at DESC").Find(&cards)
+	db.Where(
+		"user_id = ? AND (storage_expires_at IS NULL OR storage_expires_at > ?)",
+		userID, time.Now(),
+	).Order("is_default DESC, created_at DESC").Find(&cards)
 
 	var orders []models.Order
 	db.Where("user_id = ?", userID).

@@ -77,17 +77,17 @@ func NewCardHandler(stripeSecretKey string, appURL string) *CardHandler {
 }
 
 // GetCards returns all saved cards for the authenticated user.
+// Cards past their retention deadline are filtered out at read time;
+// physical deletion runs in handlers.ReconcileExpiredCards.
 func (h *CardHandler) GetCards(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
 
-	if err := expireStoredCards(db, userID, h.stripeKey, time.Now()); err != nil {
-		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire old cards", nil)
-		return
-	}
-
 	var cards []models.Card
-	db.Where("user_id = ?", userID).Order("is_default DESC, created_at DESC").Find(&cards)
+	db.Where(
+		"user_id = ? AND (storage_expires_at IS NULL OR storage_expires_at > ?)",
+		userID, time.Now(),
+	).Order("is_default DESC, created_at DESC").Find(&cards)
 
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"cards": cards,
@@ -350,23 +350,6 @@ func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
 		"message": "card deleted",
 	})
-}
-
-func expireStoredCards(db *gorm.DB, userID uint, stripeKey string, now time.Time) error {
-	var cards []models.Card
-	if err := db.Where(
-		"user_id = ? AND storage_expires_at IS NOT NULL AND storage_expires_at <= ?",
-		userID,
-		now,
-	).Find(&cards).Error; err != nil {
-		return err
-	}
-	for i := range cards {
-		if err := expireStoredCard(db, &cards[i], stripeKey); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // expireStoredCard removes a card whose retention deadline elapsed.

@@ -9,15 +9,15 @@ import (
 	"terminalShop/pkg/models"
 )
 
-// TestExpireStoredCards_FiltersByUserAndDeadline drives the real SQL path so
-// a column-name typo in the WHERE clause surfaces here, not in production.
-func TestExpireStoredCards_FiltersByUserAndDeadline(t *testing.T) {
+// TestReconcileExpiredCards_RemovesPastDeadlineOnly drives the real SQL path
+// so a column-name typo in the WHERE clause surfaces here, not in production.
+func TestReconcileExpiredCards_RemovesPastDeadlineOnly(t *testing.T) {
 	testDB, user := setupCardsExpireTestDB(t)
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
-	now := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
+	now := time.Now()
 	past := now.Add(-1 * time.Hour)
 	future := now.Add(24 * time.Hour)
 
@@ -58,9 +58,7 @@ func TestExpireStoredCards_FiltersByUserAndDeadline(t *testing.T) {
 		t.Fatalf("seed cart: %v", err)
 	}
 
-	if err := expireStoredCards(db, user.ID, "", now); err != nil {
-		t.Fatalf("expireStoredCards: %v", err)
-	}
+	ReconcileExpiredCards("")
 
 	var remaining []models.Card
 	if err := db.Where("user_id = ?", user.ID).Find(&remaining).Error; err != nil {
@@ -84,16 +82,15 @@ func TestExpireStoredCards_FiltersByUserAndDeadline(t *testing.T) {
 	}
 }
 
-// TestExpireStoredCards_LeavesOtherUsersAlone makes sure the WHERE clause
-// scopes to the calling user — a regression here would leak cross-account.
-func TestExpireStoredCards_LeavesOtherUsersAlone(t *testing.T) {
+// TestReconcileExpiredCards_SweepsAcrossUsers verifies the sweeper is not
+// scoped to one user; it must collect every past-deadline row in one pass.
+func TestReconcileExpiredCards_SweepsAcrossUsers(t *testing.T) {
 	testDB, user := setupCardsExpireTestDB(t)
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
-	now := time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)
-	past := now.Add(-1 * time.Hour)
+	past := time.Now().Add(-1 * time.Hour)
 
 	other := models.User{
 		SSHKeyFingerprint: "SHA256:other",
@@ -105,26 +102,29 @@ func TestExpireStoredCards_LeavesOtherUsersAlone(t *testing.T) {
 		t.Fatalf("seed other user: %v", err)
 	}
 
-	otherCard := models.Card{
-		UserID:           other.ID,
-		StripePaymentID:  "tok_other_expired",
-		Last4:            "9999",
-		Brand:            "Visa",
-		ExpMonth:         1,
-		ExpYear:          2030,
-		StorageExpiresAt: &past,
-	}
-	if err := db.Create(&otherCard).Error; err != nil {
-		t.Fatalf("seed other card: %v", err)
-	}
-
-	if err := expireStoredCards(db, user.ID, "", now); err != nil {
-		t.Fatalf("expireStoredCards: %v", err)
+	for _, uid := range []uint{user.ID, other.ID} {
+		c := models.Card{
+			UserID:           uid,
+			StripePaymentID:  "tok_expired",
+			Last4:            "9999",
+			Brand:            "Visa",
+			ExpMonth:         1,
+			ExpYear:          2030,
+			StorageExpiresAt: &past,
+		}
+		if err := db.Create(&c).Error; err != nil {
+			t.Fatalf("seed card: %v", err)
+		}
 	}
 
-	var reloaded models.Card
-	if err := db.First(&reloaded, otherCard.ID).Error; err != nil {
-		t.Fatalf("other user's expired card was deleted by another user's sweep: %v", err)
+	ReconcileExpiredCards("")
+
+	var count int64
+	if err := db.Model(&models.Card{}).Count(&count).Error; err != nil {
+		t.Fatalf("count cards: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("want 0 cards after sweep, got %d", count)
 	}
 }
 
