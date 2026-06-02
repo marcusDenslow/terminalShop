@@ -35,7 +35,7 @@ func (Card) TableName() string {
 	return "cards"
 }
 
-// CartStorageExpiresAt returns the inactivity expiration for a saved card
+// CardStorageExpiresAt returns the inactivity expiration for a saved card
 func CardStorageExpiresAt(now time.Time) *time.Time {
 	expiresAt := now.Add(cardStorageTTL)
 	return &expiresAt

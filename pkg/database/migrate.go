@@ -32,7 +32,7 @@ func Migrate(db *gorm.DB) error {
 	}
 
 	if err := backfillCardStorageExpiration(db); err != nil {
-		return nil
+		return err
 	}
 
 	log.Println("Database migrations completed successfully")

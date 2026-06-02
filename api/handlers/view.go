@@ -46,7 +46,7 @@ func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var cards []models.Card
-	db.Where("user_id = ?", userID).Order("id_default DESC, created_at DESC").Find(&cards)
+	db.Where("user_id = ?", userID).Order("is_default DESC, created_at DESC").Find(&cards)
 
 	var orders []models.Order
 	db.Where("user_id = ?", userID).

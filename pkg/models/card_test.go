@@ -27,7 +27,7 @@ func TestCardStorageTTL(t *testing.T) {
 	usedAt := now.Add(24 * time.Hour)
 	card.RefreshStorageTTL(usedAt)
 	if card.LastUsedAt == nil || !card.LastUsedAt.Equal(usedAt) {
-		t.Fatalf("last used to refreshed: %v", card.LastUsedAt)
+		t.Fatalf("last used not refreshed: %v", card.LastUsedAt)
 	}
 	if card.StorageExpiresAt == nil || !card.StorageExpiresAt.Equal(usedAt.Add(cardStorageTTL)) {
 		t.Fatalf("expiration not refreshed: %v", card.StorageExpiresAt)

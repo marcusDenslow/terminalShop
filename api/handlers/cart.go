@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -307,7 +306,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if card.IsStorageExpired(time.Now()) {
-		middleware.RecordCartConversion("validation_expired_at")
+		middleware.RecordCartConversion("validation_card_expired")
 		if err := expireStoredCard(db, &card, h.stripeKey); err != nil {
 			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
 			return
@@ -520,10 +519,6 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	middleware.RecordOrderCreated(string(order.Status))
 	middleware.RecordCartConversion("success")
 	middleware.ObserveOrderValueCents(total)
-
-	if err := refreshCardStorageTTL(db, card.ID, time.Now()); err != nil {
-		slog.Warn("failed to refresh card storage ttl", "card_id", card.ID, "error", err)
-	}
 
 	if err := db.Preload("Items").First(&order, order.ID).Error; err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to preload items", nil)

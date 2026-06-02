@@ -82,7 +82,7 @@ func (h *CardHandler) GetCards(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
 	if err := expireStoredCards(db, userID, h.stripeKey, time.Now()); err != nil {
-		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed toe expire old cards", nil)
+		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire old cards", nil)
 		return
 	}
 
@@ -355,7 +355,7 @@ func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 func expireStoredCards(db *gorm.DB, userID uint, stripeKey string, now time.Time) error {
 	var cards []models.Card
 	if err := db.Where(
-		"used_id = ? AND storage_expires_at IS NOT NULL AND storage_expires_at <= ?",
+		"user_id = ? AND storage_expires_at IS NOT NULL AND storage_expires_at <= ?",
 		userID,
 		now,
 	).Find(&cards).Error; err != nil {
@@ -369,9 +369,21 @@ func expireStoredCards(db *gorm.DB, userID uint, stripeKey string, now time.Time
 	return nil
 }
 
+// expireStoredCard removes a card whose retention deadline elapsed.
+// Local state (cart references + card row) is committed atomically;
+// Stripe detach and audit run only after the local commit so retries
+// cannot double-fire the audit event.
 func expireStoredCard(db *gorm.DB, card *models.Card, stripeKey string) error {
-	if err := db.Model(&models.Cart{}).Where("card_id = ? AND user_id = ?", card.ID, card.UserID).Update("card_id", nil).Error; err != nil {
-		return fmt.Errorf("failed to clear expired card from cart: %w", err)
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Cart{}).Where("card_id = ? AND user_id = ?", card.ID, card.UserID).Update("card_id", nil).Error; err != nil {
+			return fmt.Errorf("failed to clear expired card from cart: %w", err)
+		}
+		if err := tx.Delete(card).Error; err != nil {
+			return fmt.Errorf("failed to delete expired card: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	if stripeKey != "" && strings.HasPrefix(card.StripePaymentID, "pm_") {
@@ -379,10 +391,6 @@ func expireStoredCard(db *gorm.DB, card *models.Card, stripeKey string) error {
 		if _, err := paymentmethod.Detach(card.StripePaymentID, &stripe.PaymentMethodDetachParams{}); err != nil {
 			slog.Warn("failed to detach expired card", "card_id", card.ID, "error", err)
 		}
-	}
-
-	if err := db.Delete(card).Error; err != nil {
-		return fmt.Errorf("failed to delete expired card: %w", err)
 	}
 
 	audit.CardExpired(card.UserID, card.ID)
