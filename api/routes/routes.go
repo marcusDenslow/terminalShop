@@ -132,6 +132,7 @@ func SetupRoutes(
 			// Orders
 			r.Get("/orders", orderHandler.GetOrders)
 			r.Get("/orders/{id}/status", orderHandler.GetOrderStatus)
+			r.With(middleware.RateLimitByUser(10, time.Minute)).Post("/orders/{id}/retry-auth", cartHandler.RetryAuth)
 			r.Post("/orders/{id}/refund-request", orderHandler.CreateRefundRequest)
 			r.Post("/orders/{id}/refund", orderHandler.RefundOrder)
 

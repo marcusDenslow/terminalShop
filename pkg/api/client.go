@@ -563,6 +563,58 @@ func (c *Client) GetOrderStatus(id uint) (string, error) {
 	return sResp.Data.Status, nil
 }
 
+// RetryAuthOutcome is the result of POST /orders/{id}/retry-auth.
+// status=="requires_action" -> RedirectURL is a fresh QR target; resume polling.
+// Status=="succeeded" -> stripe approved frictionless; keep polling for the
+// webhook to flip status=paid (RedirectURL will be empty)
+type RetryAuthOutcome struct {
+	OrderID     uint
+	Status      string
+	RedirectURL string
+}
+
+type retryAuthResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		OrderID     uint   `json:"order_id"`
+		Status      string `json:"status"`
+		RedirectURL string `json:"redirect_url,omitempty"`
+	} `json:"data"`
+	Error *APIError `json:"error,omitempty"`
+}
+
+// RetryAuth asks the server to re-Confirm the existing PaymentIntent for the
+// order, producing a new 3DS challenge URL. Used by the TUI's authFailed
+// screen so the customer can recover without re-entering the checkout flow.
+func (c *Client) RetryAuth(orderID uint) (*RetryAuthOutcome, error) {
+	url := fmt.Sprintf("%s/api/v1/orders/%d/retry-auth", c.BaseURL, orderID)
+	req, err := http.NewRequest("POST", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create retry request: %w", err)
+	}
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send retry request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var rResp retryAuthResponse
+	if err := json.NewDecoder(resp.Body).Decode(&rResp); err != nil {
+		return nil, fmt.Errorf("failed to decode retry response: %w", err)
+	}
+	if !rResp.Success {
+		if rResp.Error != nil {
+			return nil, fmt.Errorf("%s: %s", rResp.Error.Code, rResp.Error.Message)
+		}
+		return nil, fmt.Errorf("failed to retry authentication")
+	}
+	return &RetryAuthOutcome{
+		OrderID:     rResp.Data.OrderID,
+		Status:      rResp.Data.Status,
+		RedirectURL: rResp.Data.RedirectURL,
+	}, nil
+}
+
 // GetCards fetches all saved cards for the user.
 func (c *Client) GetCards() ([]models.Card, error) {
 	url := fmt.Sprintf("%s/api/v1/cards", c.BaseURL)

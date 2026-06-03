@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stripe/stripe-go/v78"
 	"github.com/stripe/stripe-go/v78/paymentintent"
 	"github.com/stripe/stripe-go/v78/paymentmethod"
@@ -27,6 +29,12 @@ type CartHandler struct {
 	appURL        string
 	maxOrderCents int
 }
+
+// maxAuthIssuances caps how many times a single orders PaymentIntent can be
+// pushed into requires_action, one initial challenge plus up to three retries
+// before we tell the customer to use a different card. Counted via existing
+// audit rows (eventOrderRequiresAction) so the cap stays migration-free
+const maxAuthIssuances = 4
 
 // NewCartHandler creates a new cart handler with the Stripe secret key
 func NewCartHandler(stripeSecretKey, appURL string, maxOrderCents int) *CartHandler {
@@ -621,4 +629,108 @@ func appURLForHandler(r *http.Request) string {
 		host = fh
 	}
 	return fmt.Sprintf("%s://%s", scheme, host)
+}
+
+// RetryAuth re-Confirms an in-flight PaymentIntent that the customer failed
+// or abandoned during the 3DS challenge, recovering the existing order rather
+// than starting a new checkout. Bound to POST /api/v1/orders/{id}/retry-auth.
+//
+// Stripe's PI state machine bounces back to requires_payment_method after a
+// failed or abandoned 3DS, so paymentintent.Confirm(pi.id, …) mints a fresh
+// next_action.redirect_to_url — the same shape respondRequiresAction already
+// handles. No idempotency key is set: Confirm mutates an existing PI and
+// Stripe collapses by id (see sca-psd2-compliance.md caveat #5).
+func (h *CartHandler) RetryAuth(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB().WithContext(r.Context())
+	userID := middleware.UserIDFromContext(r.Context())
+
+	idStr := chi.URLParam(r, "id")
+	id64, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_ID", "invalid order id", nil)
+		return
+	}
+	orderID := uint(id64)
+
+	var order models.Order
+	if err := db.Where("id = ? AND user_id = ?", orderID, userID).First(&order).Error; err != nil {
+		utils.RespondError(w, http.StatusNotFound, "ORDER_NOT_FOUND", "order not found", nil)
+		return
+	}
+
+	// Only pedning (initial attempt mid-flight) and failed (webhool flipped it
+	// after a non-recoverable error) are retryable. paid, refunded, shipped, delivered,
+	// cancelled are terminal - refuse
+	if order.Status != models.OrderStatusPending && order.Status != models.OrderStatusFailed {
+		utils.RespondError(w, http.StatusConflict, "INVALID_STATE", "order is already finalized", nil)
+		return
+	}
+	if order.StripePaymentID == "" {
+		utils.RespondError(w, http.StatusConflict, "INVALID_STATE", "order has no payment intent to retry", nil)
+		return
+	}
+
+	var issuances int64
+	if err := db.Model(&models.OrderEvent{}).Where("order_id = ? AND type = ?", order.ID, "order_requires_action").Count(&issuances).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to count auth attempts", nil)
+		return
+	}
+	if issuances >= maxAuthIssuances {
+		middleware.RecordCartConversion("retry_max_attempts")
+		utils.RespondError(w, http.StatusTooManyRequests, "RETRY_LIMIT", "too many authentication attempts, please use a different card", nil)
+		return
+	}
+
+	var card models.Card
+	if err := db.Unscoped().First(&card, order.CardID).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to load card", nil)
+		return
+	}
+
+	stripe.Key = h.stripeKey
+
+	stripeStart := time.Now()
+	confirmed, cerr := paymentintent.Confirm(order.StripePaymentID, &stripe.PaymentIntentConfirmParams{
+		PaymentMethod: stripe.String(card.StripePaymentID),
+		OffSession:    stripe.Bool(false),
+		ReturnURL:     stripe.String(h.appURL + "/post-3ds"),
+	})
+	stripeDur := time.Since(stripeStart).Seconds()
+	if cerr != nil {
+		middleware.ObserveStripeRequest("payment_intent_confirm", "error", stripeDur)
+		if stripeErr, ok := cerr.(*stripe.Error); ok && stripeErr.Type == stripe.ErrorTypeCard {
+			db.Model(&order).Update("status", models.OrderStatusFailed)
+			audit.OrderFailed(userID, order.ID, order.Total, stripeErr.Msg)
+			middleware.RecordCartConversion("retry_card_declined")
+			utils.RespondError(w, http.StatusPaymentRequired, mapStripeCardErrCode(stripeErr.Code), stripeErr.Msg, nil)
+			return
+		}
+		if stripeErr, ok := cerr.(*stripe.Error); ok && stripeErr.Code == "payment_intent_unexpected_state" {
+			middleware.RecordCartConversion("retry_race_already_done")
+			utils.RespondSuccess(w, http.StatusAccepted, map[string]any{
+				"order_id": order.ID,
+				"status":   "succeeded",
+			})
+			return
+		}
+		middleware.RecordCartConversion("retry_stripe_error")
+		utils.RespondError(w, http.StatusBadGateway, "PAYMENT_FAILED", "payment failed", nil)
+		return
+	}
+	middleware.ObserveStripeRequest("payment_intent_confirm", "success", stripeDur)
+
+	// frictionless 3DS on retry, stripe approved without a new challenge.
+	// the payment_intent.succeeded webhook owns the order.status=paid
+	// transition (matches the initial-flow contract); tell the TUI to keep
+	// polling /orders/{id}/status until it lands
+	if confirmed.Status == stripe.PaymentIntentStatusSucceeded {
+		middleware.RecordCartConversion("retry_frictionless")
+		utils.RespondSuccess(w, http.StatusAccepted, map[string]any{
+			"order_id": order.ID,
+			"status":   "succeeded",
+		})
+		return
+	}
+
+	h.respondRequiresAction(w, &order, card.StripePaymentID, confirmed)
 }
