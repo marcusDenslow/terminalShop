@@ -129,7 +129,7 @@ func (m Model) RefundUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			state.form = f
 		}
 		if state.form.State == huh.StateCompleted {
-			state.form = m.buildRefundForm(state)
+			state.reason = state.form.GetString("reason")
 			return m, m.setRefundFocus(state, refundFocusMessage)
 		}
 		return m, cmd
@@ -335,7 +335,7 @@ func (m Model) renderRefundTextarea(state *refundState) string {
 	}
 
 	wrapper := lipgloss.NewStyle().
-		Border(lipgloss.ThickBorder()).
+		Border(lipgloss.RoundedBorder()).
 		BorderForeground(border)
 
 	contentWidth := m.refundContentWidth()
