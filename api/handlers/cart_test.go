@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"terminalShop/api/middleware"
+	"terminalShop/pkg/audit"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 )
@@ -865,5 +867,150 @@ func TestConvertCart_ExpiredReturns410(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp.Error.Code != "CARD_STORAGE_EXPIRED" {
 		t.Fatalf("want CARD_STORAGE_EXPIRED, got %q", resp.Error.Code)
+	}
+}
+
+// TestRetryAuth exercises the pre-Stripe validation branches of
+// CartHandler.RetryAuth. The happy paths (Confirm → requires_action /
+// succeeded) hit the live Stripe API and aren't covered here — see
+// sca-psd2-compliance.md "Test plan" for manual coverage with the
+// 4000 0027 6000 3184 test card. Caveat #14 in that doc still applies:
+// NewCartHandler takes 3 args and the seeded user must have a non-empty
+// StripeCustomerID so the Convert/Retry paths stay hermetic.
+func TestRetryAuth(t *testing.T) {
+	cases := []struct {
+		name        string
+		ownedByUser bool
+		seedStatus  models.OrderStatus
+		seedPayment string
+		seedEvents  int
+		wantStatus  int
+		wantErrCode string
+	}{
+		{
+			name:        "wrong user returns not found",
+			ownedByUser: false, seedStatus: models.OrderStatusFailed,
+			seedPayment: "pi_test_wrong_user", seedEvents: 1,
+			wantStatus: http.StatusNotFound, wantErrCode: "ORDER_NOT_FOUND",
+		},
+		{
+			name:        "missing payment intent rejects",
+			ownedByUser: true, seedStatus: models.OrderStatusPending,
+			seedPayment: "", seedEvents: 0,
+			wantStatus: http.StatusConflict, wantErrCode: "INVALID_STATE",
+		},
+		{
+			name:        "paid order is not retryable",
+			ownedByUser: true, seedStatus: models.OrderStatusPaid,
+			seedPayment: "pi_test_paid", seedEvents: 1,
+			wantStatus: http.StatusConflict, wantErrCode: "INVALID_STATE",
+		},
+		{
+			name:        "refunded order is not retryable",
+			ownedByUser: true, seedStatus: models.OrderStatusRefunded,
+			seedPayment: "pi_test_refunded", seedEvents: 1,
+			wantStatus: http.StatusConflict, wantErrCode: "INVALID_STATE",
+		},
+		{
+			name:        "retry cap reached returns 429",
+			ownedByUser: true, seedStatus: models.OrderStatusFailed,
+			seedPayment: "pi_test_capped", seedEvents: maxAuthIssuances,
+			wantStatus: http.StatusTooManyRequests, wantErrCode: "RETRY_LIMIT",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testDB, user := setupCartTestDB(t)
+			defer func() { _ = os.Remove(testDB) }()
+			defer database.ResetForTesting()
+
+			db := database.GetDB()
+			user.StripeCustomerID = "cus_test_retry"
+			if err := db.Save(&user).Error; err != nil {
+				t.Fatalf("save user: %v", err)
+			}
+
+			ownerID := user.ID
+			if !tc.ownedByUser {
+				other := models.User{
+					SSHKeyFingerprint: "SHA256:retryother",
+					SSHPublicKey:      "ssh-ed25519 AAAA retryother",
+				}
+				if err := db.Create(&other).Error; err != nil {
+					t.Fatalf("seed other user: %v", err)
+				}
+				ownerID = other.ID
+			}
+
+			card := models.Card{
+				UserID: ownerID, StripePaymentID: "pm_test_retry",
+				Last4: "4242", Brand: "Visa", ExpMonth: 12, ExpYear: 2030,
+			}
+			if err := db.Create(&card).Error; err != nil {
+				t.Fatalf("seed card: %v", err)
+			}
+
+			order := models.Order{
+				UserID:          ownerID,
+				CardID:          card.ID,
+				StripePaymentID: tc.seedPayment,
+				Status:          tc.seedStatus,
+				Subtotal:        500, Total: 500,
+				ShippingName: "Test", ShippingStreet: "1 Main St",
+				ShippingCity: "PDX", ShippingState: "OR",
+				ShippingZip: "97201", ShippingCountry: "US",
+			}
+			if err := db.Create(&order).Error; err != nil {
+				t.Fatalf("seed order: %v", err)
+			}
+
+			for i := 0; i < tc.seedEvents; i++ {
+				evt := models.OrderEvent{
+					OrderID: order.ID,
+					Type:    audit.EventOrderRequiresAction,
+					Actor:   fmt.Sprintf("user:%d", ownerID),
+					Payload: `{}`,
+				}
+				if err := db.Create(&evt).Error; err != nil {
+					t.Fatalf("seed event: %v", err)
+				}
+			}
+
+			handler := NewCartHandler("", "http://localhost", 0)
+			req := orderRequest("POST",
+				fmt.Sprintf("/api/v1/orders/%d/retry-auth", order.ID), nil, user.ID, fmt.Sprintf("%d", order.ID))
+			w := httptest.NewRecorder()
+			handler.RetryAuth(w, req)
+
+			if w.Code != tc.wantStatus {
+				t.Fatalf("status: want %d, got %d body=%s", tc.wantStatus, w.Code, w.Body.String())
+			}
+
+			var resp struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			_ = json.NewDecoder(w.Body).Decode(&resp)
+			if resp.Error.Code != tc.wantErrCode {
+				t.Fatalf("err code: want %q, got %q, body=%s", tc.wantErrCode, resp.Error.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestRetryAuth_OrderNotFound(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	handler := NewCartHandler("", "http://localhost", 0)
+	req := orderRequest("POST", "/api/v1/orders/9999/retry-auth", nil, user.ID, "9999")
+	w := httptest.NewRecorder()
+	handler.RetryAuth(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d body=%s", w.Code, w.Body.String())
 	}
 }

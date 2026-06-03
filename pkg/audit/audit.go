@@ -13,6 +13,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// EventOrderRequiresAction is the audit event-type string emitted whenever a
+// PaymentIntent is pushed into requires_action. explored so cart-flow handler
+// can count retry attempts without hardcoding the string literal.
+const EventOrderRequiresAction = "order_requires_action"
+
 type eventType string
 
 const (
@@ -23,7 +28,7 @@ const (
 	eventOrderPaid              eventType = "order_paid"
 	eventOrderShipped           eventType = "order_shipped"
 	eventOrderFailed            eventType = "order_failed"
-	eventOrderRequiresAction    eventType = "order_requires_action"
+	eventOrderRequiresAction    eventType = EventOrderRequiresAction
 	eventOrderRefunded          eventType = "order_refunded"
 	eventPaymentCritical        eventType = "payment_critical"
 	eventLabelPurchased         eventType = "label_purchased"
@@ -313,7 +318,6 @@ func attrsToMap(a []any) map[string]any {
 	return m
 }
 
-//nolint:unused // called from ConvertCart in the next update
 func OrderRequiresAction(userID, orderID uint, paymentIntentID string) {
 	e := event{
 		Event:    eventOrderRequiresAction,
