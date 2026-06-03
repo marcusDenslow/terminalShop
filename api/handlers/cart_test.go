@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"terminalShop/api/middleware"
+	"terminalShop/pkg/audit"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 )
@@ -947,7 +948,7 @@ func TestRetryAuth(t *testing.T) {
 				Last4: "4242", Brand: "Visa", ExpMonth: 12, ExpYear: 2030,
 			}
 			if err := db.Create(&card).Error; err != nil {
-				t.Fatalf("seed cart: %v", err)
+				t.Fatalf("seed card: %v", err)
 			}
 
 			order := models.Order{
@@ -967,7 +968,7 @@ func TestRetryAuth(t *testing.T) {
 			for i := 0; i < tc.seedEvents; i++ {
 				evt := models.OrderEvent{
 					OrderID: order.ID,
-					Type:    "order_requires_action",
+					Type:    audit.EventOrderRequiresAction,
 					Actor:   fmt.Sprintf("user:%d", ownerID),
 					Payload: `{}`,
 				}
