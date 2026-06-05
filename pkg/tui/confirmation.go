@@ -170,8 +170,20 @@ func (m Model) ReviewView() string {
 	if m.CheckingOut {
 		return m.theme.TextAccent().Bold(true).Padding(1).Render("  submitting order...")
 	}
+	if m.review.retrying {
+		return m.theme.TextAccent().Bold(true).Padding(1).Render("  retrying authentication...")
+	}
+	if m.review.retryExhausted {
+		content := m.theme.TextError().Bold(true).Padding(1).Render("too many authentication attempts") + "\n" + m.theme.TextLabel().Padding(0, 1).Render("press esc to start a new order")
+		return lipgloss.Place(
+			m.widthContainer,
+			lipgloss.Height(content),
+			lipgloss.Center, lipgloss.Center,
+			content,
+		)
+	}
 	if m.review.authFailed {
-		content := m.theme.TextError().Bold(true).Padding(1).Render("authentication failed — press esc to try again")
+		content := m.theme.TextError().Bold(true).Padding(1).Render("authentication failed — press r to retry, esc to go back")
 		return lipgloss.Place(
 			m.widthContainer,
 			lipgloss.Height(content),
@@ -208,7 +220,7 @@ func (m Model) renderRequiresActionView() string {
 	header := m.theme.TextAccent().Bold(true).Render("your bank wants to verify this charge")
 
 	if m.review.redirectURL == "" {
-		return base.Render("  waiting for authentication link...")
+		return base.Render("  verifying with your bank...")
 	}
 
 	qr, qrSize, err := qrfefe.Generate(m.review.redirectURL)
@@ -274,18 +286,77 @@ func (m Model) ReviewUpdate(msg tea.Msg) (Model, tea.Cmd) {
 			m.review.requiresAction = false
 			m.review.redirectURL = ""
 			m.review.authFailed = true
+			m.footer = []footerCommand{{key: "r", value: "retry"}, {key: "esc", value: "back"}}
 			return m, nil
 		default:
 			return m, m.schedulePollOrderStatus(msg.OrderID)
 		}
 
+	case RetryAuthResultMsg:
+		if m.review.orderID != 0 && msg.OrderID != m.review.orderID {
+			return m, nil
+		}
+		m.review.retrying = false
+		if msg.Err != nil {
+			s := msg.Err.Error()
+			switch {
+			case strings.Contains(s, "RETRY_LIMIT"):
+				m.review.authFailed = false
+				m.review.retryExhausted = true
+				m.footer = []footerCommand{{key: "esc", value: "back"}}
+				return m, nil
+			case strings.Contains(s, "CARD_NO_LONGER_AVAILABLE"):
+				m.review.authFailed = false
+				m.review.requiresAction = false
+				m.review.redirectURL = ""
+				m.review.orderID = 0
+				m = m.SwitchPage(paymentPage)
+				m.payment.view = 0
+				m.payment.form = nil
+				m.error = &VisibleError{message: "saved card is no longer available. add it again to try."}
+				return m, nil
+			default:
+				m.error = &VisibleError{message: friendlyCheckoutError(msg.Err)}
+				return m, nil
+			}
+		}
+		m.review.authFailed = false
+		m.review.retryExhausted = false
+		m.review.requiresAction = true
+		m.review.redirectURL = msg.RedirectURL
+		m.review.orderID = msg.OrderID
+		m.footer = []footerCommand{{key: "esc", value: "cancel"}}
+		return m, m.schedulePollOrderStatus(msg.OrderID)
+
 	case tea.KeyMsg:
 		if m.CheckingOut {
 			return m, nil
 		}
+		if m.review.retrying {
+			return m, nil
+		}
 		if m.review.authFailed {
-			if msg.String() == "esc" || msg.String() == "enter" {
+			switch msg.String() {
+			case "r":
+				if m.review.orderID == 0 {
+					return m, nil
+				}
+				m.review.retrying = true
+				m.error = nil
+				return m, m.retryAuthCmd(m.review.orderID)
+			case "esc":
 				m.review.authFailed = false
+				m = m.SwitchPage(paymentPage)
+				m.payment.view = 0
+				m.payment.form = nil
+				return m, nil
+			}
+			return m, nil
+		}
+		if m.review.retryExhausted {
+			if msg.String() == "esc" {
+				m.review.retryExhausted = false
+				m.review.orderID = 0
 				m = m.SwitchPage(paymentPage)
 				m.payment.view = 0
 				m.payment.form = nil
