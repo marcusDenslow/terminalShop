@@ -709,6 +709,14 @@ func TestConvertCartLimit(t *testing.T) {
 				t.Fatalf("seed card: %v", err)
 			}
 
+			// Pin coffee_id=4's price so cart-cap math stays stable across
+			// seed-price changes. The cap test is about (price * quantity)
+			// vs cap, not which coffee or what the menu currently charges.
+			const pinnedPrice = 500
+			if err := db.Model(&models.Coffee{}).Where("id = ?", 4).Update("price", pinnedPrice).Error; err != nil {
+				t.Fatalf("pin coffee price: %v", err)
+			}
+
 			handler := NewCartHandler("", "", tc.capCents)
 
 			body, _ := json.Marshal(map[string]interface{}{"coffee_id": 4, "quantity": tc.quantity})
@@ -760,8 +768,8 @@ func TestConvertCartLimit(t *testing.T) {
 				if got, _ := resp.Error.Details["limit_cents"].(float64); int(got) != tc.capCents {
 					t.Errorf("limit_cents in details: want %d, got %v", tc.capCents, resp.Error.Details["limit_cents"])
 				}
-				if got, _ := resp.Error.Details["total_cents"].(float64); int(got) != tc.quantity*500 {
-					t.Errorf("total_cents in details: want %d, got %v", tc.quantity*500, resp.Error.Details["total_cents"])
+				if got, _ := resp.Error.Details["total_cents"].(float64); int(got) != tc.quantity*pinnedPrice {
+					t.Errorf("total_cents in details: want %d, got %v", tc.quantity*pinnedPrice, resp.Error.Details["total_cents"])
 				}
 			}
 		})
