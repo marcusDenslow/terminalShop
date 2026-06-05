@@ -211,6 +211,8 @@ type reviewState struct {
 	redirectURL    string
 	orderID        uint
 	authFailed     bool
+	retrying       bool
+	retryExhausted bool
 }
 
 type confirmState struct {
@@ -440,6 +442,18 @@ type OrderStatusMsg struct {
 	OrderID uint
 	Status  string
 	Err     error
+}
+
+// RetryAuthResultMsg carries the outcome of POST /orders/{id}/retry-auth.
+// Status "requires_action" -> RedirectURL is a fresh challenge URL; resume
+// the QR + poll loop. Status "succeeded" -> frictionless retry approved;
+// server's APIError string ("RETRY_LIMIT" / "CARD_NO_LONGER_AVAILABLE" /
+// transient) - the Update branch matches on substring.
+type RetryAuthResultMsg struct {
+	OrderID     uint
+	Status      string
+	RedirectURL string
+	Err         error
 }
 
 // CartSyncedMsg is recieved when the server responds to a cart item update
@@ -680,6 +694,23 @@ func (m Model) schedulePollOrderStatus(orderID uint) tea.Cmd {
 		}
 		return OrderStatusMsg{OrderID: orderID, Status: status}
 	})
+}
+
+func (m Model) retryAuthCmd(orderID uint) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil {
+			return RetryAuthResultMsg{OrderID: orderID, Err: fmt.Errorf("api client unavailable")}
+		}
+		outcome, err := m.APIClient.RetryAuth(orderID)
+		if err != nil {
+			return RetryAuthResultMsg{OrderID: orderID, Err: err}
+		}
+		return RetryAuthResultMsg{
+			OrderID:     orderID,
+			Status:      outcome.Status,
+			RedirectURL: outcome.RedirectURL,
+		}
+	}
 }
 
 func (m Model) syncCartItemCmd(coffeeID uint, quantity int) (Model, tea.Cmd) {
