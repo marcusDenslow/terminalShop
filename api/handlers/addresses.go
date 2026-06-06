@@ -42,7 +42,7 @@ func (h *AddressHandler) GetAddresses(w http.ResponseWriter, r *http.Request) {
 	var addresses []models.Address
 	db.Where("user_id = ?", userID).Order("is_default DESC, created_at DESC").Find(&addresses)
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"addresses": addresses,
 	})
 }
@@ -154,7 +154,7 @@ func (h *AddressHandler) CreateAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusCreated, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusCreated, map[string]any{
 		"address": address,
 	})
 }
@@ -183,7 +183,7 @@ func (h *AddressHandler) DeleteAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"message": "address successfully deleted",
 	})
 }
@@ -218,7 +218,7 @@ func (h *AddressHandler) SetDefaultAddress(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"address": address,
 	})
 }

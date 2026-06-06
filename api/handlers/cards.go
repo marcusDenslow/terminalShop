@@ -89,12 +89,12 @@ func (h *CardHandler) GetCards(w http.ResponseWriter, r *http.Request) {
 		userID, time.Now(),
 	).Order("is_default DESC, created_at DESC").Find(&cards)
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"cards": cards,
 	})
 }
 
-// func utils.RespondError(w http.ResponseWriter, statusCode int, code string, message string, details map[string]interface{})
+// func utils.RespondError(w http.ResponseWriter, statusCode int, code string, message string, details map[string]any)
 
 // GetCard returns a single saved card by ID.
 func (h *CardHandler) GetCard(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +114,7 @@ func (h *CardHandler) GetCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"card": card,
 	})
 }
@@ -156,7 +156,7 @@ func (h *CardHandler) SetDefaultCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"card": card,
 	})
 }
@@ -197,7 +197,7 @@ func (h *CardHandler) CollectCard(w http.ResponseWriter, r *http.Request) {
 		utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to generate redirect token", nil)
 		return
 	}
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"url": fmt.Sprintf("%s/pay/%s", h.appURL, token),
 	})
 }
@@ -302,7 +302,7 @@ func (h *CardHandler) SaveCard(w http.ResponseWriter, r *http.Request) {
 
 	audit.CardAdded(userID, card.ID, card.Brand, card.Last4)
 
-	utils.RespondSuccess(w, http.StatusCreated, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusCreated, map[string]any{
 		"card": card,
 	})
 }
@@ -347,7 +347,7 @@ func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 
 	audit.CardDeleted(userID, card.ID)
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"message": "card deleted",
 	})
 }

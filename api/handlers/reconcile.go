@@ -49,7 +49,7 @@ func ReconcileOrders(stripeKey string) {
 				"order_id", order.ID, "pi", pi.ID)
 
 			txErr := db.Transaction(func(tx *gorm.DB) error {
-				if err := tx.Model(&order).Updates(map[string]interface{}{
+				if err := tx.Model(&order).Updates(map[string]any{
 					"status":            models.OrderStatusPaid,
 					"stripe_payment_id": pi.ID,
 				}).Error; err != nil {
@@ -62,7 +62,7 @@ func ReconcileOrders(stripeKey string) {
 				if err := tx.Where("cart_id = ?", cart.ID).Delete(&models.CartItem{}).Error; err != nil {
 					return err
 				}
-				return tx.Model(&cart).Updates(map[string]interface{}{
+				return tx.Model(&cart).Updates(map[string]any{
 					"address_id": nil,
 					"card_id":    nil,
 				}).Error

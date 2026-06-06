@@ -55,18 +55,18 @@ func getOrCreateCart(ctx context.Context, userID uint) (*models.Cart, error) {
 	return &cart, nil
 }
 
-func cartResponse(ctx context.Context, cart *models.Cart) map[string]interface{} {
+func cartResponse(ctx context.Context, cart *models.Cart) map[string]any {
 	db := database.GetDB().WithContext(ctx)
 
 	var items []models.CartItem
 	db.Where("cart_id = ? AND quantity > 0", cart.ID).Preload("Coffee").Find(&items)
 
 	subtotal := 0
-	itemsData := make([]map[string]interface{}, 0, len(items))
+	itemsData := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		lineTotal := item.Coffee.Price * item.Quantity
 		subtotal += lineTotal
-		itemsData = append(itemsData, map[string]interface{}{
+		itemsData = append(itemsData, map[string]any{
 			"id":        item.ID,
 			"coffee_id": item.CoffeeID,
 			"quantity":  item.Quantity,
@@ -75,7 +75,7 @@ func cartResponse(ctx context.Context, cart *models.Cart) map[string]interface{}
 		})
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"items":            itemsData,
 		"subtotal":         subtotal,
 		"address_id":       cart.AddressID,
@@ -94,7 +94,7 @@ func (h *CartHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"cart": cartResponse(r.Context(), cart),
 	})
 }
@@ -157,7 +157,7 @@ func (h *CartHandler) SetItem(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"cart": cartResponse(r.Context(), cart),
 	})
 }
@@ -193,7 +193,7 @@ func (h *CartHandler) SetAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"message": "address set",
 	})
 }
@@ -238,7 +238,7 @@ func (h *CartHandler) SetCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"message": "card set",
 	})
 }
@@ -258,7 +258,7 @@ func (h *CartHandler) ClearCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"message": "cart cleared",
 	})
 }
@@ -386,7 +386,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		middleware.RecordCartConversion("validation_over_limit")
 		utils.RespondError(w, http.StatusBadRequest, "CART_OVER_LIMIT",
 			fmt.Sprintf("order total must be at most $%.2f", float64(h.maxOrderCents)/100),
-			map[string]interface{}{
+			map[string]any{
 				"total_cents": total,
 				"limit_cents": h.maxOrderCents,
 			})
@@ -507,7 +507,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		if err := tx.Where("cart_id = ?", cart.ID).Delete(&models.CartItem{}).Error; err != nil {
 			return err
 		}
-		return tx.Model(cart).Updates(map[string]interface{}{
+		return tx.Model(cart).Updates(map[string]any{
 			"address_id": nil,
 			"card_id":    nil,
 		}).Error
@@ -534,7 +534,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	}
 	go notify.SlackOrderPaid(&order)
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"order": order,
 	})
 }
