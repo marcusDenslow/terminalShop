@@ -35,6 +35,8 @@ func (order *Order) DisplayState() string {
 	switch order.Status {
 	case OrderStatusPending:
 		return "Awaiting payment"
+	case OrderStatusRequiresAction:
+		return "Awaiting authentication"
 	case OrderStatusPaid:
 		if order.TrackingNumber == "" {
 			return "Paid * awaiting label"
@@ -76,6 +78,8 @@ func (order *Order) DisplayKind() DisplayKind {
 	}
 	switch order.Status {
 	case OrderStatusPending:
+		return DisplayKindNeutral
+	case OrderStatusRequiresAction:
 		return DisplayKindNeutral
 	case OrderStatusPaid:
 		return DisplayKindAccent

@@ -184,7 +184,7 @@ func (h *WebhookHandler) handlePaymentIntentFailed(ctx context.Context, event st
 	}
 
 	db := database.GetDB().WithContext(ctx)
-	if err := db.Model(&models.Order{}).Where("id = ? AND status = ?", orderIDStr, models.OrderStatusPending).
+	if err := db.Model(&models.Order{}).Where("id = ? AND status IN (?, ?)", orderIDStr, models.OrderStatusPending, models.OrderStatusRequiresAction).
 		Update("status", models.OrderStatusFailed).Error; err != nil {
 		webhookLog().Error("failed to mark order failed", "order_id", orderIDStr, "error", err)
 	}

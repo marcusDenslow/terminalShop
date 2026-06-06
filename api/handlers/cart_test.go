@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/stripe/stripe-go/v78"
 
 	"terminalShop/api/middleware"
 	"terminalShop/pkg/audit"
@@ -920,6 +921,12 @@ func TestRetryAuth(t *testing.T) {
 			wantStatus: http.StatusConflict, wantErrCode: "INVALID_STATE",
 		},
 		{
+			name:        "requires_action retryable until cap",
+			ownedByUser: true, seedStatus: models.OrderStatusRequiresAction,
+			seedPayment: "pi_test_req_action_cap", seedEvents: maxAuthIssuances,
+			wantStatus: http.StatusTooManyRequests, wantErrCode: "RETRY_LIMIT",
+		},
+		{
 			name:        "retry cap reached returns 429",
 			ownedByUser: true, seedStatus: models.OrderStatusFailed,
 			seedPayment: "pi_test_capped", seedEvents: maxAuthIssuances,
@@ -1020,5 +1027,139 @@ func TestRetryAuth_OrderNotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestRespondRequiresAction_SetStatusRequiresAction(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+	card := models.Card{
+		UserID: user.ID, StripePaymentID: "pm_test_req_action",
+		Last4: "4242", Brand: "Visa", ExpMonth: 12, ExpYear: 2030,
+	}
+	if err := db.Create(&card).Error; err != nil {
+		t.Fatalf("seed card: %v", err)
+	}
+
+	order := models.Order{
+		UserID: user.ID, CardID: card.ID,
+		Status:   models.OrderStatusPending,
+		Subtotal: 500, Total: 500,
+		ShippingName: "Test", ShippingStreet: "1 Main St",
+		ShippingCity: "PDX", ShippingState: "OR",
+		ShippingZip: "97201", ShippingCountry: "US",
+	}
+	if err := db.Create(&order).Error; err != nil {
+		t.Fatalf("seed order: %v", err)
+	}
+
+	pi := &stripe.PaymentIntent{
+		ID: "pi_test_action_set",
+		NextAction: &stripe.PaymentIntentNextAction{
+			RedirectToURL: &stripe.PaymentIntentNextActionRedirectToURL{
+				URL: "https://hooks.stripe.com/redirect/test/test_3ds",
+			},
+		},
+	}
+
+	handler := NewCartHandler("", "http://localhost", 0)
+	w := httptest.NewRecorder()
+	handler.respondRequiresAction(w, &order, card.StripePaymentID, pi)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Data struct {
+			OrderID         uint   `json:"order_id"`
+			PaymentIntentID string `json:"payment_intent_id"`
+			Status          string `json:"status"`
+			RedirectURL     string `json:"redirect_url"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Data.Status != "requires_action" {
+		t.Fatalf("response status: %q, got %q", "requires_action", resp.Data.Status)
+	}
+	if resp.Data.RedirectURL == "" {
+		t.Fatalf("expected redirect url, got empty")
+	}
+	if resp.Data.PaymentIntentID != pi.ID {
+		t.Fatalf("payment intent id: want %q, got %q", pi.ID, resp.Data.PaymentIntentID)
+	}
+
+	var reloaded models.Order
+	if err := db.First(&reloaded, order.ID).Error; err != nil {
+		t.Fatalf("reload order: %v", err)
+	}
+	if reloaded.Status != models.OrderStatusRequiresAction {
+		t.Fatalf("order.Status: want %q, got %q", models.OrderStatusRequiresAction, reloaded.Status)
+	}
+	if reloaded.StripePaymentID != pi.ID {
+		t.Fatalf("order.StripePaymentID: want %q, got %q", pi.ID, reloaded.StripePaymentID)
+	}
+}
+
+// TestRespondRequiresAction_OverridesFailedFromWebhookRace simulates the race
+// described in sca-psd2-compliance.md note #3 / caveat #4: the
+// payment_intent.payment_failed webhook arrives BEFORE respondRequiresAction
+// returns and flips the row to OrderStatusFailed. The helper must override
+// that back to OrderStatusRequiresAction so the in-flight 3DS state surfaces
+// correctly to the TUI.
+func TestRespondRequiresAction_OverridesFailedFromWebhookRace(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+	card := models.Card{
+		UserID: user.ID, StripePaymentID: "pm_test_race",
+		Last4: "4242", Brand: "Visa", ExpMonth: 12, ExpYear: 2030,
+	}
+	if err := db.Create(&card).Error; err != nil {
+		t.Fatalf("seed card: %v", err)
+	}
+
+	order := models.Order{
+		UserID: user.ID, CardID: card.ID,
+		Status:   models.OrderStatusFailed,
+		Subtotal: 500, Total: 500,
+		ShippingName: "Test", ShippingStreet: "1 Main St",
+		ShippingCity: "PDX", ShippingState: "OR",
+		ShippingZip: "97201", ShippingCountry: "US",
+	}
+	if err := db.Create(&order).Error; err != nil {
+		t.Fatalf("seed order: %v", err)
+	}
+
+	pi := &stripe.PaymentIntent{
+		ID: "pi_test_race",
+		NextAction: &stripe.PaymentIntentNextAction{
+			RedirectToURL: &stripe.PaymentIntentNextActionRedirectToURL{
+				URL: "https://hooks.stripe.com/redirect/test_race",
+			},
+		},
+	}
+
+	handler := NewCartHandler("", "http://localhost", 0)
+	w := httptest.NewRecorder()
+	handler.respondRequiresAction(w, &order, card.StripePaymentID, pi)
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("want 202, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var reloaded models.Order
+	if err := db.First(&reloaded, order.ID).Error; err != nil {
+		t.Fatalf("reload order: %v", err)
+	}
+	if reloaded.Status != models.OrderStatusRequiresAction {
+		t.Fatalf("override failed: want %q, got %q", models.OrderStatusRequiresAction, reloaded.Status)
 	}
 }
