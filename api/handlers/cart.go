@@ -539,9 +539,10 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// respondRequiresAction handles a PaymentIntent that needs 3DS auth
-// The order stays pending. the webhook flips it to paid once the customer
-// completes the bank-hosted challenge, the tui polls /api/v1/orders/{id}/status
+// respondRequiresAction handles a PaymentIntent that needs 3DS auth. The order
+// transitions to requires_action (see caveat #20 in sca-psd2-compliance.md);
+// the payment_intent.succeeded webhook flips it to paid once the customer
+// completes the bank-hosted challenge. The TUI polls /api/v1/orders/{id}/status.
 func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models.Order, paymentMethodID string, pi *stripe.PaymentIntent) {
 	db := database.GetDB()
 

@@ -921,7 +921,7 @@ func TestRetryAuth(t *testing.T) {
 			wantStatus: http.StatusConflict, wantErrCode: "INVALID_STATE",
 		},
 		{
-			name:        "requires_action retryable until cap",
+			name:        "requires_action honors retry cap",
 			ownedByUser: true, seedStatus: models.OrderStatusRequiresAction,
 			seedPayment: "pi_test_req_action_cap", seedEvents: maxAuthIssuances,
 			wantStatus: http.StatusTooManyRequests, wantErrCode: "RETRY_LIMIT",

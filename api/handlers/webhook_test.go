@@ -185,3 +185,40 @@ func TestHandlePaymentIntentFailed_MissingMetadataNoOp(t *testing.T) {
 	h := NewWebhookHandler("", "", "")
 	h.handlePaymentIntentFailed(context.Background(), evt) // must not panic
 }
+
+func TestHandlePaymentIntentSucceeded_RequiresActionFlipsToPaid(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	order := seedOrderForWebhook(t, user.ID, models.OrderStatusRequiresAction, "pi_test_req_action_paid")
+
+	pi := map[string]any{
+		"id":       order.StripePaymentID,
+		"amount":   order.Total,
+		"metadata": map[string]string{"order_id": fmt.Sprintf("%d", order.ID)},
+	}
+	raw, err := json.Marshal(pi)
+	if err != nil {
+		t.Fatalf("marshal pi: %v", err)
+	}
+	evt := stripe.Event{
+		Type: "payment_intent.succeeded",
+		Data: &stripe.EventData{Raw: raw},
+	}
+
+	h := NewWebhookHandler("", "", "")
+	h.handlePaymentIntentSucceeded(context.Background(), evt)
+
+	db := database.GetDB()
+	var reloaded models.Order
+	if err := db.First(&reloaded, order.ID).Error; err != nil {
+		t.Fatalf("reload order: %v", err)
+	}
+	if reloaded.Status != models.OrderStatusPaid {
+		t.Fatalf("status: want %q, got %q", models.OrderStatusPaid, reloaded.Status)
+	}
+	if reloaded.StripePaymentID != order.StripePaymentID {
+		t.Fatalf("stripe_payment_id: want %q, got %q", order.StripePaymentID, reloaded.StripePaymentID)
+	}
+}
