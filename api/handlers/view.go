@@ -54,7 +54,7 @@ func (h *ViewHandler) GetViewInit(w http.ResponseWriter, r *http.Request) {
 		db.Where("cart_id = ? AND quantity > 0", cart.ID).Preload("Coffee").Find(&cartItems)
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"user":      user.ToPublic(),
 		"products":  products,
 		"cart":      cartItems,

@@ -221,7 +221,7 @@ func (h *OrderHandler) RefundOrder(w http.ResponseWriter, r *http.Request) {
 
 	audit.OrderRefunded(userID, order.ID, order.Total, rf.ID)
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"refund_id": rf.ID,
 		"status":    "refunded",
 	})
@@ -287,7 +287,7 @@ func (h *OrderHandler) UpdateTracking(w http.ResponseWriter, r *http.Request) {
 
 	audit.OrderShipped(order.UserID, order.ID, req.Carrier, req.TrackingNumber)
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"order_id":        order.ID,
 		"carrier":         req.Carrier,
 		"tracking_number": req.TrackingNumber,

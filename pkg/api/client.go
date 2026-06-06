@@ -104,16 +104,16 @@ func (c *Client) RefreshToken(fingerprint, clientSecret string) (string, error) 
 
 // APIResponse represents the standard API response format
 type APIResponse struct {
-	Success bool                   `json:"success"`
-	Data    map[string]interface{} `json:"data"`
-	Error   *APIError              `json:"error,omitempty"`
+	Success bool           `json:"success"`
+	Data    map[string]any `json:"data"`
+	Error   *APIError      `json:"error,omitempty"`
 }
 
 // APIError represents an error from the API
 type APIError struct {
-	Code    string                 `json:"code"`
-	Message string                 `json:"message"`
-	Details map[string]interface{} `json:"details,omitempty"`
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 // ProductsResponse represents the products API response
@@ -339,7 +339,7 @@ func (c *Client) GetCart() (*CartData, error) {
 func (c *Client) SetCartItem(coffeeID uint, quantity int) (*CartData, error) {
 	url := fmt.Sprintf("%s/api/v1/cart/item", c.BaseURL)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"coffee_id": coffeeID,
 		"quantity":  quantity,
 	}
@@ -379,7 +379,7 @@ func (c *Client) SetCartItem(coffeeID uint, quantity int) (*CartData, error) {
 func (c *Client) SetCartAddress(addressID uint) error {
 	url := fmt.Sprintf("%s/api/v1/cart/address", c.BaseURL)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"address_id": addressID,
 	}
 	jsonData, err := json.Marshal(body)
@@ -418,7 +418,7 @@ func (c *Client) SetCartAddress(addressID uint) error {
 func (c *Client) SetCartCard(cardID uint) error {
 	url := fmt.Sprintf("%s/api/v1/cart/card", c.BaseURL)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"card_id": cardID,
 	}
 	jsonData, err := json.Marshal(body)

@@ -83,8 +83,8 @@ func TestGetCartEmpty(t *testing.T) {
 		Success bool `json:"success"`
 		Data    struct {
 			Cart struct {
-				Items    []interface{} `json:"items"`
-				Subtotal int           `json:"subtotal"`
+				Items    []any `json:"items"`
+				Subtotal int   `json:"subtotal"`
 			} `json:"cart"`
 		} `json:"data"`
 	}
@@ -110,7 +110,7 @@ func TestSetItemAndGetCart(t *testing.T) {
 	handler := NewCartHandler("", "", 0)
 
 	// Add item (CoffeeID=1, Quantity=2)
-	body, _ := json.Marshal(map[string]interface{}{
+	body, _ := json.Marshal(map[string]any{
 		"coffee_id": 1,
 		"quantity":  2,
 	})
@@ -166,13 +166,13 @@ func TestSetItemUpdateQuantity(t *testing.T) {
 	handler := NewCartHandler("", "", 0)
 
 	// Add item
-	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 2})
+	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 2})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetItem(w, req)
 
 	// Update quantity
-	body, _ = json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 5})
+	body, _ = json.Marshal(map[string]any{"coffee_id": 1, "quantity": 5})
 	req = authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 	w = httptest.NewRecorder()
 	handler.SetItem(w, req)
@@ -211,13 +211,13 @@ func TestSetItemRemove(t *testing.T) {
 	handler := NewCartHandler("", "", 0)
 
 	// Add item
-	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 3})
+	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 3})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetItem(w, req)
 
 	// Remove item (quantity 0)
-	body, _ = json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 0})
+	body, _ = json.Marshal(map[string]any{"coffee_id": 1, "quantity": 0})
 	req = authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 	w = httptest.NewRecorder()
 	handler.SetItem(w, req)
@@ -231,7 +231,7 @@ func TestSetItemRemove(t *testing.T) {
 		Success bool `json:"success"`
 		Data    struct {
 			Cart struct {
-				Items []interface{} `json:"items"`
+				Items []any `json:"items"`
 			} `json:"cart"`
 		} `json:"data"`
 	}
@@ -249,7 +249,7 @@ func TestSetItemInvalidProduct(t *testing.T) {
 
 	handler := NewCartHandler("", "", 0)
 
-	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 999, "quantity": 1})
+	body, _ := json.Marshal(map[string]any{"coffee_id": 999, "quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetItem(w, req)
@@ -266,7 +266,7 @@ func TestSetItemMissingCoffeeID(t *testing.T) {
 
 	handler := NewCartHandler("", "", 0)
 
-	body, _ := json.Marshal(map[string]interface{}{"quantity": 1})
+	body, _ := json.Marshal(map[string]any{"quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetItem(w, req)
@@ -285,7 +285,7 @@ func TestClearCart(t *testing.T) {
 
 	// Add two items
 	for _, coffeeID := range []uint{1, 2} {
-		body, _ := json.Marshal(map[string]interface{}{"coffee_id": coffeeID, "quantity": 1})
+		body, _ := json.Marshal(map[string]any{"coffee_id": coffeeID, "quantity": 1})
 		req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 		w := httptest.NewRecorder()
 		handler.SetItem(w, req)
@@ -309,7 +309,7 @@ func TestClearCart(t *testing.T) {
 		Success bool `json:"success"`
 		Data    struct {
 			Cart struct {
-				Items []interface{} `json:"items"`
+				Items []any `json:"items"`
 			} `json:"cart"`
 		} `json:"data"`
 	}
@@ -339,7 +339,7 @@ func TestSetAddress(t *testing.T) {
 
 	handler := NewCartHandler("", "", 0)
 
-	body, _ := json.Marshal(map[string]interface{}{"address_id": addr.ID})
+	body, _ := json.Marshal(map[string]any{"address_id": addr.ID})
 	req := authRequest("PUT", "/api/v1/cart/address", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetAddress(w, req)
@@ -393,7 +393,7 @@ func TestSetAddressWrongUser(t *testing.T) {
 
 	handler := NewCartHandler("", "", 0)
 
-	body, _ := json.Marshal(map[string]interface{}{"address_id": addr.ID})
+	body, _ := json.Marshal(map[string]any{"address_id": addr.ID})
 	req := authRequest("PUT", "/api/v1/cart/address", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetAddress(w, req)
@@ -421,7 +421,7 @@ func TestSetCard(t *testing.T) {
 
 	handler := NewCartHandler("", "", 0)
 
-	body, _ := json.Marshal(map[string]interface{}{"card_id": card.ID})
+	body, _ := json.Marshal(map[string]any{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetCard(w, req)
@@ -473,7 +473,7 @@ func TestSetCardWrongUser(t *testing.T) {
 
 	handler := NewCartHandler("", "", 0)
 
-	body, _ := json.Marshal(map[string]interface{}{"card_id": card.ID})
+	body, _ := json.Marshal(map[string]any{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetCard(w, req)
@@ -491,7 +491,7 @@ func TestConvertCartMissingAddress(t *testing.T) {
 	handler := NewCartHandler("", "", 0)
 
 	// Add item but no address or card
-	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 1})
+	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetItem(w, req)
@@ -515,14 +515,14 @@ func TestConvertCartMissingCard(t *testing.T) {
 	db := database.GetDB()
 
 	// Add item and address
-	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 1})
+	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetItem(w, req)
 
 	addr := models.Address{UserID: user.ID, Name: "Test", Street: "123 St", City: "PDX", State: "OR", Zip: "97201", Country: "US"}
 	db.Create(&addr)
-	body, _ = json.Marshal(map[string]interface{}{"address_id": addr.ID})
+	body, _ = json.Marshal(map[string]any{"address_id": addr.ID})
 	req = authRequest("PUT", "/api/v1/cart/address", body, user.ID)
 	w = httptest.NewRecorder()
 	handler.SetAddress(w, req)
@@ -563,7 +563,7 @@ func TestMultipleItems(t *testing.T) {
 
 	// Add three different items
 	for i := uint(1); i <= 3; i++ {
-		body, _ := json.Marshal(map[string]interface{}{"coffee_id": i, "quantity": int(i)})
+		body, _ := json.Marshal(map[string]any{"coffee_id": i, "quantity": int(i)})
 		req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 		w := httptest.NewRecorder()
 		handler.SetItem(w, req)
@@ -581,8 +581,8 @@ func TestMultipleItems(t *testing.T) {
 		Success bool `json:"success"`
 		Data    struct {
 			Cart struct {
-				Items    []interface{} `json:"items"`
-				Subtotal int           `json:"subtotal"`
+				Items    []any `json:"items"`
+				Subtotal int   `json:"subtotal"`
 			} `json:"cart"`
 		} `json:"data"`
 	}
@@ -614,13 +614,13 @@ func TestCartIsolation(t *testing.T) {
 	r.Get("/cart", handler.GetCart)
 
 	// User 1 adds item
-	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 5})
+	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 5})
 	req := authRequest("PUT", "/cart/item", body, user1.ID)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	// User 2 adds different item
-	body, _ = json.Marshal(map[string]interface{}{"coffee_id": 2, "quantity": 3})
+	body, _ = json.Marshal(map[string]any{"coffee_id": 2, "quantity": 3})
 	req = authRequest("PUT", "/cart/item", body, user2.ID)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -719,7 +719,7 @@ func TestConvertCartLimit(t *testing.T) {
 
 			handler := NewCartHandler("", "", tc.capCents)
 
-			body, _ := json.Marshal(map[string]interface{}{"coffee_id": 4, "quantity": tc.quantity})
+			body, _ := json.Marshal(map[string]any{"coffee_id": 4, "quantity": tc.quantity})
 			req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
 			w := httptest.NewRecorder()
 			handler.SetItem(w, req)
@@ -728,7 +728,7 @@ func TestConvertCartLimit(t *testing.T) {
 			}
 
 			// set address
-			body, _ = json.Marshal(map[string]interface{}{"address_id": addr.ID})
+			body, _ = json.Marshal(map[string]any{"address_id": addr.ID})
 			req = authRequest("PUT", "/api/v1/cart/address", body, user.ID)
 			w = httptest.NewRecorder()
 			handler.SetAddress(w, req)
@@ -737,7 +737,7 @@ func TestConvertCartLimit(t *testing.T) {
 			}
 
 			// set card
-			body, _ = json.Marshal(map[string]interface{}{"card_id": card.ID})
+			body, _ = json.Marshal(map[string]any{"card_id": card.ID})
 			req = authRequest("PUT", "/api/v1/cart/card", body, user.ID)
 			w = httptest.NewRecorder()
 			handler.SetCard(w, req)
@@ -753,9 +753,9 @@ func TestConvertCartLimit(t *testing.T) {
 			var resp struct {
 				Success bool `json:"success"`
 				Error   struct {
-					Code    string                 `json:"code"`
-					Message string                 `json:"message"`
-					Details map[string]interface{} `json:"details"`
+					Code    string         `json:"code"`
+					Message string         `json:"message"`
+					Details map[string]any `json:"details"`
 				} `json:"error"`
 			}
 			_ = json.NewDecoder(w.Body).Decode(&resp)
@@ -795,7 +795,7 @@ func TestSetCard_ExpiredReturns410(t *testing.T) {
 	}
 
 	handler := NewCartHandler("", "", 0)
-	body, _ := json.Marshal(map[string]interface{}{"card_id": card.ID})
+	body, _ := json.Marshal(map[string]any{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
 	w := httptest.NewRecorder()
 	handler.SetCard(w, req)
@@ -832,7 +832,7 @@ func TestConvertCart_ExpiredReturns410(t *testing.T) {
 
 	db := database.GetDB()
 
-	body, _ := json.Marshal(map[string]interface{}{"coffee_id": 1, "quantity": 1})
+	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 1})
 	req := authRequest("PUT", "/api/v1/vart/item", body, user.ID)
 	w := httptest.NewRecorder()
 	NewCartHandler("", "", 0).SetItem(w, req)
@@ -842,7 +842,7 @@ func TestConvertCart_ExpiredReturns410(t *testing.T) {
 		City: "PDX", State: "OR", Zip: "97201", Country: "US",
 	}
 	db.Create(&addr)
-	body, _ = json.Marshal(map[string]interface{}{"address_id": addr.ID})
+	body, _ = json.Marshal(map[string]any{"address_id": addr.ID})
 	req = authRequest("PUT", "/api/v1/cart/address", body, user.ID)
 	w = httptest.NewRecorder()
 	NewCartHandler("", "", 0).SetAddress(w, req)

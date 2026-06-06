@@ -8,8 +8,8 @@ import (
 
 // SuccessResponse represents a successful API response
 type SuccessResponse struct {
-	Success bool        `json:"success"`
-	Data    interface{} `json:"data"`
+	Success bool `json:"success"`
+	Data    any  `json:"data"`
 }
 
 // ErrorResponse represents an error API response
@@ -20,13 +20,13 @@ type ErrorResponse struct {
 
 // Error contains error details
 type Error struct {
-	Code    string                 `json:"code"`
-	Message string                 `json:"message"`
-	Details map[string]interface{} `json:"details,omitempty"`
+	Code    string         `json:"code"`
+	Message string         `json:"message"`
+	Details map[string]any `json:"details,omitempty"`
 }
 
 // RespondSuccess sends a successful JSON response
-func RespondSuccess(w http.ResponseWriter, statusCode int, data interface{}) {
+func RespondSuccess(w http.ResponseWriter, statusCode int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 
@@ -39,7 +39,7 @@ func RespondSuccess(w http.ResponseWriter, statusCode int, data interface{}) {
 }
 
 // RespondError sends an error JSON response
-func RespondError(w http.ResponseWriter, statusCode int, code, message string, details map[string]interface{}) {
+func RespondError(w http.ResponseWriter, statusCode int, code, message string, details map[string]any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 

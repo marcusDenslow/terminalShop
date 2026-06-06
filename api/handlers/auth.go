@@ -108,7 +108,7 @@ func (h *AuthHandler) GetToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	middleware.RecordAuthAttempt("success")
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"access_token": token,
 		"token_type":   "Bearer",
 		"expires_in":   1800, // 30 minutes in seconds
@@ -146,7 +146,7 @@ func (h *AuthHandler) RegisterWithSSHKey(w http.ResponseWriter, r *http.Request)
 	}
 
 	if len(errors) > 0 {
-		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "validation failed", map[string]interface{}{
+		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "validation failed", map[string]any{
 			"errors": errors,
 		})
 		return
@@ -173,7 +173,7 @@ func (h *AuthHandler) RegisterWithSSHKey(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusCreated, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusCreated, map[string]any{
 		"user": user.ToPublic(),
 	})
 }
@@ -195,7 +195,7 @@ func (h *AuthHandler) GetUserBySSHKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"user": user.ToPublic(),
 	})
 }

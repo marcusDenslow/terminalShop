@@ -58,7 +58,7 @@ func TestGetAddressesEmpty(t *testing.T) {
 	var resp struct {
 		Success bool `json:"success"`
 		Data    struct {
-			Addresses []interface{} `json:"addresses"`
+			Addresses []any `json:"addresses"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {

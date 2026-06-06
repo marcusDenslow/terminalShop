@@ -30,7 +30,7 @@ func (h *ProductHandler) GetProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"products": products,
 	})
 }
@@ -53,7 +53,7 @@ func (h *ProductHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.RespondSuccess(w, http.StatusOK, map[string]interface{}{
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
 		"product": product,
 	})
 }
