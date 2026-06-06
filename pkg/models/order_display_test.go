@@ -14,6 +14,7 @@ func TestOrderDisplayState(t *testing.T) {
 		kind  DisplayKind
 	}{
 		{"pending", Order{Status: OrderStatusPending}, "Awaiting payment", DisplayKindNeutral},
+		{"requires_action", Order{Status: OrderStatusRequiresAction}, "Awaiting authentication", DisplayKindNeutral},
 		{"paid no tracking", Order{Status: OrderStatusPaid}, "Paid * awaiting label", DisplayKindAccent},
 		{"paid with tracking, no event", Order{Status: OrderStatusPaid, TrackingNumber: "12999"}, "Paid", DisplayKindAccent},
 		{"Paid pre-transit", Order{Status: OrderStatusPaid, TrackingNumber: "12999", TrackingStatus: TrackingStatusPreTransit}, "Paid * ready to ship", DisplayKindAccent},

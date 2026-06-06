@@ -10,13 +10,14 @@ import (
 type OrderStatus string
 
 const (
-	OrderStatusPending   OrderStatus = "pending"
-	OrderStatusPaid      OrderStatus = "paid"
-	OrderStatusShipped   OrderStatus = "shipped"
-	OrderStatusDelivered OrderStatus = "delivered"
-	OrderStatusCancelled OrderStatus = "cancelled"
-	OrderStatusRefunded  OrderStatus = "refunded"
-	OrderStatusFailed    OrderStatus = "failed"
+	OrderStatusPending        OrderStatus = "pending"
+	OrderStatusRequiresAction OrderStatus = "requires_action"
+	OrderStatusPaid           OrderStatus = "paid"
+	OrderStatusShipped        OrderStatus = "shipped"
+	OrderStatusDelivered      OrderStatus = "delivered"
+	OrderStatusCancelled      OrderStatus = "cancelled"
+	OrderStatusRefunded       OrderStatus = "refunded"
+	OrderStatusFailed         OrderStatus = "failed"
 )
 
 type TrackingStatus string

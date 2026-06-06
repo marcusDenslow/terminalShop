@@ -539,9 +539,10 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// respondRequiresAction handles a PaymentIntent that needs 3DS auth
-// The order stays pending. the webhook flips it to paid once the customer
-// completes the bank-hosted challenge, the tui polls /api/v1/orders/{id}/status
+// respondRequiresAction handles a PaymentIntent that needs 3DS auth. The order
+// transitions to requires_action (see caveat #20 in sca-psd2-compliance.md);
+// the payment_intent.succeeded webhook flips it to paid once the customer
+// completes the bank-hosted challenge. The TUI polls /api/v1/orders/{id}/status.
 func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models.Order, paymentMethodID string, pi *stripe.PaymentIntent) {
 	db := database.GetDB()
 
@@ -568,13 +569,15 @@ func (h *CartHandler) respondRequiresAction(w http.ResponseWriter, order *models
 		return
 	}
 
-	// Persist the paymentIntent id AND reset status to pending. The
-	// payment_intent.payment_failed webhook from the initial off-session decline
-	// often arrives before this response and flips the order to failed —
-	// override it back so the 3DS-in-flight order shows the correct state.
+	// Persist the paymentIntent id AND set status to requires_action so list
+	// UIs can distinguish "charging" from "awaiting customer 3DS". The
+	// payment_intent.payment_failed webhook from the initial off-session
+	// decline often arrives before this response and flips the order to
+	// failed - override it back so the 3DS-in-flight order shows the
+	// correct state
 	if err := db.Model(order).Updates(map[string]any{
 		"stripe_payment_id": pi.ID,
-		"status":            models.OrderStatusPending,
+		"status":            models.OrderStatusRequiresAction,
 	}).Error; err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to save payment id", nil)
 		return
@@ -658,10 +661,14 @@ func (h *CartHandler) RetryAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only pending (initial attempt mid-flight) and failed (webhook flipped it
-	// after a non-recoverable error) are retryable. paid, refundedn shipped,
-	// delivered, cancelled are terminal - refuse
-	if order.Status != models.OrderStatusPending && order.Status != models.OrderStatusFailed {
+	// Retryable source states:
+	//	pending 		- initial attempt mid-flight (pre-PI confirm page)
+	//	requires_action - customer abandoned or failed the 3DS challenge
+	//	failed 			- webhook flipped after a non-recoverable error
+	// terminal states (paid, shipped, delivered, cancelled, refunded) refuse.
+	if order.Status != models.OrderStatusPending &&
+		order.Status != models.OrderStatusRequiresAction &&
+		order.Status != models.OrderStatusFailed {
 		utils.RespondError(w, http.StatusConflict, "INVALID_STATE", "order is already finalized", nil)
 		return
 	}
