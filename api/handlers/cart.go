@@ -382,6 +382,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	if h.maxOrderCents > 0 && total > h.maxOrderCents {
 		middleware.RecordCartConversion("validation_over_limit")
+		audit.CartRejected(userID, total, h.maxOrderCents)
 		utils.RespondError(w, http.StatusBadRequest, "CART_OVER_LIMIT",
 			fmt.Sprintf("order total must be at most $%.2f", float64(h.maxOrderCents)/100),
 			map[string]any{

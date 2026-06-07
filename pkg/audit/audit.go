@@ -24,6 +24,12 @@ const EventOrderRequiresAction = "order_requires_action"
 // stays decoupled from sweep activity
 const EventOrder3DSAbandoned = "order_3ds_abandoned"
 
+// EventCartRejected is the audit event-type string emitted when the per-order
+// spend cap blocks a checkout BEFORE an order row is created. The event lives
+// in slog only, persist() no-ops on zero order id, which is the correct shape
+// here (cap rejection is upstream of order state). See caveat #13.
+const EventCartRejected = "cart_rejected"
+
 type eventType string
 
 const (
@@ -36,6 +42,7 @@ const (
 	eventOrderFailed            eventType = "order_failed"
 	eventOrderRequiresAction    eventType = EventOrderRequiresAction
 	eventOrder3DSAbandoned      eventType = EventOrder3DSAbandoned
+	eventCartRejected           eventType = EventCartRejected
 	eventOrderRefunded          eventType = "order_refunded"
 	eventPaymentCritical        eventType = "payment_critical"
 	eventLabelPurchased         eventType = "label_purchased"
@@ -46,19 +53,21 @@ const (
 )
 
 type event struct {
-	Event     eventType
-	UserID    uint
-	OrderID   uint
-	CardID    uint
-	Amount    int
-	StripeID  string
-	CardLast4 string
-	CardBrand string
-	Carrier   string
-	Tracking  string
-	Status    string
-	Error     string
-	Actor     string
+	Event      eventType
+	UserID     uint
+	OrderID    uint
+	CardID     uint
+	Amount     int
+	StripeID   string
+	CardLast4  string
+	CardBrand  string
+	Carrier    string
+	Tracking   string
+	Status     string
+	Error      string
+	Actor      string
+	TotalCents int
+	CapCents   int
 }
 
 func (e event) attrs() []any {
@@ -98,6 +107,12 @@ func (e event) attrs() []any {
 	}
 	if e.Actor != "" {
 		a = append(a, "actor", e.Actor)
+	}
+	if e.TotalCents != 0 {
+		a = append(a, "total_cents", e.TotalCents)
+	}
+	if e.CapCents != 0 {
+		a = append(a, "cap_cents", e.CapCents)
 	}
 	return a
 }
@@ -348,4 +363,20 @@ func Order3DSAbandoned(userID, orderID uint, paymentIntentID string) {
 	}
 	slog.Info("audit", e.attrs()...)
 	persist(orderID, eventOrder3DSAbandoned, e)
+}
+
+// CartRejected records the per-order cap blocking a checkout BEFORE an
+// order row is created. Slog-only by design: cap rejection runs upstream
+// of order creation so there is no order id to scope a persistent
+// OrderEvent row. persist() is intentionally not called - future refactors
+// of the persist() zero-id guard must not silently start writing rows here.
+// Counterpart to the validation_over_limit Prometheus counter.
+func CartRejected(userID uint, totalCents, capCents int) {
+	e := event{
+		Event:      eventCartRejected,
+		UserID:     userID,
+		TotalCents: totalCents,
+		CapCents:   capCents,
+	}
+	slog.Info("audit", e.attrs()...)
 }

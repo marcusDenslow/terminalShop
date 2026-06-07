@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -746,6 +747,19 @@ func TestConvertCartLimit(t *testing.T) {
 				t.Fatalf("SetCard: %d %s", w.Code, w.Body.String())
 			}
 
+			// Capture audit slog ONLY for ConvertCart's emit window. Placed
+			// here (not at top of t.Run) so setup INFO logs from
+			// database.Connect/Migrate/Seed don't pollute the buffer with
+			// non-audit records - json.Unmarshal below requires a single
+			// JSON object, not multi-document input. slog.Default is
+			// process-global - do NOT add t.Parallel() to subtests here.
+			var auditBuf bytes.Buffer
+			if tc.expectOverCap {
+				prev := slog.Default()
+				slog.SetDefault(slog.New(slog.NewJSONHandler(&auditBuf, nil)))
+				t.Cleanup(func() { slog.SetDefault(prev) })
+			}
+
 			// Convert
 			req = authRequest("POST", "/api/v1/cart/convert", nil, user.ID)
 			w = httptest.NewRecorder()
@@ -771,6 +785,27 @@ func TestConvertCartLimit(t *testing.T) {
 				}
 				if got, _ := resp.Error.Details["total_cents"].(float64); int(got) != tc.quantity*pinnedPrice {
 					t.Errorf("total_cents in details: want %d, got %v", tc.quantity*pinnedPrice, resp.Error.Details["total_cents"])
+				}
+
+				if auditBuf.Len() == 0 {
+					t.Fatalf("audit: expected cart_rejected slog line, got nothing")
+				}
+
+				var rec map[string]any
+				if err := json.Unmarshal(auditBuf.Bytes(), &rec); err != nil {
+					t.Fatalf("audit: decode slog record: %v\nraw: %s", err, auditBuf.String())
+				}
+				if got := rec["event"]; got != "cart_rejected" {
+					t.Errorf("audit event: want cart_rejected, got %v", got)
+				}
+				if n, _ := rec["user_id"].(float64); uint(n) != user.ID {
+					t.Errorf("audit user_id: want %d, got %v", user.ID, rec["user_id"])
+				}
+				if n, _ := rec["total_cents"].(float64); int(n) != tc.quantity*pinnedPrice {
+					t.Errorf("audit total_cents: want %d, got %v", tc.quantity*pinnedPrice, rec["total_cents"])
+				}
+				if n, _ := rec["cap_cents"].(float64); int(n) != tc.capCents {
+					t.Errorf("audit cap_cents: want %d, got %v", tc.capCents, rec["cap_cents"])
 				}
 			}
 		})
