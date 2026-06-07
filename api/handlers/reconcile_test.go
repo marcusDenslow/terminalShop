@@ -39,7 +39,7 @@ func TestReconcileStale3DSOrders_FlipsAbandonedToFailed(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders("", 30*time.Minute)
+	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -85,7 +85,7 @@ func TestReconcileStale3DSOrders_SkipsRecent(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders("", 30*time.Minute)
+	ReconcileStale3DSOrders(30 * time.Minute)
 
 	if called {
 		t.Fatalf("stripe Get called for in-window row")
@@ -124,7 +124,7 @@ func TestReconcileStale3DSOrders_SkipsWhenStripeSaysSucceeded(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders("", 30*time.Minute)
+	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -161,7 +161,7 @@ func TestReconcileStale3DSOrders_GuardsAgainstWebhookRace(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders("", 30*time.Minute)
+	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -196,7 +196,7 @@ func TestReconcileStale3DSOrders_FlipsCanceledPI(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders("", 30*time.Minute)
+	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -232,7 +232,7 @@ func TestReconcileStale3DSOrders_DoesNotConsumeRetryCap(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders("", 30*time.Minute)
+	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var retryCount int64
 	if err := db.Model(&models.OrderEvent{}).
@@ -275,7 +275,7 @@ func TestReconcileStale3DSOrders_SkipsTransitioningStatuses(t *testing.T) {
 				return &stripe.PaymentIntent{ID: id, Status: tc.status}, nil
 			}
 
-			ReconcileStale3DSOrders("", 30*time.Minute)
+			ReconcileStale3DSOrders(30 * time.Minute)
 
 			var reloaded models.Order
 			if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -312,7 +312,7 @@ func TestReconcileStale3DSOrders_SkipsUnknownStatus(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders("", 30*time.Minute)
+	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -344,7 +344,7 @@ func TestReconcileStale3DSOrders_SkipsOnStripeError(t *testing.T) {
 		return nil, fmt.Errorf("simulated stripe outage")
 	}
 
-	ReconcileStale3DSOrders("", 30*time.Minute)
+	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -381,7 +381,7 @@ func TestReconcileStale3DSOrders_SkipsEmptyPaymentIntentID(t *testing.T) {
 		return &stripe.PaymentIntent{Status: stripe.PaymentIntentStatusRequiresPaymentMethod}, nil
 	}
 
-	ReconcileStale3DSOrders("", 30*time.Minute)
+	ReconcileStale3DSOrders(30 * time.Minute)
 
 	if called {
 		t.Fatalf("stripe Get called for empty-PI row")

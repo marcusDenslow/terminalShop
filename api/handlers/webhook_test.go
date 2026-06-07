@@ -74,7 +74,7 @@ func TestHandlePaymentIntentFailed_RequiresActionFlipsToFailed(t *testing.T) {
 
 	order := seedOrderForWebhook(t, user.ID, models.OrderStatusRequiresAction, "pi_test_req_action_failed")
 
-	h := NewWebhookHandler("", "", "")
+	h := NewWebhookHandler("", "")
 	evt := buildPaymentFailedEvent(t, order.StripePaymentID, order.ID, "card_declined")
 	h.handlePaymentIntentFailed(context.Background(), evt)
 
@@ -100,7 +100,7 @@ func TestHandlePaymentIntentFailed_RequiresActionAuthRequiredShortCircuits(t *te
 
 	order := seedOrderForWebhook(t, user.ID, models.OrderStatusRequiresAction, "pi_test_req_action_authreq")
 
-	h := NewWebhookHandler("", "", "")
+	h := NewWebhookHandler("", "")
 	evt := buildPaymentFailedEvent(t, order.StripePaymentID, order.ID, "authentication_required")
 	h.handlePaymentIntentFailed(context.Background(), evt)
 
@@ -124,7 +124,7 @@ func TestHandlePaymentIntentFailed_PendingStillFlips(t *testing.T) {
 
 	order := seedOrderForWebhook(t, user.ID, models.OrderStatusPending, "pi_test_pending_failed")
 
-	h := NewWebhookHandler("", "", "")
+	h := NewWebhookHandler("", "")
 	evt := buildPaymentFailedEvent(t, order.StripePaymentID, order.ID, "card_declined")
 	h.handlePaymentIntentFailed(context.Background(), evt)
 
@@ -150,7 +150,7 @@ func TestHandlePaymentIntentFailed_PaidNotTouched(t *testing.T) {
 
 	order := seedOrderForWebhook(t, user.ID, models.OrderStatusPaid, "pi_test_paid_untouched")
 
-	h := NewWebhookHandler("", "", "")
+	h := NewWebhookHandler("", "")
 	evt := buildPaymentFailedEvent(t, order.StripePaymentID, order.ID, "card_declined")
 	h.handlePaymentIntentFailed(context.Background(), evt)
 
@@ -182,7 +182,7 @@ func TestHandlePaymentIntentFailed_MissingMetadataNoOp(t *testing.T) {
 		Data: &stripe.EventData{Raw: raw},
 	}
 
-	h := NewWebhookHandler("", "", "")
+	h := NewWebhookHandler("", "")
 	h.handlePaymentIntentFailed(context.Background(), evt) // must not panic
 }
 
@@ -207,7 +207,7 @@ func TestHandlePaymentIntentSucceeded_RequiresActionFlipsToPaid(t *testing.T) {
 		Data: &stripe.EventData{Raw: raw},
 	}
 
-	h := NewWebhookHandler("", "", "")
+	h := NewWebhookHandler("", "")
 	h.handlePaymentIntentSucceeded(context.Background(), evt)
 
 	db := database.GetDB()

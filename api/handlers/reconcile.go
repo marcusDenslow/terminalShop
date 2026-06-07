@@ -26,7 +26,7 @@ func reconcileLog() *slog.Logger { return slog.With("component", "reconcile") }
 // and checks whether Stripe has a succeeded PaymentIntent for them. This fixes
 // the case where the server crashed after charging but before the DB transaction
 // completed.
-func ReconcileOrders(_ string) {
+func ReconcileOrders() {
 	db := database.GetDB()
 
 	var orders []models.Order
@@ -88,11 +88,8 @@ func ReconcileOrders(_ string) {
 // payment_intent.succeeded webhook is respected. Deliberately separate
 // from ReconcileOrders: the empty-PI predicate there is load-bearing for
 // the crash-mid-create case (see sca-psd2-compliance.md caveat #20).
-//
-// stripeKey is unused; stripe.Key is wired once in main.go at startup
-// so concurrent reconcilers don't race on the package-level global. Parameter
-// kept to match the other reconciler's signature for the ticker call site.
-func ReconcileStale3DSOrders(_ string, threshold time.Duration) {
+// stripe.Key is wired once at startup in api/main.go.
+func ReconcileStale3DSOrders(threshold time.Duration) {
 	db := database.GetDB()
 
 	var orders []models.Order
@@ -181,7 +178,7 @@ func flipStale3DSToFailed(db *gorm.DB, order *models.Order, stripeStatus string)
 // Read paths filter out expired rows so users never see them; this job drives
 // the Stripe detach + audit + physical row delete out of band so request
 // handlers never block on Stripe API calls during a card sweep.
-func ReconcileExpiredCards(stripeKey string) {
+func ReconcileExpiredCards() {
 	db := database.GetDB()
 
 	var cards []models.Card
@@ -198,7 +195,7 @@ func ReconcileExpiredCards(stripeKey string) {
 
 	reconcileLog().Info("expiring inactive saved cards", "count", len(cards))
 	for i := range cards {
-		if err := expireStoredCard(db, &cards[i], stripeKey); err != nil {
+		if err := expireStoredCard(db, &cards[i]); err != nil {
 			reconcileLog().Error("expire card failed", "card_id", cards[i].ID, "error", err)
 		}
 	}

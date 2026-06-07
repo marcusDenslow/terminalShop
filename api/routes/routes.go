@@ -16,7 +16,6 @@ import (
 // SetupRoutes configures all API routes
 func SetupRoutes(
 	version string,
-	stripeSecretKey string,
 	stripeWebhookSecret string,
 	jwtManager *auth.JWTManager,
 	authFingerprintKey string,
@@ -47,12 +46,12 @@ func SetupRoutes(
 	healthHandler := handlers.NewHealthHandler(version)
 	productHandler := handlers.NewProductHandler()
 	authHandler := handlers.NewAuthHandler(jwtManager, authFingerprintKey)
-	cartHandler := handlers.NewCartHandler(stripeSecretKey, appURL, maxOrderCents)
-	cardHandler := handlers.NewCardHandler(stripeSecretKey, appURL)
-	orderHandler := handlers.NewOrderHandler(stripeSecretKey, bringAPIUID, bringAPIKey, bringCustomerNumber)
+	cartHandler := handlers.NewCartHandler(appURL, maxOrderCents)
+	cardHandler := handlers.NewCardHandler(appURL)
+	orderHandler := handlers.NewOrderHandler(bringAPIUID, bringAPIKey, bringCustomerNumber)
 	addressHandler := handlers.NewAddressHandler(shippoAPIKey, bringAPIUID, bringAPIKey)
 	viewHandler := handlers.NewViewHandler()
-	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, stripeSecretKey, shippoWebhookSecret)
+	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, shippoWebhookSecret)
 	slackHandler := handlers.NewSlackHandler(slackSigningSecret, adminAPIKey, apiPort, shippoWebhookSecret)
 
 	// Short payment redirect and success page — no auth required.

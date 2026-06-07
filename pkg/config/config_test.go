@@ -1,8 +1,22 @@
 package config
 
 import (
+	"io"
+	"log/slog"
+	"os"
 	"testing"
 )
+
+// TestMain silences the package's slog warnings so the negative/garbage
+// env-var cases plus the sub-10 valid-minimum case don't spam test output.
+// The actual fall-back behavior is still asserted via the case tables.
+func TestMain(m *testing.M) {
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	code := m.Run()
+	slog.SetDefault(prev)
+	os.Exit(code)
+}
 
 func TestLoadMaxOrderCents(t *testing.T) {
 	cases := []struct {
@@ -49,7 +63,7 @@ func TestLoadAbandoned3DSThresholdMinutes(t *testing.T) {
 		{"zero falls back to default", "0", 30},
 		{"negative falls back to default", "-5", 30},
 		{"garbage falls back to default", "half an hour", 30},
-		{"valid minimum", "1", 1},
+		{"valid minimum (warns)", "1", 1},
 	}
 
 	for _, tc := range cases {

@@ -53,6 +53,8 @@ func main() {
 
 	// wire the stripe SDK's package-level key once at startup so concurrent
 	// reconcilers and the request path don't race on stripe.Key writes.
+	// NOTE: assumes single-process — if you ever embed both the SSH and API
+	// binaries together, the last writer wins and one of them silently breaks.
 	stripe.Key = cfg.StripeSecretKey
 
 	// Seed database with initial data
@@ -77,7 +79,7 @@ func main() {
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, 30*time.Minute)
 
 	// Setup routes
-	router := routes.SetupRoutes(version, cfg.StripeSecretKey, cfg.StripeWebhookSecret, jwtManager, cfg.AuthFingerprintKey, cfg.ShippoAPIKey, cfg.BringAPIUID, cfg.BringAPIKey, cfg.BringCustomerNumber, cfg.ShippoWebhookSecret, cfg.AppURL, cfg.SlackSigningSecret, cfg.AdminAPIKey, cfg.APIPort, cfg.MaxOrderCents)
+	router := routes.SetupRoutes(version, cfg.StripeWebhookSecret, jwtManager, cfg.AuthFingerprintKey, cfg.ShippoAPIKey, cfg.BringAPIUID, cfg.BringAPIKey, cfg.BringCustomerNumber, cfg.ShippoWebhookSecret, cfg.AppURL, cfg.SlackSigningSecret, cfg.AdminAPIKey, cfg.APIPort, cfg.MaxOrderCents)
 
 	// Create HTTP server
 	server := &http.Server{
@@ -112,7 +114,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				handlers.ReconcileOrders(cfg.StripeSecretKey)
+				handlers.ReconcileOrders()
 			case <-ctx.Done():
 				return
 			}
@@ -143,7 +145,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				handlers.ReconcileExpiredCards(cfg.StripeSecretKey)
+				handlers.ReconcileExpiredCards()
 			case <-ctx.Done():
 				return
 			}
@@ -157,7 +159,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				handlers.ReconcileStale3DSOrders(cfg.StripeSecretKey, threshold)
+				handlers.ReconcileStale3DSOrders(threshold)
 			case <-ctx.Done():
 				return
 			}

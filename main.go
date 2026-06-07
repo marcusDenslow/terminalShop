@@ -32,7 +32,6 @@ func listenHost() string {
 var (
 	apiURL             string
 	authFingerprintKey string
-	stripePublicKey    string
 )
 
 func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
@@ -44,7 +43,7 @@ func teaHandler(s ssh.Session) (tea.Model, []tea.ProgramOption) {
 		pubKeyStr = auth.FormatSSHPublicKey(pubKey)
 	}
 
-	m := tui.NewModelWithAuth(fingerprint, pubKeyStr, apiURL, authFingerprintKey, stripePublicKey)
+	m := tui.NewModelWithAuth(fingerprint, pubKeyStr, apiURL, authFingerprintKey)
 	return m, nil
 }
 
@@ -58,12 +57,13 @@ func main() {
 	// Set API URL and auth key from config for TUI connections
 	apiURL = cfg.APIURL
 	authFingerprintKey = cfg.AuthFingerprintKey
-	stripePublicKey = cfg.StripePublicKey
 
 	// Wire the publishable key into stripe-go's package-level global once.
 	// TUI uses the legacy Tokens API (stripetoken.New) which accepts the
 	// publishable key; per-session writes would race across concurrent SSH
 	// sessions even though they'd all write the same value.
+	// NOTE: assumes single-process — if you ever embed both the SSH and API
+	// binaries together, the last writer wins and one of them silently breaks.
 	stripe.Key = cfg.StripePublicKey
 
 	log.Printf("TUI will connect to API at: %s", apiURL)

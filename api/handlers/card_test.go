@@ -46,7 +46,7 @@ func TestGetCards_FiltersExpiredRows(t *testing.T) {
 		}
 	}
 
-	handler := NewCardHandler("", "")
+	handler := NewCardHandler("")
 	req := authRequest("GET", "/api/v1/cards", nil, user.ID)
 	w := httptest.NewRecorder()
 	handler.GetCards(w, req)
@@ -91,7 +91,7 @@ func TestSetDefaultCard_ExpiredReturns410(t *testing.T) {
 		t.Fatalf("seed card: %v", err)
 	}
 
-	handler := NewCardHandler("", "")
+	handler := NewCardHandler("")
 	idStr := strconv.FormatUint(uint64(card.ID), 10)
 	req := authRequest("PUT", "/api/v1/cards/"+idStr+"/default", nil, user.ID)
 	routeCtx := chi.NewRouteContext()
