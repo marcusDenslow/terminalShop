@@ -24,12 +24,12 @@ func TestLoadMaxOrderCents(t *testing.T) {
 		env  string // "" means unset
 		want int
 	}{
-		{"empty falls back to default", "", 20000},
+		{"empty falls back to default", "", 50000},
 		{"explicit zero disables", "0", 0},
-		{"valid override", "50000", 50000},
-		{"negative falls back to default", "-1", 20000},
-		{"garbage falls back to default", "two hundred", 20000},
-		{"empty after trim falls back to default", "", 20000},
+		{"valid override", "30000", 30000},
+		{"negative falls back to default", "-1", 50000},
+		{"garbage falls back to default", "two hundred", 50000},
+		{"empty after trim falls back to default", "", 50000},
 	}
 
 	for _, tc := range cases {

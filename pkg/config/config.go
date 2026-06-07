@@ -137,11 +137,13 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-// loadMaxOrderCents reads MAX_ORDER_CENTS. Default $200. Explicit 0 disables
-// the cap. Garbage or negative values fall back to the default with a warning
-// so an operator typo cannot silently disable a fraud control.
+// loadMaxOrderCents reads MAX_ORDER_CENTS. Default $500 — aligns with the
+// PSD2 TRA exemption ceiling (above this, Stripe always requests SCA, so the
+// cap is only meaningful below it). Explicit 0 disables the cap. Garbage or
+// negative values fall back to the default with a warning so an operator
+// typo cannot silently disable a fraud control.
 func loadMaxOrderCents() int {
-	const defaultCap = 20000
+	const defaultCap = 50000
 	raw := os.Getenv("MAX_ORDER_CENTS")
 	if raw == "" {
 		return defaultCap
