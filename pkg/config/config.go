@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
@@ -165,7 +166,8 @@ func loadAbandoned3DSThresholdMinutes() int {
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n < 1 {
-		fmt.Printf("WARNING: ABANDONED_3DS_THRESHOLD_MINUTES=%q invalid, falling back to default %d\n", raw, defaultMinutes)
+		slog.Warn("invalid ABANDONED_3DS_THRESHOLD_MINUTES, falling back",
+			"raw", raw, "default", defaultMinutes)
 		return defaultMinutes
 	}
 	return n

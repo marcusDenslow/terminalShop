@@ -19,6 +19,8 @@ import (
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/observability"
 	"terminalShop/pkg/stripeclient"
+
+	"github.com/stripe/stripe-go/v78"
 )
 
 const version = "v0.1.0"
@@ -48,6 +50,12 @@ func main() {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
 	audit.SetDB(db)
+
+	// wire the stripe SDK's package-level key once so concurrent reconcilers
+	// and the request path dont race on stripe.Key writes (handler still
+	// re-assign per request because they predate this init - pre-exiting
+	// debt, but no NEW writer is added on the reconciler path now)
+	stripe.Key = cfg.StripeSecretKey
 
 	// Seed database with initial data
 	if err := database.Seed(db); err != nil {

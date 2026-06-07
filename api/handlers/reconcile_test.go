@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -235,6 +236,144 @@ func TestReconcileStale3DSOrders_DoesNotConsumeRetryCap(t *testing.T) {
 	}
 	if retryCount != 0 {
 		t.Fatalf("sweep must not emit EventOrderRequiresAction; got %d", retryCount)
+	}
+}
+
+// TestReconcileStale3DSOrders_SkipsTransitioningStatuses covers the
+// processing and requires_capture branches: Stripe still owns the PI's
+// next move, so the sweep must not flip even past the threshold.
+func TestReconcileStale3DSOrders_SkipsTransitioningStatuses(t *testing.T) {
+	cases := []struct {
+		name   string
+		status stripe.PaymentIntentStatus
+	}{
+		{"processing", stripe.PaymentIntentStatusProcessing},
+		{"requires_capture", stripe.PaymentIntentStatusRequiresCapture},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			testDB, user := setupCartTestDB(t)
+			defer func() { _ = os.Remove(testDB) }()
+			defer database.ResetForTesting()
+
+			db := database.GetDB()
+			order := seedRequiresActionOrder(t, user.ID,
+				"pi_transitioning_"+tc.name, time.Now().Add(-1*time.Hour))
+
+			orig := paymentIntentGetFn
+			defer func() { paymentIntentGetFn = orig }()
+			paymentIntentGetFn = func(id string, _ *stripe.PaymentIntentParams) (*stripe.PaymentIntent, error) {
+				return &stripe.PaymentIntent{ID: id, Status: tc.status}, nil
+			}
+
+			ReconcileStale3DSOrders("", 30*time.Minute)
+
+			var reloaded models.Order
+			if err := db.First(&reloaded, order.ID).Error; err != nil {
+				t.Fatalf("reload: %v", err)
+			}
+			if reloaded.Status != models.OrderStatusRequiresAction {
+				t.Fatalf("%s must stay requires_action; got %q", tc.name, reloaded.Status)
+			}
+		})
+	}
+}
+
+// TestReconcileStale3DSOrders_SkipsUnknownStatus covers the switch's default
+// arm: an unrecognized Stripe status logs and skips rather than guessing a
+// transition. Defends against new PI statuses appearing in future SDKs.
+func TestReconcileStale3DSOrders_SkipsUnknownStatus(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+	order := seedRequiresActionOrder(t, user.ID, "pi_unknown_status",
+		time.Now().Add(-1*time.Hour))
+
+	orig := paymentIntentGetFn
+	defer func() { paymentIntentGetFn = orig }()
+	paymentIntentGetFn = func(id string, _ *stripe.PaymentIntentParams) (*stripe.PaymentIntent, error) {
+		return &stripe.PaymentIntent{
+			ID:     id,
+			Status: stripe.PaymentIntentStatus("some_new_future_status"),
+		}, nil
+	}
+
+	ReconcileStale3DSOrders("", 30*time.Minute)
+
+	var reloaded models.Order
+	if err := db.First(&reloaded, order.ID).Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.Status != models.OrderStatusRequiresAction {
+		t.Fatalf("unknown status must not flip; got %q", reloaded.Status)
+	}
+}
+
+// TestReconcileStale3DSOrders_SkipsOnStripeError verifies a Stripe Get
+// failure logs and leaves the row alone. Transient network errors must not
+// look like an abandoned 3DS.
+func TestReconcileStale3DSOrders_SkipsOnStripeError(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+	order := seedRequiresActionOrder(t, user.ID, "pi_stripe_error",
+		time.Now().Add(-1*time.Hour))
+
+	orig := paymentIntentGetFn
+	defer func() { paymentIntentGetFn = orig }()
+	paymentIntentGetFn = func(_ string, _ *stripe.PaymentIntentParams) (*stripe.PaymentIntent, error) {
+		return nil, fmt.Errorf("simulated stripe outage")
+	}
+
+	ReconcileStale3DSOrders("", 30*time.Minute)
+
+	var reloaded models.Order
+	if err := db.First(&reloaded, order.ID).Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.Status != models.OrderStatusRequiresAction {
+		t.Fatalf("stripe error must not flip; got %q", reloaded.Status)
+	}
+}
+
+// TestReconcileStale3DSOrders_SkipsEmptyPaymentIntentID guards the
+// defensive empty-PI short-circuit: even past the threshold, a row missing
+// stripe_payment_id must not reach paymentintent.Get (which would 4xx).
+func TestReconcileStale3DSOrders_SkipsEmptyPaymentIntentID(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+	order := seedRequiresActionOrder(t, user.ID, "pi_will_be_blanked",
+		time.Now().Add(-1*time.Hour))
+	if err := db.Model(&order).UpdateColumn("stripe_payment_id", "").Error; err != nil {
+		t.Fatalf("blank PI id: %v", err)
+	}
+
+	called := false
+	orig := paymentIntentGetFn
+	defer func() { paymentIntentGetFn = orig }()
+	paymentIntentGetFn = func(_ string, _ *stripe.PaymentIntentParams) (*stripe.PaymentIntent, error) {
+		called = true
+		return &stripe.PaymentIntent{Status: stripe.PaymentIntentStatusRequiresPaymentMethod}, nil
+	}
+
+	ReconcileStale3DSOrders("", 30*time.Minute)
+
+	if called {
+		t.Fatalf("stripe Get called for empty-PI row")
+	}
+	var reloaded models.Order
+	if err := db.First(&reloaded, order.ID).Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reloaded.Status != models.OrderStatusRequiresAction {
+		t.Fatalf("empty-PI guard must leave status alone; got %q", reloaded.Status)
 	}
 }
 
