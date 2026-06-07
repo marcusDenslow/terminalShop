@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"terminalShop/pkg/audit"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
 	"terminalShop/pkg/notify"
@@ -14,14 +15,18 @@ import (
 	"gorm.io/gorm"
 )
 
+// paymentIntentGetFn lets tests stub the Stripe Get call without spinning
+// up an httptest backend. Production callers go straight through to the
+// real paymentintent.Get.
+var paymentIntentGetFn = paymentintent.Get
+
 func reconcileLog() *slog.Logger { return slog.With("component", "reconcile") }
 
 // ReconcileOrders finds pending orders with no Stripe ID older than 10 minutes
 // and checks whether Stripe has a succeeded PaymentIntent for them. This fixes
 // the case where the server crashed after charging but before the DB transaction
 // completed.
-func ReconcileOrders(stripeKey string) {
-	stripe.Key = stripeKey
+func ReconcileOrders() {
 	db := database.GetDB()
 
 	var orders []models.Order
@@ -77,11 +82,103 @@ func ReconcileOrders(stripeKey string) {
 	}
 }
 
+// ReconcileStale3DSOrders flips requires_action orders that have been
+// awaiting the customer's 3DS challenge longer than threshold to failed,
+// after re-checking the PaymentIntent with Stripe so a late
+// payment_intent.succeeded webhook is respected. Deliberately separate
+// from ReconcileOrders: the empty-PI predicate there is load-bearing for
+// the crash-mid-create case (see sca-psd2-compliance.md caveat #20).
+// stripe.Key is wired once at startup in api/main.go.
+func ReconcileStale3DSOrders(threshold time.Duration) {
+	db := database.GetDB()
+
+	var orders []models.Order
+	// Predicate keys off updated_at, not created_at: respondRequiresAction
+	// and RetryAuth both bump updated_at via GORM auto-stamping, so every
+	// customer-driven retry extends the grace window. Intentional - sweeping
+	// a row the customer just re-armed would race the new challenge.
+	cutoff := time.Now().Add(-threshold)
+	if err := db.Where("status = ? AND updated_at < ?",
+		models.OrderStatusRequiresAction, cutoff).Find(&orders).Error; err != nil {
+		reconcileLog().Error("stale 3ds scan failed", "error", err)
+		return
+	}
+	if len(orders) == 0 {
+		return
+	}
+
+	reconcileLog().Info("checking stale requires_action orders", "count", len(orders))
+
+	for i := range orders {
+		order := &orders[i]
+		if order.StripePaymentID == "" {
+			// respondRequiresAction writes stripe_payment_id and status in
+			// one UPDATE so this should be unreachable; guard anyway so a
+			// future regression noisily logs instead of 4xx'ing Stripe.
+			reconcileLog().Warn("requires_action row missing PI id; skipping", "order_id", order.ID)
+			continue
+		}
+		actual, err := paymentIntentGetFn(order.StripePaymentID, nil)
+		if err != nil {
+			reconcileLog().Error("stripe get failed",
+				"order_id", order.ID, "pi", order.StripePaymentID, "error", err)
+			continue
+		}
+		switch actual.Status {
+		case stripe.PaymentIntentStatusSucceeded:
+			// Stripe says paid but our row still says requires_action, the
+			// payment_intent.succeeded webhook has not landed yet (or was
+			//  dropped). Defer to handlePaymentIntentsucceeded; it owns the
+			// paid transition + cart cleanup atomically. The next sweep
+			// tick re-checks and surfaces the dropped webhook if it persists
+			reconcileLog().Warn("stripe reports succeeded for requires_action row; deferring to webhook",
+				"order_id", order.ID, "pi", order.StripePaymentID)
+		case stripe.PaymentIntentStatusProcessing,
+			stripe.PaymentIntentStatusRequiresCapture:
+			reconcileLog().Info("payment intent still transitioning; skipping",
+				"order_id", order.ID, "pi", order.StripePaymentID, "stripe_status", string(actual.Status))
+		case stripe.PaymentIntentStatusRequiresAction,
+			stripe.PaymentIntentStatusRequiresPaymentMethod,
+			stripe.PaymentIntentStatusRequiresConfirmation,
+			stripe.PaymentIntentStatusCanceled:
+			flipStale3DSToFailed(db, order, string(actual.Status))
+		default:
+			reconcileLog().Warn("unrecognized stripe status; skipping",
+				"order_id", order.ID, "pi", order.StripePaymentID, "stripe_status", string(actual.Status))
+		}
+	}
+}
+
+// flipStale3DSToFailed transitions a single stale requires_action row
+// to failed. The UPDATE is conditional on status = requires_action so a
+// payment_intent.succeeded webhook that landed between the stripe get and
+// this write (caveat #20 race) wins and we silently no-op
+func flipStale3DSToFailed(db *gorm.DB, order *models.Order, stripeStatus string) {
+	// Map form so the single-field UPDATE is explicit at the call site.
+	// GORM still auto-stamps updated_at; the row exits the sweep predicate
+	// naturally on the next tick because status no longer matches anyway.
+	res := db.Model(&models.Order{}).
+		Where("id = ? AND status = ?", order.ID, models.OrderStatusRequiresAction).
+		Updates(map[string]any{"status": models.OrderStatusFailed})
+	if res.Error != nil {
+		reconcileLog().Error("flip stale 3ds failed", "order_id", order.ID, "error", res.Error)
+		return
+	}
+	if res.RowsAffected == 0 {
+		reconcileLog().Info("stale 3ds row already transitioned; sweep no-op",
+			"order_id", order.ID)
+		return
+	}
+	audit.Order3DSAbandoned(order.UserID, order.ID, order.StripePaymentID)
+	reconcileLog().Info("3ds abandoned order flipped to failed",
+		"order_id", order.ID, "pi", order.StripePaymentID, "stripe_status", stripeStatus)
+}
+
 // ReconcileExpiredCards removes saved cards whose retention deadline elapsed.
 // Read paths filter out expired rows so users never see them; this job drives
 // the Stripe detach + audit + physical row delete out of band so request
 // handlers never block on Stripe API calls during a card sweep.
-func ReconcileExpiredCards(stripeKey string) {
+func ReconcileExpiredCards() {
 	db := database.GetDB()
 
 	var cards []models.Card
@@ -98,7 +195,7 @@ func ReconcileExpiredCards(stripeKey string) {
 
 	reconcileLog().Info("expiring inactive saved cards", "count", len(cards))
 	for i := range cards {
-		if err := expireStoredCard(db, &cards[i], stripeKey); err != nil {
+		if err := expireStoredCard(db, &cards[i]); err != nil {
 			reconcileLog().Error("expire card failed", "card_id", cards[i].ID, "error", err)
 		}
 	}

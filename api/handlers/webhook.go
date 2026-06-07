@@ -28,13 +28,13 @@ func webhookLog() *slog.Logger { return slog.With("component", "webhook") }
 // WebhookHandler handles inbound Stripe webhook events.
 type WebhookHandler struct {
 	webhookSecret string
-	stripeKey     string
 	shippoSecret  string
 }
 
-// NewWebhookHandler creates a new webhook handler.
-func NewWebhookHandler(webhookSecret, stripeKey, shippoSecret string) *WebhookHandler {
-	return &WebhookHandler{webhookSecret: webhookSecret, stripeKey: stripeKey, shippoSecret: shippoSecret}
+// NewWebhookHandler creates a new webhook handler. Stripe credentials are
+// wired once at startup via stripe.Key in api/main.go.
+func NewWebhookHandler(webhookSecret, shippoSecret string) *WebhookHandler {
+	return &WebhookHandler{webhookSecret: webhookSecret, shippoSecret: shippoSecret}
 }
 
 // HandleStripe validates the Stripe signature and routes the event.
@@ -211,8 +211,6 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(ctx context.Context, eve
 		webhookLog().Warn("checkout session missing setup_intent or customer")
 		return
 	}
-
-	stripe.Key = h.stripeKey
 
 	si, err := setupintent.Get(sess.SetupIntent.ID, nil)
 	if err != nil {

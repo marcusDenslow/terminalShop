@@ -60,7 +60,7 @@ func contextWithRoute(ctx context.Context, routeCtx *chi.Context) context.Contex
 func TestCreateRefundRequestRequiresMessageForOther(t *testing.T) {
 	user := setupOrderTestDB(t)
 
-	handler := NewOrderHandler("", "", "", "")
+	handler := NewOrderHandler("", "", "")
 	body := []byte(`{"reason":"Other","message":"   "}`)
 	req := orderRequest("POST", "/api/v1/orders/1/refund-request", body, user.ID, "1")
 	w := httptest.NewRecorder()
@@ -100,7 +100,7 @@ func TestCreateRefundRequestRejectsInvalidOrderState(t *testing.T) {
 		t.Fatalf("failed to create order: %v", err)
 	}
 
-	handler := NewOrderHandler("", "", "", "")
+	handler := NewOrderHandler("", "", "")
 	body := []byte(`{"reason":"Quality issue","message":""}`)
 	req := orderRequest("POST", "/api/v1/orders/1/refund-request", body, user.ID, fmt.Sprintf("%d", order.ID))
 	w := httptest.NewRecorder()
@@ -142,7 +142,7 @@ func TestCreateRefundRequestEnforcesCooldown(t *testing.T) {
 		t.Fatalf("failed to create order: %v", err)
 	}
 
-	handler := NewOrderHandler("", "", "", "")
+	handler := NewOrderHandler("", "", "")
 	body := []byte(`{"reason":"Quality issue","message":""}`)
 	req := orderRequest("POST", "/api/v1/orders/1/refund-request", body, user.ID, fmt.Sprintf("%d", order.ID))
 	w := httptest.NewRecorder()

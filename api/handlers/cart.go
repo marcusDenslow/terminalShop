@@ -25,7 +25,6 @@ import (
 )
 
 type CartHandler struct {
-	stripeKey     string
 	appURL        string
 	maxOrderCents int
 }
@@ -36,9 +35,10 @@ type CartHandler struct {
 // audit rows (audit.EventOrderRequiresAction) so the cap stays migration-free.
 const maxAuthIssuances = 4
 
-// NewCartHandler creates a new cart handler with the Stripe secret key
-func NewCartHandler(stripeSecretKey, appURL string, maxOrderCents int) *CartHandler {
-	return &CartHandler{stripeKey: stripeSecretKey, appURL: appURL, maxOrderCents: maxOrderCents}
+// NewCartHandler creates a new cart handler. Stripe credentials are wired
+// once at startup via stripe.Key in api/main.go.
+func NewCartHandler(appURL string, maxOrderCents int) *CartHandler {
+	return &CartHandler{appURL: appURL, maxOrderCents: maxOrderCents}
 }
 
 // getOrCreateCart finds the users cart or creates one.
@@ -219,7 +219,7 @@ func (h *CartHandler) SetCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if card.IsStorageExpired(time.Now()) {
-		if err := expireStoredCard(db, &card, h.stripeKey); err != nil {
+		if err := expireStoredCard(db, &card); err != nil {
 			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
 			return
 		}
@@ -315,7 +315,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	if card.IsStorageExpired(time.Now()) {
 		middleware.RecordCartConversion("validation_card_expired")
-		if err := expireStoredCard(db, &card, h.stripeKey); err != nil {
+		if err := expireStoredCard(db, &card); err != nil {
 			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
 			return
 		}
@@ -329,8 +329,6 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		utils.RespondError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found", nil)
 		return
 	}
-
-	stripe.Key = h.stripeKey
 
 	// Ensure the user has a Stripe customer (shared helper with cards handler).
 	if err := ensureStripeCustomer(db, &user); err != nil {
@@ -706,15 +704,13 @@ func (h *CartHandler) RetryAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if card.IsStorageExpired(time.Now()) {
-		if err := expireStoredCard(db, &card, h.stripeKey); err != nil {
+		if err := expireStoredCard(db, &card); err != nil {
 			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
 			return
 		}
 		respondCardStorageExpired(w)
 		return
 	}
-
-	stripe.Key = h.stripeKey
 
 	stripeStart := time.Now()
 	confirmed, cerr := paymentintent.Confirm(order.StripePaymentID, &stripe.PaymentIntentConfirmParams{

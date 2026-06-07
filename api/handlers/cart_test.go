@@ -69,7 +69,7 @@ func TestGetCartEmpty(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	req := authRequest("GET", "/api/v1/cart", nil, user.ID)
 	w := httptest.NewRecorder()
@@ -108,7 +108,7 @@ func TestSetItemAndGetCart(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	// Add item (CoffeeID=1, Quantity=2)
 	body, _ := json.Marshal(map[string]any{
@@ -164,7 +164,7 @@ func TestSetItemUpdateQuantity(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	// Add item
 	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 2})
@@ -209,7 +209,7 @@ func TestSetItemRemove(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	// Add item
 	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 3})
@@ -248,7 +248,7 @@ func TestSetItemInvalidProduct(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	body, _ := json.Marshal(map[string]any{"coffee_id": 999, "quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
@@ -265,7 +265,7 @@ func TestSetItemMissingCoffeeID(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	body, _ := json.Marshal(map[string]any{"quantity": 1})
 	req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
@@ -282,7 +282,7 @@ func TestClearCart(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	// Add two items
 	for _, coffeeID := range []uint{1, 2} {
@@ -338,7 +338,7 @@ func TestSetAddress(t *testing.T) {
 	}
 	db.Create(&addr)
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	body, _ := json.Marshal(map[string]any{"address_id": addr.ID})
 	req := authRequest("PUT", "/api/v1/cart/address", body, user.ID)
@@ -392,7 +392,7 @@ func TestSetAddressWrongUser(t *testing.T) {
 	}
 	db.Create(&addr)
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	body, _ := json.Marshal(map[string]any{"address_id": addr.ID})
 	req := authRequest("PUT", "/api/v1/cart/address", body, user.ID)
@@ -420,7 +420,7 @@ func TestSetCard(t *testing.T) {
 	}
 	db.Create(&card)
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	body, _ := json.Marshal(map[string]any{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
@@ -472,7 +472,7 @@ func TestSetCardWrongUser(t *testing.T) {
 	}
 	db.Create(&card)
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	body, _ := json.Marshal(map[string]any{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
@@ -489,7 +489,7 @@ func TestConvertCartMissingAddress(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	// Add item but no address or card
 	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 1})
@@ -512,7 +512,7 @@ func TestConvertCartMissingCard(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 	db := database.GetDB()
 
 	// Add item and address
@@ -543,7 +543,7 @@ func TestConvertCartEmpty(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	// Empty cart convert
 	req := authRequest("POST", "/api/v1/cart/convert", nil, user.ID)
@@ -560,7 +560,7 @@ func TestMultipleItems(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 
 	// Add three different items
 	for i := uint(1); i <= 3; i++ {
@@ -609,7 +609,7 @@ func TestCartIsolation(t *testing.T) {
 	}
 	db.Create(&user2)
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 	r := chi.NewRouter()
 	r.Put("/cart/item", handler.SetItem)
 	r.Get("/cart", handler.GetCart)
@@ -718,7 +718,7 @@ func TestConvertCartLimit(t *testing.T) {
 				t.Fatalf("pin coffee price: %v", err)
 			}
 
-			handler := NewCartHandler("", "", tc.capCents)
+			handler := NewCartHandler("", tc.capCents)
 
 			body, _ := json.Marshal(map[string]any{"coffee_id": 4, "quantity": tc.quantity})
 			req := authRequest("PUT", "/api/v1/cart/item", body, user.ID)
@@ -795,7 +795,7 @@ func TestSetCard_ExpiredReturns410(t *testing.T) {
 		t.Fatalf("seed card: %v", err)
 	}
 
-	handler := NewCartHandler("", "", 0)
+	handler := NewCartHandler("", 0)
 	body, _ := json.Marshal(map[string]any{"card_id": card.ID})
 	req := authRequest("PUT", "/api/v1/cart/card", body, user.ID)
 	w := httptest.NewRecorder()
@@ -836,7 +836,7 @@ func TestConvertCart_ExpiredReturns410(t *testing.T) {
 	body, _ := json.Marshal(map[string]any{"coffee_id": 1, "quantity": 1})
 	req := authRequest("PUT", "/api/v1/vart/item", body, user.ID)
 	w := httptest.NewRecorder()
-	NewCartHandler("", "", 0).SetItem(w, req)
+	NewCartHandler("", 0).SetItem(w, req)
 
 	addr := models.Address{
 		UserID: user.ID, Name: "Test", Street: "123 St",
@@ -846,7 +846,7 @@ func TestConvertCart_ExpiredReturns410(t *testing.T) {
 	body, _ = json.Marshal(map[string]any{"address_id": addr.ID})
 	req = authRequest("PUT", "/api/v1/cart/address", body, user.ID)
 	w = httptest.NewRecorder()
-	NewCartHandler("", "", 0).SetAddress(w, req)
+	NewCartHandler("", 0).SetAddress(w, req)
 
 	past := time.Now().Add(-1 * time.Hour)
 	card := models.Card{
@@ -862,7 +862,7 @@ func TestConvertCart_ExpiredReturns410(t *testing.T) {
 
 	req = authRequest("POST", "/api/v1/cart/convert", nil, user.ID)
 	w = httptest.NewRecorder()
-	NewCartHandler("", "", 0).ConvertCart(w, req)
+	NewCartHandler("", 0).ConvertCart(w, req)
 
 	if w.Code != http.StatusGone {
 		t.Fatalf("want 410, got %d, body: %s", w.Code, w.Body.String())
@@ -884,8 +884,9 @@ func TestConvertCart_ExpiredReturns410(t *testing.T) {
 // succeeded) hit the live Stripe API and aren't covered here — see
 // sca-psd2-compliance.md "Test plan" for manual coverage with the
 // 4000 0027 6000 3184 test card. Caveat #14 in that doc still applies:
-// NewCartHandler takes 3 args and the seeded user must have a non-empty
-// StripeCustomerID so the Convert/Retry paths stay hermetic.
+// NewCartHandler takes 2 args (appURL, maxOrderCents) and the seeded user
+// must have a non-empty StripeCustomerID so the Convert/Retry paths stay
+// hermetic.
 func TestRetryAuth(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -992,7 +993,7 @@ func TestRetryAuth(t *testing.T) {
 				}
 			}
 
-			handler := NewCartHandler("", "http://localhost", 0)
+			handler := NewCartHandler("http://localhost", 0)
 			req := orderRequest("POST",
 				fmt.Sprintf("/api/v1/orders/%d/retry-auth", order.ID), nil, user.ID, fmt.Sprintf("%d", order.ID))
 			w := httptest.NewRecorder()
@@ -1020,7 +1021,7 @@ func TestRetryAuth_OrderNotFound(t *testing.T) {
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
 
-	handler := NewCartHandler("", "http://localhost", 0)
+	handler := NewCartHandler("http://localhost", 0)
 	req := orderRequest("POST", "/api/v1/orders/9999/retry-auth", nil, user.ID, "9999")
 	w := httptest.NewRecorder()
 	handler.RetryAuth(w, req)
@@ -1065,7 +1066,7 @@ func TestRespondRequiresAction_SetStatusRequiresAction(t *testing.T) {
 		},
 	}
 
-	handler := NewCartHandler("", "http://localhost", 0)
+	handler := NewCartHandler("http://localhost", 0)
 	w := httptest.NewRecorder()
 	handler.respondRequiresAction(w, &order, card.StripePaymentID, pi)
 
@@ -1147,7 +1148,7 @@ func TestRespondRequiresAction_OverridesFailedFromWebhookRace(t *testing.T) {
 		},
 	}
 
-	handler := NewCartHandler("", "http://localhost", 0)
+	handler := NewCartHandler("http://localhost", 0)
 	w := httptest.NewRecorder()
 	handler.respondRequiresAction(w, &order, card.StripePaymentID, pi)
 

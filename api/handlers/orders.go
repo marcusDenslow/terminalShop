@@ -28,7 +28,6 @@ import (
 )
 
 type OrderHandler struct {
-	stripeKey           string
 	bringAPIUID         string
 	bringAPIKey         string
 	bringCustomerNumber string
@@ -44,9 +43,10 @@ type refundRequestPayload struct {
 // repeated submissions from spamming the operator's Slack channel.
 const refundRequestCooldown = 15 * time.Minute
 
-func NewOrderHandler(stripeSecretKey, bringAPIUID, bringAPIKey, bringCustomerNumber string) *OrderHandler {
+// NewOrderHandler creates an order handler. Stripe credentials are wired
+// once at startup via stripe.Key in api/main.go.
+func NewOrderHandler(bringAPIUID, bringAPIKey, bringCustomerNumber string) *OrderHandler {
 	return &OrderHandler{
-		stripeKey:           stripeSecretKey,
 		bringAPIUID:         bringAPIUID,
 		bringAPIKey:         bringAPIKey,
 		bringCustomerNumber: bringCustomerNumber,
@@ -199,8 +199,6 @@ func (h *OrderHandler) RefundOrder(w http.ResponseWriter, r *http.Request) {
 			"order has no stripe payment id — contact support", nil)
 		return
 	}
-
-	stripe.Key = h.stripeKey
 
 	rf, err := refund.New(&stripe.RefundParams{
 		PaymentIntent: stripe.String(order.StripePaymentID),

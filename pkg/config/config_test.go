@@ -1,8 +1,22 @@
 package config
 
 import (
+	"io"
+	"log/slog"
+	"os"
 	"testing"
 )
+
+// TestMain silences the package's slog warnings so the negative/garbage
+// env-var cases plus the sub-10 valid-minimum case don't spam test output.
+// The actual fall-back behavior is still asserted via the case tables.
+func TestMain(m *testing.M) {
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	code := m.Run()
+	slog.SetDefault(prev)
+	os.Exit(code)
+}
 
 func TestLoadMaxOrderCents(t *testing.T) {
 	cases := []struct {
@@ -10,7 +24,7 @@ func TestLoadMaxOrderCents(t *testing.T) {
 		env  string // "" means unset
 		want int
 	}{
-		{"unset uses default", "", 20000},
+		{"empty falls back to default", "", 20000},
 		{"explicit zero disables", "0", 0},
 		{"valid override", "50000", 50000},
 		{"negative falls back to default", "-1", 20000},
@@ -28,6 +42,36 @@ func TestLoadMaxOrderCents(t *testing.T) {
 			got := loadMaxOrderCents()
 			if got != tc.want {
 				t.Errorf("loadMaxOrderCents() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestLoadAbandoned3DSThresholdMinutes covers the env-parsing surface for
+// the sweep threshold. Zero and negative fall back to the default (unlike
+// MaxOrderCents where zero is a deliberate off-switch) because a zero
+// threshold would sweep every requires_action row on the first tick and
+// race the customer's in-progress challenge.
+func TestLoadAbandoned3DSThresholdMinutes(t *testing.T) {
+	cases := []struct {
+		name string
+		env  string // "" means unset
+		want int
+	}{
+		{"empty falls back to default", "", 30},
+		{"valid override", "45", 45},
+		{"zero falls back to default", "0", 30},
+		{"negative falls back to default", "-5", 30},
+		{"garbage falls back to default", "half an hour", 30},
+		{"valid minimum (warns)", "1", 1},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ABANDONED_3DS_THRESHOLD_MINUTES", tc.env)
+			got := loadAbandoned3DSThresholdMinutes()
+			if got != tc.want {
+				t.Errorf("loadAbandoned3DSThresholdMinutes() = %d, want %d", got, tc.want)
 			}
 		})
 	}

@@ -75,7 +75,6 @@ type Model struct {
 	Fingerprint        string
 	AccessToken        string
 	AuthFingerprintKey string // shared secret for /auth/token refresh
-	StripePublicKey    string
 
 	// One-shop auth command - capture pubKeyStr in closure, not stored on Model
 	authCmd tea.Cmd
@@ -736,7 +735,6 @@ func (m Model) saveCardOnlyCmd(form PaymentFormCompleteMsg) tea.Cmd {
 		if m.APIClient == nil {
 			return CardSavedForReviewMsg{Err: fmt.Errorf("API client not available")}
 		}
-		stripe.Key = m.StripePublicKey
 		tok, err := stripetoken.New(&stripe.TokenParams{
 			Card: &stripe.CardParams{
 				Name:       stripe.String(form.CardName),
@@ -905,11 +903,12 @@ func NewModel(username string) Model {
 }
 
 // NewModelWithAuth creates a new model with user authentication context.
-func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clientSecret string, stripePublicKey string) Model {
+// The publishable Stripe key is wired into stripe.Key once at startup in
+// the SSH binary's main, so it is not threaded through here.
+func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clientSecret string) Model {
 	m := NewModel("")
 	m.Fingerprint = fingerprint
 	m.AuthFingerprintKey = clientSecret
-	m.StripePublicKey = stripePublicKey
 	m.currentPage = splashPage
 	if apiURL != "" {
 		m.APIClient = api.NewClient(apiURL, "")
