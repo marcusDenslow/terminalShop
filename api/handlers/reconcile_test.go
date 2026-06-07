@@ -68,6 +68,8 @@ func TestReconcileStale3DSOrders_SkipsRecent(t *testing.T) {
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
+	audit.SetDB(db)
+	defer audit.SetDB(nil)
 
 	order := seedRequiresActionOrder(t, user.ID, "pi_fresh_3ds",
 		time.Now().Add(-5*time.Minute))
@@ -107,6 +109,8 @@ func TestReconcileStale3DSOrders_SkipsWhenStripeSaysSucceeded(t *testing.T) {
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
+	audit.SetDB(db)
+	defer audit.SetDB(nil)
 
 	order := seedRequiresActionOrder(t, user.ID, "pi_succeeded_late_webhook",
 		time.Now().Add(-1*time.Hour))
@@ -140,6 +144,8 @@ func TestReconcileStale3DSOrders_GuardsAgainstWebhookRace(t *testing.T) {
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
+	audit.SetDB(db)
+	defer audit.SetDB(nil)
 
 	order := seedRequiresActionOrder(t, user.ID, "pi_race_paid",
 		time.Now().Add(-1*time.Hour))
@@ -257,6 +263,9 @@ func TestReconcileStale3DSOrders_SkipsTransitioningStatuses(t *testing.T) {
 			defer database.ResetForTesting()
 
 			db := database.GetDB()
+			audit.SetDB(db)
+			defer audit.SetDB(nil)
+
 			order := seedRequiresActionOrder(t, user.ID,
 				"pi_transitioning_"+tc.name, time.Now().Add(-1*time.Hour))
 
@@ -288,6 +297,9 @@ func TestReconcileStale3DSOrders_SkipsUnknownStatus(t *testing.T) {
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
+	audit.SetDB(db)
+	defer audit.SetDB(nil)
+
 	order := seedRequiresActionOrder(t, user.ID, "pi_unknown_status",
 		time.Now().Add(-1*time.Hour))
 
@@ -320,6 +332,9 @@ func TestReconcileStale3DSOrders_SkipsOnStripeError(t *testing.T) {
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
+	audit.SetDB(db)
+	defer audit.SetDB(nil)
+
 	order := seedRequiresActionOrder(t, user.ID, "pi_stripe_error",
 		time.Now().Add(-1*time.Hour))
 
@@ -349,6 +364,9 @@ func TestReconcileStale3DSOrders_SkipsEmptyPaymentIntentID(t *testing.T) {
 	defer database.ResetForTesting()
 
 	db := database.GetDB()
+	audit.SetDB(db)
+	defer audit.SetDB(nil)
+
 	order := seedRequiresActionOrder(t, user.ID, "pi_will_be_blanked",
 		time.Now().Add(-1*time.Hour))
 	if err := db.Model(&order).UpdateColumn("stripe_payment_id", "").Error; err != nil {

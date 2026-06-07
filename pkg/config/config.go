@@ -170,5 +170,9 @@ func loadAbandoned3DSThresholdMinutes() int {
 			"raw", raw, "default", defaultMinutes)
 		return defaultMinutes
 	}
+	if n < 10 {
+		slog.Warn("ABANDONED_3DS_THRESHOLD_MINUTES below 10 may race in-flight 3ds challenges",
+			"value", n)
+	}
 	return n
 }

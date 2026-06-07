@@ -15,6 +15,7 @@ import (
 	"charm.land/wish/v2/bubbletea"
 	"charm.land/wish/v2/logging"
 	"github.com/charmbracelet/ssh"
+	"github.com/stripe/stripe-go/v78"
 
 	"terminalShop/pkg/auth"
 	"terminalShop/pkg/config"
@@ -58,6 +59,13 @@ func main() {
 	apiURL = cfg.APIURL
 	authFingerprintKey = cfg.AuthFingerprintKey
 	stripePublicKey = cfg.StripePublicKey
+
+	// Wire the publishable key into stripe-go's package-level global once.
+	// TUI uses the legacy Tokens API (stripetoken.New) which accepts the
+	// publishable key; per-session writes would race across concurrent SSH
+	// sessions even though they'd all write the same value.
+	stripe.Key = cfg.StripePublicKey
+
 	log.Printf("TUI will connect to API at: %s", apiURL)
 
 	// Create SSH server

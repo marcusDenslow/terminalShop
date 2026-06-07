@@ -330,8 +330,6 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stripe.Key = h.stripeKey
-
 	// Ensure the user has a Stripe customer (shared helper with cards handler).
 	if err := ensureStripeCustomer(db, &user); err != nil {
 		middleware.RecordCartConversion("stripe_customer_failed")
@@ -713,8 +711,6 @@ func (h *CartHandler) RetryAuth(w http.ResponseWriter, r *http.Request) {
 		respondCardStorageExpired(w)
 		return
 	}
-
-	stripe.Key = h.stripeKey
 
 	stripeStart := time.Now()
 	confirmed, cerr := paymentintent.Confirm(order.StripePaymentID, &stripe.PaymentIntentConfirmParams{

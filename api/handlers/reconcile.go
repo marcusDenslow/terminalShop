@@ -26,8 +26,7 @@ func reconcileLog() *slog.Logger { return slog.With("component", "reconcile") }
 // and checks whether Stripe has a succeeded PaymentIntent for them. This fixes
 // the case where the server crashed after charging but before the DB transaction
 // completed.
-func ReconcileOrders(stripeKey string) {
-	stripe.Key = stripeKey
+func ReconcileOrders(_ string) {
 	db := database.GetDB()
 
 	var orders []models.Order

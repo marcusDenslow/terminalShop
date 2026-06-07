@@ -212,8 +212,6 @@ func (h *WebhookHandler) handleCheckoutSessionCompleted(ctx context.Context, eve
 		return
 	}
 
-	stripe.Key = h.stripeKey
-
 	si, err := setupintent.Get(sess.SetupIntent.ID, nil)
 	if err != nil {
 		webhookLog().Error("failed to get setup intent", "setup_intent", sess.SetupIntent.ID, "error", err)

@@ -51,10 +51,8 @@ func main() {
 	}
 	audit.SetDB(db)
 
-	// wire the stripe SDK's package-level key once so concurrent reconcilers
-	// and the request path dont race on stripe.Key writes (handler still
-	// re-assign per request because they predate this init - pre-exiting
-	// debt, but no NEW writer is added on the reconciler path now)
+	// wire the stripe SDK's package-level key once at startup so concurrent
+	// reconcilers and the request path don't race on stripe.Key writes.
 	stripe.Key = cfg.StripeSecretKey
 
 	// Seed database with initial data

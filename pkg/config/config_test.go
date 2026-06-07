@@ -10,7 +10,7 @@ func TestLoadMaxOrderCents(t *testing.T) {
 		env  string // "" means unset
 		want int
 	}{
-		{"unset uses default", "", 20000},
+		{"empty falls back to default", "", 20000},
 		{"explicit zero disables", "0", 0},
 		{"valid override", "50000", 50000},
 		{"negative falls back to default", "-1", 20000},
@@ -44,7 +44,7 @@ func TestLoadAbandoned3DSThresholdMinutes(t *testing.T) {
 		env  string // "" means unset
 		want int
 	}{
-		{"unset uses default", "", 30},
+		{"empty falls back to default", "", 30},
 		{"valid override", "45", 45},
 		{"zero falls back to default", "0", 30},
 		{"negative falls back to default", "-5", 30},

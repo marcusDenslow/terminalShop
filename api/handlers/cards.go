@@ -171,8 +171,6 @@ func (h *CardHandler) CollectCard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stripe.Key = h.stripeKey
-
 	if err := ensureStripeCustomer(db, &user); err != nil {
 		utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create stripe customer", nil)
 		return
@@ -233,8 +231,6 @@ func (h *CardHandler) SaveCard(w http.ResponseWriter, r *http.Request) {
 		utils.RespondError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found", nil)
 		return
 	}
-
-	stripe.Key = h.stripeKey
 
 	// Ensure the user has a Stripe customer, creating one if needed.
 	if err := ensureStripeCustomer(db, &user); err != nil {
@@ -335,7 +331,6 @@ func (h *CardHandler) DeleteCard(w http.ResponseWriter, r *http.Request) {
 
 	// Detach from Stripe (best-effort; don't block deletion on Stripe errors).
 	if len(card.StripePaymentID) >= 3 && card.StripePaymentID[:3] == "pm_" {
-		stripe.Key = h.stripeKey
 		_, _ = paymentmethod.Detach(card.StripePaymentID, &stripe.PaymentMethodDetachParams{})
 	}
 
@@ -370,7 +365,6 @@ func expireStoredCard(db *gorm.DB, card *models.Card, stripeKey string) error {
 	}
 
 	if stripeKey != "" && strings.HasPrefix(card.StripePaymentID, "pm_") {
-		stripe.Key = stripeKey
 		if _, err := paymentmethod.Detach(card.StripePaymentID, &stripe.PaymentMethodDetachParams{}); err != nil {
 			slog.Warn("failed to detach expired card", "card_id", card.ID, "error", err)
 		}

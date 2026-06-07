@@ -200,8 +200,6 @@ func (h *OrderHandler) RefundOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stripe.Key = h.stripeKey
-
 	rf, err := refund.New(&stripe.RefundParams{
 		PaymentIntent: stripe.String(order.StripePaymentID),
 	})

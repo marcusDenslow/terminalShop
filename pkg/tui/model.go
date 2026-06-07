@@ -736,7 +736,6 @@ func (m Model) saveCardOnlyCmd(form PaymentFormCompleteMsg) tea.Cmd {
 		if m.APIClient == nil {
 			return CardSavedForReviewMsg{Err: fmt.Errorf("API client not available")}
 		}
-		stripe.Key = m.StripePublicKey
 		tok, err := stripetoken.New(&stripe.TokenParams{
 			Card: &stripe.CardParams{
 				Name:       stripe.String(form.CardName),
