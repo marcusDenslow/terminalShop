@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -684,6 +686,12 @@ func TestConvertCartLimit(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			var auditBuf bytes.Buffer
+			if tc.expectOverCap {
+				prev := slog.Default()
+				slog.SetDefault(slog.New(slog.NewJSONHandler(&auditBuf, nil)))
+				t.Cleanup(func() { slog.SetDefault(prev) })
+			}
 			testDB, user := setupCartTestDB(t)
 			defer func() { _ = os.Remove(testDB) }()
 			defer database.ResetForTesting()
@@ -771,6 +779,20 @@ func TestConvertCartLimit(t *testing.T) {
 				}
 				if got, _ := resp.Error.Details["total_cents"].(float64); int(got) != tc.quantity*pinnedPrice {
 					t.Errorf("total_cents in details: want %d, got %v", tc.quantity*pinnedPrice, resp.Error.Details["total_cents"])
+				}
+
+				auditOut := auditBuf.String()
+				if !strings.Contains(auditOut, `"event":"cart_rejected"`) {
+					t.Errorf("audit: expected cart_rejected event in slog, got %q", auditOut)
+				}
+				if !strings.Contains(auditOut, fmt.Sprintf(`"user_id":%d`, user.ID)) {
+					t.Errorf("audit: expected user_id=%d, got %q", user.ID, auditOut)
+				}
+				if !strings.Contains(auditOut, fmt.Sprintf(`"total_cents":%d`, tc.quantity*pinnedPrice)) {
+					t.Errorf("audit: expected total_cents=%d, got %q", tc.quantity*pinnedPrice, auditOut)
+				}
+				if !strings.Contains(auditOut, fmt.Sprintf(`"cap_cents":%d`, tc.capCents)) {
+					t.Errorf("audit: expected cap_cents=%d, got %q", tc.capCents, auditOut)
 				}
 			}
 		})
