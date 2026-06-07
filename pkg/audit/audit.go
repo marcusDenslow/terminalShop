@@ -366,9 +366,11 @@ func Order3DSAbandoned(userID, orderID uint, paymentIntentID string) {
 }
 
 // CartRejected records the per-order cap blocking a checkout BEFORE an
-// order row is created. Carries no order id by design (cap rejection runs
-// upstream of order creation) so persist() is a no-op; this event lives in
-// slog only. Counterpart to validation_over_limit Prometheus counter.
+// order row is created. Slog-only by design: cap rejection runs upstream
+// of order creation so there is no order id to scope a persistent
+// OrderEvent row. persist() is intentionally not called - future refactors
+// of the persist() zero-id guard must not silently start writing rows here.
+// Counterpart to the validation_over_limit Prometheus counter.
 func CartRejected(userID uint, totalCents, capCents int) {
 	e := event{
 		Event:      eventCartRejected,
@@ -377,5 +379,4 @@ func CartRejected(userID uint, totalCents, capCents int) {
 		CapCents:   capCents,
 	}
 	slog.Info("audit", e.attrs()...)
-	persist(0, eventCartRejected, e)
 }

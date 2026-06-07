@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -686,12 +685,6 @@ func TestConvertCartLimit(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var auditBuf bytes.Buffer
-			if tc.expectOverCap {
-				prev := slog.Default()
-				slog.SetDefault(slog.New(slog.NewJSONHandler(&auditBuf, nil)))
-				t.Cleanup(func() { slog.SetDefault(prev) })
-			}
 			testDB, user := setupCartTestDB(t)
 			defer func() { _ = os.Remove(testDB) }()
 			defer database.ResetForTesting()
@@ -754,6 +747,19 @@ func TestConvertCartLimit(t *testing.T) {
 				t.Fatalf("SetCard: %d %s", w.Code, w.Body.String())
 			}
 
+			// Capture audit slog ONLY for ConvertCart's emit window. Placed
+			// here (not at top of t.Run) so setup INFO logs from
+			// database.Connect/Migrate/Seed don't pollute the buffer with
+			// non-audit records - json.Unmarshal below requires a single
+			// JSON object, not multi-document input. slog.Default is
+			// process-global - do NOT add t.Parallel() to subtests here.
+			var auditBuf bytes.Buffer
+			if tc.expectOverCap {
+				prev := slog.Default()
+				slog.SetDefault(slog.New(slog.NewJSONHandler(&auditBuf, nil)))
+				t.Cleanup(func() { slog.SetDefault(prev) })
+			}
+
 			// Convert
 			req = authRequest("POST", "/api/v1/cart/convert", nil, user.ID)
 			w = httptest.NewRecorder()
@@ -781,18 +787,25 @@ func TestConvertCartLimit(t *testing.T) {
 					t.Errorf("total_cents in details: want %d, got %v", tc.quantity*pinnedPrice, resp.Error.Details["total_cents"])
 				}
 
-				auditOut := auditBuf.String()
-				if !strings.Contains(auditOut, `"event":"cart_rejected"`) {
-					t.Errorf("audit: expected cart_rejected event in slog, got %q", auditOut)
+				if auditBuf.Len() == 0 {
+					t.Fatalf("audit: expected cart_rejected slog line, got nothing")
 				}
-				if !strings.Contains(auditOut, fmt.Sprintf(`"user_id":%d`, user.ID)) {
-					t.Errorf("audit: expected user_id=%d, got %q", user.ID, auditOut)
+
+				var rec map[string]any
+				if err := json.Unmarshal(auditBuf.Bytes(), &rec); err != nil {
+					t.Fatalf("audit: decode slog record: %v\nraw: %s", err, auditBuf.String())
 				}
-				if !strings.Contains(auditOut, fmt.Sprintf(`"total_cents":%d`, tc.quantity*pinnedPrice)) {
-					t.Errorf("audit: expected total_cents=%d, got %q", tc.quantity*pinnedPrice, auditOut)
+				if got := rec["event"]; got != "cart_rejected" {
+					t.Errorf("audit event: want cart_rejected, got %v", got)
 				}
-				if !strings.Contains(auditOut, fmt.Sprintf(`"cap_cents":%d`, tc.capCents)) {
-					t.Errorf("audit: expected cap_cents=%d, got %q", tc.capCents, auditOut)
+				if n, _ := rec["user_id"].(float64); uint(n) != user.ID {
+					t.Errorf("audit user_id: want %d, got %v", user.ID, rec["user_id"])
+				}
+				if n, _ := rec["total_cents"].(float64); int(n) != tc.quantity*pinnedPrice {
+					t.Errorf("audit total_cents: want %d, got %v", tc.quantity*pinnedPrice, rec["total_cents"])
+				}
+				if n, _ := rec["cap_cents"].(float64); int(n) != tc.capCents {
+					t.Errorf("audit cap_cents: want %d, got %v", tc.capCents, rec["cap_cents"])
 				}
 			}
 		})
