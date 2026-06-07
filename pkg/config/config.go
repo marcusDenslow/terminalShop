@@ -13,25 +13,26 @@ import (
 
 // Config holds all application configuration
 type Config struct {
-	APIPort             string
-	APIURL              string
-	AppURL              string
-	SSHPort             string
-	Environment         string
-	DatabaseURL         string
-	JWTSecret           string
-	StripeSecretKey     string
-	StripePublicKey     string
-	StripeWebhookSecret string
-	ShippoAPIKey        string
-	AuthFingerprintKey  string
-	BringAPIUID         string
-	BringAPIKey         string
-	BringCustomerNumber string
-	ShippoWebhookSecret string
-	SlackSigningSecret  string
-	AdminAPIKey         string
-	MaxOrderCents       int
+	APIPort                      string
+	APIURL                       string
+	AppURL                       string
+	SSHPort                      string
+	Environment                  string
+	DatabaseURL                  string
+	JWTSecret                    string
+	StripeSecretKey              string
+	StripePublicKey              string
+	StripeWebhookSecret          string
+	ShippoAPIKey                 string
+	AuthFingerprintKey           string
+	BringAPIUID                  string
+	BringAPIKey                  string
+	BringCustomerNumber          string
+	ShippoWebhookSecret          string
+	SlackSigningSecret           string
+	AdminAPIKey                  string
+	MaxOrderCents                int
+	Abandoned3DSThresholdMinutes int
 }
 
 // Load reads configuration from environment variables and validates required secrets.
@@ -50,25 +51,26 @@ func Load() (*Config, error) {
 	apiPort := getEnvOrDefault("API_PORT", "8080")
 	apiURL := getEnvOrDefault("API_URL", fmt.Sprintf("http://localhost:%s", apiPort))
 	cfg := &Config{
-		APIPort:             apiPort,
-		APIURL:              apiURL,
-		AppURL:              getEnvOrDefault("APP_URL", apiURL),
-		SSHPort:             getEnvOrDefault("SSH_PORT", "23457"),
-		Environment:         getEnvOrDefault("ENVIRONMENT", "development"),
-		DatabaseURL:         getEnvOrDefault("DATABASE_URL", "terminalshop.db"),
-		JWTSecret:           os.Getenv("JWT_SECRET"),
-		StripeSecretKey:     os.Getenv("STRIPE_SECRET_KEY"),
-		StripePublicKey:     os.Getenv("STRIPE_PUBLIC_KEY"),
-		StripeWebhookSecret: os.Getenv("STRIPE_WEBHOOK_SECRET"),
-		ShippoAPIKey:        os.Getenv("SHIPPO_API_KEY"),
-		AuthFingerprintKey:  os.Getenv("AUTH_FINGERPRINT_KEY"),
-		BringAPIUID:         os.Getenv("BRING_API_UID"),
-		BringAPIKey:         os.Getenv("BRING_API_KEY"),
-		BringCustomerNumber: os.Getenv("BRING_CUSTOMER_NUMBER"),
-		ShippoWebhookSecret: os.Getenv("SHIPPO_WEBHOOK_SECRET"),
-		SlackSigningSecret:  os.Getenv("SLACK_SIGNING_SECRET"),
-		AdminAPIKey:         os.Getenv("ADMIN_API_KEY"),
-		MaxOrderCents:       loadMaxOrderCents(),
+		APIPort:                      apiPort,
+		APIURL:                       apiURL,
+		AppURL:                       getEnvOrDefault("APP_URL", apiURL),
+		SSHPort:                      getEnvOrDefault("SSH_PORT", "23457"),
+		Environment:                  getEnvOrDefault("ENVIRONMENT", "development"),
+		DatabaseURL:                  getEnvOrDefault("DATABASE_URL", "terminalshop.db"),
+		JWTSecret:                    os.Getenv("JWT_SECRET"),
+		StripeSecretKey:              os.Getenv("STRIPE_SECRET_KEY"),
+		StripePublicKey:              os.Getenv("STRIPE_PUBLIC_KEY"),
+		StripeWebhookSecret:          os.Getenv("STRIPE_WEBHOOK_SECRET"),
+		ShippoAPIKey:                 os.Getenv("SHIPPO_API_KEY"),
+		AuthFingerprintKey:           os.Getenv("AUTH_FINGERPRINT_KEY"),
+		BringAPIUID:                  os.Getenv("BRING_API_UID"),
+		BringAPIKey:                  os.Getenv("BRING_API_KEY"),
+		BringCustomerNumber:          os.Getenv("BRING_CUSTOMER_NUMBER"),
+		ShippoWebhookSecret:          os.Getenv("SHIPPO_WEBHOOK_SECRET"),
+		SlackSigningSecret:           os.Getenv("SLACK_SIGNING_SECRET"),
+		AdminAPIKey:                  os.Getenv("ADMIN_API_KEY"),
+		MaxOrderCents:                loadMaxOrderCents(),
+		Abandoned3DSThresholdMinutes: loadAbandoned3DSThresholdMinutes(),
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -147,6 +149,24 @@ func loadMaxOrderCents() int {
 	if err != nil || n < 0 {
 		fmt.Printf("WARNING: MAX_ORDER_CENTS=%q invalid, falling back to default %d\n", raw, defaultCap)
 		return defaultCap
+	}
+	return n
+}
+
+// loadAbandoned3DSThresholdMinutes read ABANDONED_3DS_THRESHOLD_MINUTES.
+// The abandoned-3DS sweep only flips requires_action rows whose updated_at iconfigs
+// older than this many minutes. Default 30 min. Values below 1 fall back to
+// the default so a typo cannot collapse the grace window the TUI polls inside.
+func loadAbandoned3DSThresholdMinutes() int {
+	const defaultMinutes = 30
+	raw := os.Getenv("ABANDONED_3DS_THRESHOLD_MINUTES")
+	if raw == "" {
+		return defaultMinutes
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		fmt.Printf("WARNING: ABANDONED_3DS_THRESHOLD_MINUTES=%q invalid, falling back to default %d\n", raw, defaultMinutes)
+		return defaultMinutes
 	}
 	return n
 }

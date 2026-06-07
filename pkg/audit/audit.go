@@ -14,9 +14,15 @@ import (
 )
 
 // EventOrderRequiresAction is the audit event-type string emitted whenever a
-// PaymentIntent is pushed into requires_action. explored so cart-flow handler
+// PaymentIntent is pushed into requires_action. Exposed so cart-flow handler
 // can count retry attempts without hardcoding the string literal.
 const EventOrderRequiresAction = "order_requires_action"
+
+// EventOrder3DSAbandoned is the audit event-type string emitted by the
+// abandoned-3DS sweep when it flips a stale requires_action row to failed.
+// Distinct from EventOrderRequiresAction (caveat #17) so the retry-cap count
+// stays decoupled from sweep activity
+const EventOrder3DSAbandoned = "order_3ds_abandoned"
 
 type eventType string
 
@@ -29,6 +35,7 @@ const (
 	eventOrderShipped           eventType = "order_shipped"
 	eventOrderFailed            eventType = "order_failed"
 	eventOrderRequiresAction    eventType = EventOrderRequiresAction
+	eventOrder3DSAbandoned      eventType = EventOrder3DSAbandoned
 	eventOrderRefunded          eventType = "order_refunded"
 	eventPaymentCritical        eventType = "payment_critical"
 	eventLabelPurchased         eventType = "label_purchased"
@@ -327,4 +334,18 @@ func OrderRequiresAction(userID, orderID uint, paymentIntentID string) {
 	}
 	slog.Info("audit", e.attrs()...)
 	persist(orderID, eventOrderRequiresAction, e)
+}
+
+// Order3DSAbandoned records the abandoned-3DS sweep flipping a stale
+// requires_action row to failed because Stripe still reports the underlying
+// PaymentIntent as outstanding past the sweep threshold.
+func Order3DSAbandoned(userID, orderID uint, paymentIntentID string) {
+	e := event{
+		Event:    eventOrder3DSAbandoned,
+		UserID:   userID,
+		OrderID:  orderID,
+		StripeID: paymentIntentID,
+	}
+	slog.Info("audit", e.attrs()...)
+	persist(orderID, eventOrder3DSAbandoned, e)
 }

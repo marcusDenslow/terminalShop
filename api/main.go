@@ -144,6 +144,20 @@ func main() {
 		}
 	}()
 
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		threshold := time.Duration(cfg.Abandoned3DSThresholdMinutes) * time.Minute
+		for {
+			select {
+			case <-ticker.C:
+				handlers.ReconcileStale3DSOrders(cfg.StripeSecretKey, threshold)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	log.Println("API server started. Press Ctrl+C to shutdown.")
 
 	// Block until signal received
