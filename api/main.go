@@ -114,7 +114,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				handlers.ReconcileOrders()
+				handlers.ReconcileOrders(ctx)
 			case <-ctx.Done():
 				return
 			}
@@ -122,14 +122,18 @@ func main() {
 	}()
 
 	go func() {
-		time.Sleep(30 * time.Second)
-		handlers.ReconcileUnshipped()
+		select {
+		case <-time.After(30 * time.Second):
+		case <-ctx.Done():
+			return
+		}
+		handlers.ReconcileUnshipped(ctx)
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				handlers.ReconcileUnshipped()
+				handlers.ReconcileUnshipped(ctx)
 			case <-ctx.Done():
 				return
 			}
@@ -145,7 +149,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				handlers.ReconcileExpiredCards()
+				handlers.ReconcileExpiredCards(ctx)
 			case <-ctx.Done():
 				return
 			}
@@ -159,7 +163,7 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				handlers.ReconcileStale3DSOrders(threshold)
+				handlers.ReconcileStale3DSOrders(ctx, threshold)
 			case <-ctx.Done():
 				return
 			}
@@ -174,10 +178,10 @@ func main() {
 	log.Println("Server is shutting down...")
 
 	// Graceful shutdown with 30 second timeout
-	ctx, cancel = context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
 
-	if err := server.Shutdown(ctx); err != nil {
+	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 

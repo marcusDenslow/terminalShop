@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -58,7 +59,7 @@ func TestReconcileExpiredCards_RemovesPastDeadlineOnly(t *testing.T) {
 		t.Fatalf("seed cart: %v", err)
 	}
 
-	ReconcileExpiredCards()
+	ReconcileExpiredCards(context.Background())
 
 	var remaining []models.Card
 	if err := db.Where("user_id = ?", user.ID).Find(&remaining).Error; err != nil {
@@ -117,7 +118,7 @@ func TestReconcileExpiredCards_SweepsAcrossUsers(t *testing.T) {
 		}
 	}
 
-	ReconcileExpiredCards()
+	ReconcileExpiredCards(context.Background())
 
 	var count int64
 	if err := db.Model(&models.Card{}).Count(&count).Error; err != nil {

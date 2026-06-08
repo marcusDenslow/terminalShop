@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -27,8 +28,8 @@ func reconcileLog() *slog.Logger { return slog.With("component", "reconcile") }
 // and checks whether Stripe has a succeeded PaymentIntent for them. This fixes
 // the case where the server crashed after charging but before the DB transaction
 // completed.
-func ReconcileOrders() {
-	db := database.GetDB()
+func ReconcileOrders(ctx context.Context) {
+	db := database.GetDB().WithContext(ctx)
 
 	var orders []models.Order
 	cutoff := time.Now().Add(-10 * time.Minute)
@@ -42,9 +43,14 @@ func ReconcileOrders() {
 	reconcileLog().Info("checking pending orders", "count", len(orders))
 
 	for _, order := range orders {
+		if err := ctx.Err(); err != nil {
+			reconcileLog().Info("reconcile orders cancelled mid-loop", "error", err)
+			return
+		}
 		params := &stripe.PaymentIntentSearchParams{
 			SearchParams: stripe.SearchParams{
-				Query: fmt.Sprintf("metadata['order_id']:'%d' AND status:'succeeded'", order.ID),
+				Context: ctx,
+				Query:   fmt.Sprintf("metadata['order_id']:'%d' AND status:'succeeded'", order.ID),
 			},
 		}
 
@@ -90,8 +96,8 @@ func ReconcileOrders() {
 // from ReconcileOrders: the empty-PI predicate there is load-bearing for
 // the crash-mid-create case (see sca-psd2-compliance.md caveat #20).
 // stripe.Key is wired once at startup in api/main.go.
-func ReconcileStale3DSOrders(threshold time.Duration) {
-	db := database.GetDB()
+func ReconcileStale3DSOrders(ctx context.Context, threshold time.Duration) {
+	db := database.GetDB().WithContext(ctx)
 
 	var orders []models.Order
 	// Predicate keys off updated_at, not created_at: respondRequiresAction
@@ -110,7 +116,12 @@ func ReconcileStale3DSOrders(threshold time.Duration) {
 
 	reconcileLog().Info("checking stale requires_action orders", "count", len(orders))
 
+	piParams := &stripe.PaymentIntentParams{Params: stripe.Params{Context: ctx}}
 	for i := range orders {
+		if err := ctx.Err(); err != nil {
+			reconcileLog().Info("stale 3ds sweep cancelled mid-loop", "error", err)
+			return
+		}
 		order := &orders[i]
 		if order.StripePaymentID == "" {
 			// respondRequiresAction writes stripe_payment_id and status in
@@ -120,7 +131,7 @@ func ReconcileStale3DSOrders(threshold time.Duration) {
 			middleware.RecordAbandoned3DSSweep("missing_pi")
 			continue
 		}
-		actual, err := paymentIntentGetFn(order.StripePaymentID, nil)
+		actual, err := paymentIntentGetFn(order.StripePaymentID, piParams)
 		if err != nil {
 			reconcileLog().Error("stripe get failed",
 				"order_id", order.ID, "pi", order.StripePaymentID, "error", err)
@@ -187,8 +198,8 @@ func flipStale3DSToFailed(db *gorm.DB, order *models.Order, stripeStatus string)
 // Read paths filter out expired rows so users never see them; this job drives
 // the Stripe detach + audit + physical row delete out of band so request
 // handlers never block on Stripe API calls during a card sweep.
-func ReconcileExpiredCards() {
-	db := database.GetDB()
+func ReconcileExpiredCards(ctx context.Context) {
+	db := database.GetDB().WithContext(ctx)
 
 	var cards []models.Card
 	if err := db.Where(
@@ -204,16 +215,20 @@ func ReconcileExpiredCards() {
 
 	reconcileLog().Info("expiring inactive saved cards", "count", len(cards))
 	for i := range cards {
+		if err := ctx.Err(); err != nil {
+			reconcileLog().Info("card sweep cancelled mid-loop", "error", err)
+			return
+		}
 		if err := expireStoredCard(db, &cards[i]); err != nil {
 			reconcileLog().Error("expire card failed", "card_id", cards[i].ID, "error", err)
 		}
 	}
 }
 
-// ReconcileUnshipped finds paid order orlder than 24h with no tracking
-// number and posts single Slack reminder. Pure read + notif
-func ReconcileUnshipped() {
-	db := database.GetDB()
+// ReconcileUnshipped finds paid orders older than 24h with no tracking
+// number and posts a single Slack reminder. Pure read + notify.
+func ReconcileUnshipped(ctx context.Context) {
+	db := database.GetDB().WithContext(ctx)
 
 	var orders []models.Order
 	cutoff := time.Now().Add(-24 * time.Hour)
