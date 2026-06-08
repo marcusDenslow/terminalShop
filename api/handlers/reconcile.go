@@ -225,8 +225,8 @@ func ReconcileExpiredCards(ctx context.Context) {
 	}
 }
 
-// ReconcileUnshipped finds paid order orlder than 24h with no tracking
-// number and posts single Slack reminder. Pure read + notif
+// ReconcileUnshipped finds paid orders older than 24h with no tracking
+// number and posts a single Slack reminder. Pure read + notify.
 func ReconcileUnshipped(ctx context.Context) {
 	db := database.GetDB().WithContext(ctx)
 
