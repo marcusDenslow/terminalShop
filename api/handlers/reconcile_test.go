@@ -440,6 +440,52 @@ func TestReconcileStale3DSOrders_SkipsEmptyPaymentIntentID(t *testing.T) {
 	}
 }
 
+// TestReconcileStale3DSOrders_BailsMidLoopOnCancel verifies the per-iteration
+// ctx.Err() check stops the sweep once the supervising context cancels, so a
+// SIGTERM during a large stale-3DS batch does not block the binary past the
+// 30s graceful-shutdown window in api/main.go
+func TestReconcileStale3DSOrders_BailsMidLoopOnCancel(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+	audit.SetDB(db)
+	defer audit.SetDB(nil)
+
+	seedRequiresActionOrder(t, user.ID, "pi_first", time.Now().Add(-1*time.Hour))
+	seedRequiresActionOrder(t, user.ID, "pi_second", time.Now().Add(-1*time.Hour))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	calls := 0
+	orig := paymentIntentGetFn
+	defer func() { paymentIntentGetFn = orig }()
+	paymentIntentGetFn = func(id string, _ *stripe.PaymentIntentParams) (*stripe.PaymentIntent, error) {
+		calls++
+		if calls == 1 {
+			cancel()
+		}
+		return &stripe.PaymentIntent{
+			ID:     id,
+			Status: stripe.PaymentIntentStatusRequiresPaymentMethod,
+		}, nil
+	}
+	ReconcileStale3DSOrders(ctx, 30*time.Minute)
+
+	if calls != 1 {
+		t.Fatalf("want exactly 1 stripe Get call (loop bails before row 2); got %d", calls)
+	}
+	var stillPending int64
+	if err := db.Model(&models.Order{}).Where("status = ?", models.OrderStatusRequiresAction).Count(&stillPending).Error; err != nil {
+		t.Fatalf("count requires_action rows: %v", err)
+	}
+	if stillPending < 1 {
+		t.Fatalf("want at least 1 row left in requires_action after mid-loop cancel; got %d", stillPending)
+	}
+}
+
 // seedRequiresActionOrder inserts a card + order pair in the requires_action
 // state. updatedAt is forced via UpdateColumn so GORM's auto-stamping of
 // UpdatedAt on Create does not bump the row out of the sweep predicate.
