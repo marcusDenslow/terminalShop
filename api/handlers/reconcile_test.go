@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -44,7 +45,7 @@ func TestReconcileStale3DSOrders_FlipsAbandonedToFailed(t *testing.T) {
 	flipped := middleware.Abandoned3DSSweepCounter().WithLabelValues("flipped")
 	before := testutil.ToFloat64(flipped)
 
-	ReconcileStale3DSOrders(30 * time.Minute)
+	ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -93,7 +94,7 @@ func TestReconcileStale3DSOrders_SkipsRecent(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders(30 * time.Minute)
+	ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 	if called {
 		t.Fatalf("stripe Get called for in-window row")
@@ -135,7 +136,7 @@ func TestReconcileStale3DSOrders_SkipsWhenStripeSaysSucceeded(t *testing.T) {
 	skip := middleware.Abandoned3DSSweepCounter().WithLabelValues("succeeded_skip")
 	before := testutil.ToFloat64(skip)
 
-	ReconcileStale3DSOrders(30 * time.Minute)
+	ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -178,7 +179,7 @@ func TestReconcileStale3DSOrders_GuardsAgainstWebhookRace(t *testing.T) {
 	noop := middleware.Abandoned3DSSweepCounter().WithLabelValues("flip_noop")
 	before := testutil.ToFloat64(noop)
 
-	ReconcileStale3DSOrders(30 * time.Minute)
+	ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -216,7 +217,7 @@ func TestReconcileStale3DSOrders_FlipsCanceledPI(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders(30 * time.Minute)
+	ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -252,7 +253,7 @@ func TestReconcileStale3DSOrders_DoesNotConsumeRetryCap(t *testing.T) {
 		}, nil
 	}
 
-	ReconcileStale3DSOrders(30 * time.Minute)
+	ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 	var retryCount int64
 	if err := db.Model(&models.OrderEvent{}).
@@ -298,7 +299,7 @@ func TestReconcileStale3DSOrders_SkipsTransitioningStatuses(t *testing.T) {
 			skip := middleware.Abandoned3DSSweepCounter().WithLabelValues("processing_skip")
 			before := testutil.ToFloat64(skip)
 
-			ReconcileStale3DSOrders(30 * time.Minute)
+			ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 			var reloaded models.Order
 			if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -341,7 +342,7 @@ func TestReconcileStale3DSOrders_SkipsUnknownStatus(t *testing.T) {
 	unknown := middleware.Abandoned3DSSweepCounter().WithLabelValues("unrecognized_status")
 	before := testutil.ToFloat64(unknown)
 
-	ReconcileStale3DSOrders(30 * time.Minute)
+	ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -379,7 +380,7 @@ func TestReconcileStale3DSOrders_SkipsOnStripeError(t *testing.T) {
 	stripeErr := middleware.Abandoned3DSSweepCounter().WithLabelValues("stripe_error")
 	before := testutil.ToFloat64(stripeErr)
 
-	ReconcileStale3DSOrders(30 * time.Minute)
+	ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 	var reloaded models.Order
 	if err := db.First(&reloaded, order.ID).Error; err != nil {
@@ -422,7 +423,7 @@ func TestReconcileStale3DSOrders_SkipsEmptyPaymentIntentID(t *testing.T) {
 	missing := middleware.Abandoned3DSSweepCounter().WithLabelValues("missing_pi")
 	before := testutil.ToFloat64(missing)
 
-	ReconcileStale3DSOrders(30 * time.Minute)
+	ReconcileStale3DSOrders(context.Background(), 30*time.Minute)
 
 	if called {
 		t.Fatalf("stripe Get called for empty-PI row")
