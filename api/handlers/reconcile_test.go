@@ -295,6 +295,9 @@ func TestReconcileStale3DSOrders_SkipsTransitioningStatuses(t *testing.T) {
 				return &stripe.PaymentIntent{ID: id, Status: tc.status}, nil
 			}
 
+			skip := middleware.Abandoned3DSSweepCounter().WithLabelValues("processing_skip")
+			before := testutil.ToFloat64(skip)
+
 			ReconcileStale3DSOrders(30 * time.Minute)
 
 			var reloaded models.Order
@@ -303,6 +306,9 @@ func TestReconcileStale3DSOrders_SkipsTransitioningStatuses(t *testing.T) {
 			}
 			if reloaded.Status != models.OrderStatusRequiresAction {
 				t.Fatalf("%s must stay requires_action; got %q", tc.name, reloaded.Status)
+			}
+			if got := testutil.ToFloat64(skip) - before; got != 1 {
+				t.Fatalf("want 1 processing_skip increment, got %v", got)
 			}
 		})
 	}
@@ -332,6 +338,9 @@ func TestReconcileStale3DSOrders_SkipsUnknownStatus(t *testing.T) {
 		}, nil
 	}
 
+	unknown := middleware.Abandoned3DSSweepCounter().WithLabelValues("unrecognized_status")
+	before := testutil.ToFloat64(unknown)
+
 	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
@@ -340,6 +349,9 @@ func TestReconcileStale3DSOrders_SkipsUnknownStatus(t *testing.T) {
 	}
 	if reloaded.Status != models.OrderStatusRequiresAction {
 		t.Fatalf("unknown status must not flip; got %q", reloaded.Status)
+	}
+	if got := testutil.ToFloat64(unknown) - before; got != 1 {
+		t.Fatalf("want 1 unrecognized_status increment, got %v", got)
 	}
 }
 
@@ -407,6 +419,9 @@ func TestReconcileStale3DSOrders_SkipsEmptyPaymentIntentID(t *testing.T) {
 		return &stripe.PaymentIntent{Status: stripe.PaymentIntentStatusRequiresPaymentMethod}, nil
 	}
 
+	missing := middleware.Abandoned3DSSweepCounter().WithLabelValues("missing_pi")
+	before := testutil.ToFloat64(missing)
+
 	ReconcileStale3DSOrders(30 * time.Minute)
 
 	if called {
@@ -418,6 +433,9 @@ func TestReconcileStale3DSOrders_SkipsEmptyPaymentIntentID(t *testing.T) {
 	}
 	if reloaded.Status != models.OrderStatusRequiresAction {
 		t.Fatalf("empty-PI guard must leave status alone; got %q", reloaded.Status)
+	}
+	if got := testutil.ToFloat64(missing) - before; got != 1 {
+		t.Fatalf("want 1 missing_pi increment, got %v", got)
 	}
 }
 
