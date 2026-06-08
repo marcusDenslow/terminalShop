@@ -70,6 +70,14 @@ var (
 		[]string{"outcome"},
 	)
 
+	abandoned3DSSweepTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "abandoned_3ds_sweep_total",
+			Help: "ReconcileStale3DSOrders outcomes per row processed (flipped, flip_noop, flip_failed, succeeded_skip, processing_skip, stripe_error, missing_pi, unrecognized_status)",
+		},
+		[]string{"outcome"},
+	)
+
 	orderValueDollars = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "order_value_dollars",
@@ -171,6 +179,19 @@ func RecordCartConversion(outcome string) {
 // ObserveOrderValueCents records the value of a completed order (cents → dollars).
 func ObserveOrderValueCents(cents int) {
 	orderValueDollars.Observe(float64(cents) / 100.0)
+}
+
+// RecordAbandoned3DSSweep records the outcome of one row processed by
+// ReconcileStale3DSOrders. Bounded enumeration documented on the counter's
+// Help string.
+func RecordAbandoned3DSSweep(outcome string) {
+	abandoned3DSSweepTotal.WithLabelValues(outcome).Inc()
+}
+
+// Abandoned3DSSweepCounter exposes the sweep counter so tests can snapshot
+// per-label values via prometheus testutil. Not used in production code.
+func Abandoned3DSSweepCounter() *prometheus.CounterVec {
+	return abandoned3DSSweepTotal
 }
 
 // ObserveStripeRequest records latency of a Stripe API call.

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"terminalShop/api/middleware"
 	"terminalShop/pkg/audit"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
@@ -116,12 +117,14 @@ func ReconcileStale3DSOrders(threshold time.Duration) {
 			// one UPDATE so this should be unreachable; guard anyway so a
 			// future regression noisily logs instead of 4xx'ing Stripe.
 			reconcileLog().Warn("requires_action row missing PI id; skipping", "order_id", order.ID)
+			middleware.RecordAbandoned3DSSweep("missing_pi")
 			continue
 		}
 		actual, err := paymentIntentGetFn(order.StripePaymentID, nil)
 		if err != nil {
 			reconcileLog().Error("stripe get failed",
 				"order_id", order.ID, "pi", order.StripePaymentID, "error", err)
+			middleware.RecordAbandoned3DSSweep("stripe_error")
 			continue
 		}
 		switch actual.Status {
@@ -133,10 +136,12 @@ func ReconcileStale3DSOrders(threshold time.Duration) {
 			// tick re-checks and surfaces the dropped webhook if it persists
 			reconcileLog().Warn("stripe reports succeeded for requires_action row; deferring to webhook",
 				"order_id", order.ID, "pi", order.StripePaymentID)
+			middleware.RecordAbandoned3DSSweep("succeeded_skip")
 		case stripe.PaymentIntentStatusProcessing,
 			stripe.PaymentIntentStatusRequiresCapture:
 			reconcileLog().Info("payment intent still transitioning; skipping",
 				"order_id", order.ID, "pi", order.StripePaymentID, "stripe_status", string(actual.Status))
+			middleware.RecordAbandoned3DSSweep("processing_skip")
 		case stripe.PaymentIntentStatusRequiresAction,
 			stripe.PaymentIntentStatusRequiresPaymentMethod,
 			stripe.PaymentIntentStatusRequiresConfirmation,
@@ -145,6 +150,7 @@ func ReconcileStale3DSOrders(threshold time.Duration) {
 		default:
 			reconcileLog().Warn("unrecognized stripe status; skipping",
 				"order_id", order.ID, "pi", order.StripePaymentID, "stripe_status", string(actual.Status))
+			middleware.RecordAbandoned3DSSweep("unrecognized_status")
 		}
 	}
 }
@@ -162,16 +168,19 @@ func flipStale3DSToFailed(db *gorm.DB, order *models.Order, stripeStatus string)
 		Updates(map[string]any{"status": models.OrderStatusFailed})
 	if res.Error != nil {
 		reconcileLog().Error("flip stale 3ds failed", "order_id", order.ID, "error", res.Error)
+		middleware.RecordAbandoned3DSSweep("flip_failed")
 		return
 	}
 	if res.RowsAffected == 0 {
 		reconcileLog().Info("stale 3ds row already transitioned; sweep no-op",
 			"order_id", order.ID)
+		middleware.RecordAbandoned3DSSweep("flip_noop")
 		return
 	}
 	audit.Order3DSAbandoned(order.UserID, order.ID, order.StripePaymentID)
 	reconcileLog().Info("3ds abandoned order flipped to failed",
 		"order_id", order.ID, "pi", order.StripePaymentID, "stripe_status", stripeStatus)
+	middleware.RecordAbandoned3DSSweep("flipped")
 }
 
 // ReconcileExpiredCards removes saved cards whose retention deadline elapsed.

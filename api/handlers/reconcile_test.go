@@ -6,11 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stripe/stripe-go/v78"
-
+	"terminalShop/api/middleware"
 	"terminalShop/pkg/audit"
 	"terminalShop/pkg/database"
 	"terminalShop/pkg/models"
+
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stripe/stripe-go/v78"
 )
 
 // TestReconcileStale3DSOrders_FlipsAbandonedToFailed verifies the predicate
@@ -39,6 +41,9 @@ func TestReconcileStale3DSOrders_FlipsAbandonedToFailed(t *testing.T) {
 		}, nil
 	}
 
+	flipped := middleware.Abandoned3DSSweepCounter().WithLabelValues("flipped")
+	before := testutil.ToFloat64(flipped)
+
 	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
@@ -56,6 +61,9 @@ func TestReconcileStale3DSOrders_FlipsAbandonedToFailed(t *testing.T) {
 	}
 	if len(events) != 1 {
 		t.Fatalf("want 1 order_3ds_abandoned audit row, got %d", len(events))
+	}
+	if got := testutil.ToFloat64(flipped) - before; got != 1 {
+		t.Fatalf("want 1 flipped sweep counter increment, got %v", got)
 	}
 }
 
@@ -124,6 +132,9 @@ func TestReconcileStale3DSOrders_SkipsWhenStripeSaysSucceeded(t *testing.T) {
 		}, nil
 	}
 
+	skip := middleware.Abandoned3DSSweepCounter().WithLabelValues("succeeded_skip")
+	before := testutil.ToFloat64(skip)
+
 	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
@@ -132,6 +143,9 @@ func TestReconcileStale3DSOrders_SkipsWhenStripeSaysSucceeded(t *testing.T) {
 	}
 	if reloaded.Status != models.OrderStatusRequiresAction {
 		t.Fatalf("must defer to webhook on succeeded; got %q", reloaded.Status)
+	}
+	if got := testutil.ToFloat64(skip) - before; got != 1 {
+		t.Fatalf("want 1 succeeded_skip sweep counter increment, got %v", got)
 	}
 }
 
@@ -161,6 +175,9 @@ func TestReconcileStale3DSOrders_GuardsAgainstWebhookRace(t *testing.T) {
 		}, nil
 	}
 
+	noop := middleware.Abandoned3DSSweepCounter().WithLabelValues("flip_noop")
+	before := testutil.ToFloat64(noop)
+
 	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
@@ -169,6 +186,9 @@ func TestReconcileStale3DSOrders_GuardsAgainstWebhookRace(t *testing.T) {
 	}
 	if reloaded.Status != models.OrderStatusPaid {
 		t.Fatalf("conditional update must preserve paid; got %q", reloaded.Status)
+	}
+	if got := testutil.ToFloat64(noop) - before; got != 1 {
+		t.Fatalf("want 1 flip_noop sweep counter increment, got %v", got)
 	}
 }
 
@@ -344,6 +364,9 @@ func TestReconcileStale3DSOrders_SkipsOnStripeError(t *testing.T) {
 		return nil, fmt.Errorf("simulated stripe outage")
 	}
 
+	stripeErr := middleware.Abandoned3DSSweepCounter().WithLabelValues("stripe_error")
+	before := testutil.ToFloat64(stripeErr)
+
 	ReconcileStale3DSOrders(30 * time.Minute)
 
 	var reloaded models.Order
@@ -352,6 +375,9 @@ func TestReconcileStale3DSOrders_SkipsOnStripeError(t *testing.T) {
 	}
 	if reloaded.Status != models.OrderStatusRequiresAction {
 		t.Fatalf("stripe error must not flip; got %q", reloaded.Status)
+	}
+	if got := testutil.ToFloat64(stripeErr) - before; got != 1 {
+		t.Fatalf("want 1 stripe_error sweep counter increment, got %v", got)
 	}
 }
 
