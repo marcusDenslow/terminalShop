@@ -71,3 +71,4 @@ uses SQLite by default so there's nothing to spin up.
 ## inspiration
 
 [terminal.shop](https://terminal.shop) for the original idea and most of the patterns in `pkg/tui/`. their source is open and worth reading.
+# something
