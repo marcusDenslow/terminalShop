@@ -355,11 +355,16 @@ func (m Model) RenderCardList() string {
 		boxes = append(boxes, box)
 	}
 
-	sshFocused := m.payment.cardCursor == len(m.SavedCards)
-	sshBox := m.CreateBox(m.formatListItem("+ add card via ssh", sshFocused), sshFocused)
+	// SSH inline card-add is dormant until i have a norwegian org
+	// number wired to stripe, something i dont have since its $300+. Keep the row visible so the option is
+	// discoverable, but render it dimmed and exclude it from cursor space
+	// (handled in PaymentUpdate below) so it can not be picked
+	dim := m.theme.TextDim().Render
+	sshLabel := dim("+ add card via ssh") + "  " + dim("(WIP)")
+	sshBox := m.CreateBox(m.formatListItem(sshLabel, false), false)
 	boxes = append(boxes, sshBox)
 
-	httpsFocused := m.payment.cardCursor == len(m.SavedCards)+1
+	httpsFocused := m.payment.cardCursor == len(m.SavedCards)
 	httpsBox := m.CreateBox(m.formatListItem("+ add payment via browser", httpsFocused), httpsFocused)
 	boxes = append(boxes, httpsBox)
 
@@ -501,7 +506,7 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.payment.cardCursor--
 			}
 		case "down", "j":
-			if m.payment.cardCursor < len(m.SavedCards)+1 {
+			if m.payment.cardCursor < len(m.SavedCards) {
 				m.payment.cardCursor++
 			}
 
@@ -511,17 +516,8 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.SelectedCard = &selected
 				return m.ReviewSwitch()
 			}
-			if m.payment.cardCursor == len(m.SavedCards) {
-				m.payment.view = 1
-				m.payment.form = m.InitPaymentForm()
-				m.footer = []footerCommand{
-					{key: "tab", value: "next"},
-					{key: "enter", value: "submit"},
-					{key: "esc", value: "back"},
-				}
-				return m, m.payment.form.form.Init()
-			}
-			// Browser payment
+			// Browser flow, the only reachable add-card path while the SSH
+			// inline form is dormant (see RenderCardList)
 			m.payment.view = 2
 			m.payment.collectURL = nil
 			m.payment.collectTimeOut = false
@@ -545,16 +541,6 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				m.SavedCards = append(m.SavedCards[:m.payment.cardCursor], m.SavedCards[m.payment.cardCursor+1:]...)
 				if m.payment.cardCursor >= len(m.SavedCards) && m.payment.cardCursor > 0 {
 					m.payment.cardCursor--
-				}
-				if len(m.SavedCards) == 0 {
-					m.payment.view = 1
-					m.payment.form = m.InitPaymentForm()
-					m.footer = []footerCommand{
-						{key: "tab", value: "next"},
-						{key: "enter", value: "submit"},
-						{key: "esc", value: "back"},
-					}
-					return m, tea.Batch(m.payment.form.form.Init(), m.deleteCardCmd(card.ID))
 				}
 				return m, m.deleteCardCmd(card.ID)
 			}
