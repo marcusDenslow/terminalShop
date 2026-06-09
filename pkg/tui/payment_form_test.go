@@ -40,8 +40,8 @@ func TestRenderCardList_SshOptionComingSoon(t *testing.T) {
 	if !strings.Contains(out, "add card via ssh") {
 		t.Fatalf("ssh option missing from card list output:\n%s", out)
 	}
-	if !strings.Contains(out, "coming soon") {
-		t.Fatalf("want 'coming soon' marked on ssh option:\n%s", out)
+	if !strings.Contains(out, "WIP") {
+		t.Fatalf("want 'WIP' marked on ssh option:\n%s", out)
 	}
 }
 

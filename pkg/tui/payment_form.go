@@ -360,7 +360,7 @@ func (m Model) RenderCardList() string {
 	// discoverable, but render it dimmed and exclude it from cursor space
 	// (handled in PaymentUpdate below) so it can not be picked
 	dim := m.theme.TextDim().Render
-	sshLabel := dim("+ add card via ssh") + "  " + dim("(coming soon)")
+	sshLabel := dim("+ add card via ssh") + "  " + dim("(WIP)")
 	sshBox := m.CreateBox(m.formatListItem(sshLabel, false), false)
 	boxes = append(boxes, sshBox)
 
