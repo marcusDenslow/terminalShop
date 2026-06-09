@@ -22,6 +22,15 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
+            set -euo pipefail
             cd ~/terminalShop
-            git pull
+            git fetch origin master
+            git reset --hard origin/master
+            deployed=$(git rev-parse HEAD)
+            expected="${{ github.sha }}"
+            if [ "$deployed" != "$expected" ]; then
+              echo "::error::deploy HEAD mismatch: box=$deployed expected=$expected"
+              exit 1
+            fi
             docker compose -f docker-compose.prod.yml up -d --build
+            echo "deploy verified: HEAD=$deployed"
