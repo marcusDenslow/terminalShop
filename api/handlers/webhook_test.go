@@ -222,3 +222,38 @@ func TestHandlePaymentIntentSucceeded_RequiresActionFlipsToPaid(t *testing.T) {
 		t.Fatalf("stripe_payment_id: want %q, got %q", order.StripePaymentID, reloaded.StripePaymentID)
 	}
 }
+
+func TestHandlePaymentIntentSucceeded_AmountMismatchDoesNotPay(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	order := seedOrderForWebhook(t, user.ID, models.OrderStatusRequiresAction, "pi_test_amount_mismatch")
+
+	// PI claims 1 cent; seed order.Total is 500.
+	pi := map[string]any{
+		"id":       order.StripePaymentID,
+		"amount":   1,
+		"metadata": map[string]string{"order_id": fmt.Sprintf("%d", order.ID)},
+	}
+	raw, err := json.Marshal(pi)
+	if err != nil {
+		t.Fatalf("marshal pi: %v", err)
+	}
+	evt := stripe.Event{
+		Type: "payment_intent.succeeded",
+		Data: &stripe.EventData{Raw: raw},
+	}
+
+	h := NewWebhookHandler("", "")
+	h.handlePaymentIntentSucceeded(context.Background(), evt)
+
+	db := database.GetDB()
+	var reloaded models.Order
+	if err := db.First(&reloaded, order.ID).Error; err != nil {
+		t.Fatalf("reloaded order: %v", err)
+	}
+	if reloaded.Status == models.OrderStatusPaid {
+		t.Fatalf("order marked paid despite amount mismatch")
+	}
+}

@@ -92,6 +92,7 @@ func (c *Config) validate() error {
 		{"JWT_SECRET", c.JWTSecret},
 		{"STRIPE_SECRET_KEY", c.StripeSecretKey},
 		{"AUTH_FINGERPRINT_KEY", c.AuthFingerprintKey},
+		{"STRIPE_WEBHOOK_SECRET", c.StripeWebhookSecret},
 	}
 
 	var missing []string
