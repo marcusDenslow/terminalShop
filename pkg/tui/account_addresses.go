@@ -1,7 +1,7 @@
 package tui
 
 func (m Model) AddressesView(width int) string {
-	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
+	titleStyle := accountTitleStyle(width).MarginBottom(2)
 	contentStyle := m.theme.TextBody().Width(width)
 
 	lines := titleStyle.Render("Address") + "\n\n"

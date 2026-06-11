@@ -8,13 +8,13 @@ import (
 
 func (m Model) createBoxInner(content string, selected bool, position lipgloss.Position, paddingH int, paddingV int, totalWidth int) string {
 	padded := lipgloss.PlaceHorizontal(totalWidth, position, content)
-	base := m.theme.Base().Border(lipgloss.NormalBorder()).Width(totalWidth)
+	base := m.theme.Base().Border(lipgloss.RoundedBorder()).Width(totalWidth)
 
 	var style lipgloss.Style
 	if selected {
-		style = base.BorderForeground(m.theme.Highlight())
+		style = base.BorderForeground(cWhite)
 	} else {
-		style = base.BorderForeground(m.theme.Border())
+		style = base.BorderForeground(cLine)
 	}
 	return style.Padding(paddingV, paddingH).Render(padded)
 }

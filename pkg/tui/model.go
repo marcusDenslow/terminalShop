@@ -142,10 +142,7 @@ type Model struct {
 }
 
 type shopState struct {
-	selected       int
-	menuViewport   viewport.Model
-	detailViewport viewport.Model
-	viewportsReady bool
+	selected int
 }
 
 type splashState struct {
@@ -240,7 +237,6 @@ func (m Model) SwitchPage(p page) Model {
 
 func (m Model) ShopSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(shopPage)
-	m = m.updateShopViewports()
 	m.footer = []footerCommand{
 		{key: "j/k", value: "products"},
 		{key: "+/-", value: "qty"},
@@ -928,10 +924,6 @@ func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clien
 		return SplashAuthMsg{Token: token, User: user}
 	}
 	return m
-}
-
-func newViewport(w, h int) viewport.Model {
-	return viewport.New(viewport.WithWidth(w), viewport.WithHeight(h))
 }
 
 func (m Model) collectCardCmd() tea.Cmd {
