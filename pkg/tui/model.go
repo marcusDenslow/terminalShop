@@ -926,10 +926,6 @@ func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clien
 	return m
 }
 
-func newViewport(w, h int) viewport.Model {
-	return viewport.New(viewport.WithWidth(w), viewport.WithHeight(h))
-}
-
 func (m Model) collectCardCmd() tea.Cmd {
 	return func() tea.Msg {
 		if m.APIClient == nil {
