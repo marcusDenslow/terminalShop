@@ -99,6 +99,89 @@ func TestRenderAccountSmoke(t *testing.T) {
 	}
 }
 
+// TestRenderOrderWindowing verifies the windowed order list: whole cards
+// only, with ↑/↓ arrow rows marking hidden items.
+func TestRenderOrderWindowing(t *testing.T) {
+	m := NewModel("smoke")
+	m.Loading = false
+	m.OrdersLoaded = true
+	for i := 1; i <= 9; i++ {
+		m.Orders = append(m.Orders, models.Order{
+			ID:     uint(9000 + i),
+			Status: models.OrderStatusPaid,
+			Total:  1000 + i*100,
+		})
+	}
+	m = m.updateLayout(100, 40)
+	m, _ = m.AccountSwitch()
+
+	// Preview mode: window starts at the top, arrow only below.
+	plain := ansiRE.ReplaceAllString(m.renderString(), "")
+	t.Log("\n" + plain)
+	if !strings.Contains(plain, "↓ 4 more") {
+		t.Errorf("preview mode: expected '↓ 4 more' indicator")
+	}
+	if strings.Contains(plain, "↑") {
+		t.Errorf("preview mode: unexpected up arrow")
+	}
+
+	// Browse mode scrolled to the middle: arrows on both ends.
+	m.account.orderViewState = 1
+	m.account.orderCursor = 6
+	m = m.scrollToAccountDetailItem()
+	plain = ansiRE.ReplaceAllString(m.renderString(), "")
+	t.Log("\n" + plain)
+	if !strings.Contains(plain, "↑ 2 more") || !strings.Contains(plain, "↓ 2 more") {
+		t.Errorf("browse mode: expected '↑ 2 more' and '↓ 2 more' indicators")
+	}
+}
+
+// TestRenderCartSmoke verifies the cart page cards line up with the chrome.
+func TestRenderCartSmoke(t *testing.T) {
+	m := NewModel("smoke")
+	m.Loading = false
+	// Seed coffees carry no IDs, so assign them for distinct cart keys
+	for i := range m.Coffees {
+		m.Coffees[i].ID = uint(i + 1)
+	}
+	m.Cart[m.Coffees[0].ID] = &models.CartItem{CoffeeID: m.Coffees[0].ID, Coffee: m.Coffees[0], Quantity: 2}
+	m.Cart[m.Coffees[1].ID] = &models.CartItem{CoffeeID: m.Coffees[1].ID, Coffee: m.Coffees[1], Quantity: 1}
+	m = m.updateLayout(100, 40)
+	m, _ = m.CartSwitch()
+
+	plain := ansiRE.ReplaceAllString(m.renderString(), "")
+	t.Log("\n" + plain)
+
+	var lefts, rights []int
+	for _, line := range strings.Split(plain, "\n") {
+		runes := []rune(line)
+		first, last := -1, -1
+		for i, r := range runes {
+			if strings.ContainsRune("╭╮╰╯│", r) {
+				if first == -1 {
+					first = i
+				}
+				last = i
+			}
+		}
+		if first != -1 {
+			lefts = append(lefts, first)
+			rights = append(rights, last)
+		}
+	}
+	if len(lefts) == 0 {
+		t.Fatal("no box-drawing rows found")
+	}
+	// Every box row (header, cards, footer) must share the chrome edges.
+	for i := range lefts {
+		if lefts[i] != lefts[0] || rights[i] != rights[0] {
+			t.Errorf("box edge misaligned: row %d spans %d-%d, expected %d-%d",
+				i, lefts[i], rights[i], lefts[0], rights[0])
+			break
+		}
+	}
+}
+
 // TestRenderShopSmokeStacked prints the stacked (medium/small) layouts.
 func TestRenderShopSmokeStacked(t *testing.T) {
 	for _, size := range [][2]int{{60, 32}, {45, 30}} {

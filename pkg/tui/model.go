@@ -182,6 +182,7 @@ type accountState struct {
 	cursor             int
 	orderViewState     int
 	orderCursor        int
+	orderWindowStart   int // first fully-visible card in the windowed order list
 	orderYOffset       int // saved scroll pos when entering order detail
 	faqFocused         bool
 	addressListFocused bool
@@ -261,13 +262,12 @@ func (m Model) CartSwitch() (Model, tea.Cmd) {
 			{key: "q", value: "quit"},
 		}
 	} else {
+		// Keep this list short enough to fit on one footer line.
 		m.footer = []footerCommand{
 			{key: "j/k", value: "items"},
 			{key: "+/-", value: "qty"},
-			{key: "p/enter", value: "checkout"},
+			{key: "enter", value: "checkout"},
 			{key: "s", value: "shop"},
-			{key: "a", value: "account"},
-			{key: "pgup/pgdn", value: "scroll"},
 			{key: "?", value: "help"},
 			{key: "q", value: "quit"},
 		}

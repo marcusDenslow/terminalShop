@@ -1,10 +1,9 @@
 package tui
 
 func (m Model) AddressesView(width int) string {
-	titleStyle := accountTitleStyle(width).MarginBottom(2)
 	contentStyle := m.theme.TextBody().Width(width)
 
-	lines := titleStyle.Render("Address") + "\n\n"
+	lines := ""
 	if len(m.SavedAddresses) == 0 {
 		lines += contentStyle.Render("No saved addresses")
 	} else {

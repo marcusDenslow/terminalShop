@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -9,16 +11,18 @@ import (
 )
 
 // accountBodyHeight returns the inner content height of the account body
-// panels, mirroring the boxed shop layout: header + footer + 2 blank gap
-// rows + 2 panel border rows are reserved.
+// panels. The body is quantized to whole order cards so the menu panel's
+// bottom border lines up exactly with the last visible card; the two gap
+// rows around the body host the up/down scroll arrows.
 func (m Model) accountBodyHeight() int {
 	headerHeight := lipgloss.Height(m.BuildHeader())
 	footerHeight := lipgloss.Height(m.BuildFooter())
-	h := m.heightContainer - headerHeight - footerHeight - 4
-	if h < 3 {
-		h = 3
+	budget := m.heightContainer - headerHeight - footerHeight - 2
+	cards := budget / orderCardHeight
+	if cards < 1 {
+		cards = 1
 	}
-	return h
+	return cards*orderCardHeight - 2
 }
 
 // accountDetailWidth returns the width of the unboxed detail area: the chrome
@@ -32,19 +36,13 @@ func (m Model) accountDetailWidth() int {
 	return contentW - (menuW + 4) - 1
 }
 
-// accountTitleStyle styles a section title for the detail area: centered
-// across the full detail width so it sits over the content below it.
-func accountTitleStyle(width int) lipgloss.Style {
-	return pWht.Bold(true).Width(width).Align(lipgloss.Center)
-}
-
 // updateAccountViewport initializes or resizes the detail viewport for the account page.
 // The viewport spans the unboxed detail area to the right of the menu panel.
 func (m Model) updateAccountViewport() Model {
 	detailW := m.accountDetailWidth()
-	// +1: no panel on the detail side, but one row is spent on the leading
-	// newline that aligns the content with the menu panel's first item row.
-	availableHeight := m.accountBodyHeight() + 1
+	// +2: no panel on the detail side, so the viewport spans the same rows
+	// as the menu panel including its border rows — tops and bottoms align.
+	availableHeight := m.accountBodyHeight() + 2
 	if m.size < large {
 		// Stacked: the menu panel sits above the detail area
 		menuPanelHeight := len(models.AccountMenuItems) + 2
@@ -85,7 +83,6 @@ func (m Model) getAccountDetailContent() string {
 	case "cards":
 		return m.CardsView(detailContentWidth)
 	case "faq":
-		titleStyle := accountTitleStyle(detailContentWidth).MarginBottom(2)
 		questionStyle := m.theme.TextHighlight().Bold(true)
 		contentStyle := m.theme.TextBody().Width(detailContentWidth)
 		faqContent := ""
@@ -96,7 +93,7 @@ func (m Model) getAccountDetailContent() string {
 				faqContent += "\n\n"
 			}
 		}
-		detailView := titleStyle.Render("FAQ") + "\n\n" + faqContent
+		detailView := faqContent
 		if !m.account.faqFocused {
 			hintStyle := m.theme.TextDim()
 			detailView += "\n\n" + hintStyle.Render("enter: scroll faq")
@@ -120,19 +117,25 @@ func (m Model) scrollToAccountDetailItem() Model {
 
 	switch {
 	case m.account.orderViewState == 1:
-		// No title in list mode, cards joined with JoinVertical (no gaps)
-		// Card: border(2) + content(2) + PaddingLeft only = 4 lines
-		headerOffset = 0
-		itemHeight = 4
-		itemCount = len(m.currentOrderList())
-		selectedIndex = m.account.orderCursor
+		// Order list uses whole-card windowing instead of viewport scroll:
+		// shift the window just enough to keep the cursor's card visible.
+		page := m.orderListPageSize()
+		if m.account.orderCursor < m.account.orderWindowStart {
+			m.account.orderWindowStart = m.account.orderCursor
+		}
+		if m.account.orderCursor >= m.account.orderWindowStart+page {
+			m.account.orderWindowStart = m.account.orderCursor - page + 1
+		}
+		m.account.detailViewport.GotoTop()
+		return m
 	case m.account.addressListFocused:
-		headerOffset = 3
+		// Titles were removed from the detail views, lists start at the top
+		headerOffset = 0
 		itemHeight = 5
 		itemCount = len(m.SavedAddresses)
 		selectedIndex = m.account.addressCursor
 	case m.account.cardListFocused:
-		headerOffset = 3
+		headerOffset = 0
 		itemHeight = 4
 		itemCount = len(m.SavedCards)
 		selectedIndex = m.account.cardCursor
@@ -163,12 +166,20 @@ func (m Model) scrollToAccountDetailItem() Model {
 func (m Model) BuildAccountView() string {
 	_, menuW, _, _ := m.shopLayout()
 
-	// Left panel: menu items, pill highlight like the shop chrome
+	// Left panel: menu items. The highlight is blue while the user navigates
+	// the menu, and falls back to the gray pill when focus has moved into the
+	// detail area (browsing orders, managing addresses/cards, scrolling faq).
+	focusedInside := m.account.orderViewState > 0 || m.account.addressListFocused ||
+		m.account.cardListFocused || m.account.faqFocused
+	pillBg := m.theme.Highlight()
+	if focusedInside {
+		pillBg = cPill
+	}
 	var menu []string
 	for i, item := range models.AccountMenuItems {
 		if m.account.cursor == i {
 			menu = append(menu, lipgloss.NewStyle().Width(menuW).
-				Background(cPill).Foreground(cWhite).Bold(true).
+				Background(pillBg).Foreground(cWhite).Bold(true).
 				Render(" "+item))
 		} else {
 			menu = append(menu, lipgloss.NewStyle().Width(menuW).
@@ -195,22 +206,32 @@ func (m Model) BuildAccountView() string {
 		)
 	} else {
 		bodyH := m.accountBodyHeight()
-		// Leading newline drops the detail content one row so its title
-		// lines up with the menu panel's first item, not its top border.
 		body = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			panel(menuW, bodyH, menuContent),
 			" ",
-			"\n"+detailRendered,
+			detailRendered,
 		)
 	}
 
-	// Blank rows separate the body from the header and footer boxes.
-	return "\n" + body + "\n"
+	// Blank rows separate the body from the header and footer boxes. When the
+	// windowed order list has hidden items, the arrows occupy those gap rows,
+	// centered over the card column, so the cards themselves always span
+	// exactly the menu panel's rows — top and bottom borders aligned.
+	topGap := ""
+	if above := m.orderHiddenAbove(); above > 0 && m.size >= large {
+		topGap = strings.Repeat(" ", menuW+5) +
+			orderScrollIndicator("↑", above, m.accountDetailWidth())
+	}
+	bottomGap := ""
+	if below := m.orderHiddenBelow(); below > 0 && m.size >= large {
+		bottomGap = strings.Repeat(" ", menuW+5) +
+			orderScrollIndicator("↓", below, m.accountDetailWidth())
+	}
+	return topGap + "\n" + body + "\n" + bottomGap
 }
 
 func (m Model) AboutView(width int) string {
-	titleStyle := accountTitleStyle(width).MarginBottom(2)
 	contentStyle := m.theme.TextBody().Width(width)
 	// USE this if wanting to add a corp name later
 	// accentStyle := m.theme.TextHighlight().Bold(true)
@@ -232,7 +253,7 @@ func (m Model) AboutView(width int) string {
 		width,
 	)) + "\n"
 
-	return titleStyle.Render("About") + "\n\n" + aboutContent
+	return aboutContent
 }
 
 func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
@@ -359,6 +380,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				case 0:
 					m.account.orderViewState = 1
 					m.account.orderCursor = 0
+					m.account.orderWindowStart = 0
 					m.account.detailViewport.GotoTop()
 					m.footer = []footerCommand{
 						{key: "j/k", value: "orders"},
