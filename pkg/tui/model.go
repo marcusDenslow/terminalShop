@@ -837,6 +837,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Espresso",
 				RoastType:   "Dark Roast",
+				RoastLevel:  5,
 				Ounces:      2,
 				BeanType:    "Arabica",
 				Price:       350, // $3.50
@@ -846,6 +847,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Latte",
 				RoastType:   "Medium Roast",
+				RoastLevel:  2,
 				Ounces:      12,
 				BeanType:    "Arabica Blend",
 				Price:       500, // $5.00
@@ -855,6 +857,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Cappuccino",
 				RoastType:   "Medium Roast",
+				RoastLevel:  3,
 				Ounces:      8,
 				BeanType:    "Italian Blend",
 				Price:       450, // $4.50
@@ -864,6 +867,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Americano",
 				RoastType:   "Dark Roast",
+				RoastLevel:  4,
 				Ounces:      16,
 				BeanType:    "Arabica",
 				Price:       400, // $4.00
@@ -873,6 +877,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Mocha",
 				RoastType:   "Medium Roast",
+				RoastLevel:  3,
 				Ounces:      16,
 				BeanType:    "Colombian",
 				Price:       550, // $5.50
@@ -882,6 +887,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Macchiato",
 				RoastType:   "Dark Roast",
+				RoastLevel:  4,
 				Ounces:      3,
 				BeanType:    "Robusta Blend",
 				Price:       425, // $4.25
