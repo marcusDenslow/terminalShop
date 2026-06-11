@@ -38,6 +38,7 @@ func (m Model) shopLayout() (contentW, menuW, detailW, wideW int) {
 }
 
 // roastLevel maps a roast type to a 1-5 intensity for the roast meter.
+// It is the fallback for products stored before the roast_level column existed.
 func roastLevel(roastType string) int {
 	rt := strings.ToLower(roastType)
 	switch {
@@ -105,7 +106,11 @@ func (m Model) shopDetailContent(w int) string {
 		pDim.Render(fmt.Sprintf("%dOZ", coffee.Ounces)) + sep +
 		pDim.Render(strings.ToUpper(coffee.BeanType))
 
-	strength := pDim.Render("roast  ") + roastMeter(roastLevel(coffee.RoastType))
+	level := coffee.RoastLevel
+	if level < 1 || level > 5 {
+		level = roastLevel(coffee.RoastType)
+	}
+	strength := pDim.Render("roast  ") + roastMeter(level)
 
 	price := lipgloss.NewStyle().Foreground(lipgloss.Color(coffee.Color)).Bold(true).
 		Render(fmt.Sprintf("$%d.%02d", coffee.Price/100, coffee.Price%100)) +
