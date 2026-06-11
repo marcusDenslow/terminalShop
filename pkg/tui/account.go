@@ -8,36 +8,58 @@ import (
 	"terminalShop/pkg/models"
 )
 
-// updateAccountViewport initializes or resizes the detail viewport for the account page.
-// Follows the reference pattern: each page owns its own viewport(s).
-func (m Model) updateAccountViewport() Model {
-	// Match the reference: only subtract header + footer, no extra margins
-	// (account is a viewport page — views.go renders it without margin padding)
+// accountBodyHeight returns the inner content height of the account body
+// panels, mirroring the boxed shop layout: header + footer + 2 blank gap
+// rows + 2 panel border rows are reserved.
+func (m Model) accountBodyHeight() int {
 	headerHeight := lipgloss.Height(m.BuildHeader())
 	footerHeight := lipgloss.Height(m.BuildFooter())
-	verticalMarginHeight := headerHeight + footerHeight
-
-	availableHeight := m.heightContainer - verticalMarginHeight
-
-	leftWidth := 18
-	rightWidth := m.widthContent - leftWidth - 2
-	detailWidth := rightWidth
-	if m.size < large {
-		detailWidth = m.widthContent
-		// In stacked mode, reduce available height by the left panel
-		leftPanelHeight := len(models.AccountMenuItems) + 1
-		availableHeight -= leftPanelHeight
+	h := m.heightContainer - headerHeight - footerHeight - 4
+	if h < 3 {
+		h = 3
 	}
-	if availableHeight < 3 {
-		availableHeight = 3
+	return h
+}
+
+// accountDetailWidth returns the width of the unboxed detail area: the chrome
+// width minus the menu panel and the gap. The detail side has no outer panel
+// (its content draws its own boxes), so it reclaims the border + padding.
+func (m Model) accountDetailWidth() int {
+	contentW, menuW, _, _ := m.shopLayout()
+	if m.size < large {
+		return contentW
+	}
+	return contentW - (menuW + 4) - 1
+}
+
+// accountTitleStyle styles a section title for the detail area: centered
+// across the full detail width so it sits over the content below it.
+func accountTitleStyle(width int) lipgloss.Style {
+	return pWht.Bold(true).Width(width).Align(lipgloss.Center)
+}
+
+// updateAccountViewport initializes or resizes the detail viewport for the account page.
+// The viewport spans the unboxed detail area to the right of the menu panel.
+func (m Model) updateAccountViewport() Model {
+	detailW := m.accountDetailWidth()
+	// +1: no panel on the detail side, but one row is spent on the leading
+	// newline that aligns the content with the menu panel's first item row.
+	availableHeight := m.accountBodyHeight() + 1
+	if m.size < large {
+		// Stacked: the menu panel sits above the detail area
+		menuPanelHeight := len(models.AccountMenuItems) + 2
+		availableHeight -= menuPanelHeight
+		if availableHeight < 3 {
+			availableHeight = 3
+		}
 	}
 
 	if !m.account.viewportReady {
-		m.account.detailViewport = viewport.New(viewport.WithWidth(detailWidth), viewport.WithHeight(availableHeight))
+		m.account.detailViewport = viewport.New(viewport.WithWidth(detailW), viewport.WithHeight(availableHeight))
 		m.account.detailViewport.KeyMap = modifiedKeyMap
 		m.account.viewportReady = true
 	} else {
-		m.account.detailViewport.SetWidth(detailWidth)
+		m.account.detailViewport.SetWidth(detailW)
 		m.account.detailViewport.SetHeight(availableHeight)
 	}
 
@@ -46,12 +68,7 @@ func (m Model) updateAccountViewport() Model {
 
 // getAccountDetailContent generates the content string for the current detail panel.
 func (m Model) getAccountDetailContent() string {
-	leftWidth := 18
-	rightWidth := m.widthContent - leftWidth - 2
-	detailContentWidth := rightWidth - 2
-	if m.size < large {
-		detailContentWidth = m.widthContent - 2
-	}
+	detailContentWidth := m.accountDetailWidth()
 
 	if m.account.cursor < 0 || m.account.cursor >= len(models.AccountMenuItems) {
 		return ""
@@ -68,7 +85,7 @@ func (m Model) getAccountDetailContent() string {
 	case "cards":
 		return m.CardsView(detailContentWidth)
 	case "faq":
-		titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
+		titleStyle := accountTitleStyle(detailContentWidth).MarginBottom(2)
 		questionStyle := m.theme.TextHighlight().Bold(true)
 		contentStyle := m.theme.TextBody().Width(detailContentWidth)
 		faqContent := ""
@@ -143,23 +160,22 @@ func (m Model) scrollToAccountDetailItem() Model {
 	return m
 }
 
-func (m Model) BuildAccountView(availableHeight int) string {
-	leftWidth := 18
+func (m Model) BuildAccountView() string {
+	_, menuW, _, _ := m.shopLayout()
 
-	// Build the left panel (menu items)
-	leftPanel := ""
+	// Left panel: menu items, pill highlight like the shop chrome
+	var menu []string
 	for i, item := range models.AccountMenuItems {
 		if m.account.cursor == i {
-			style := m.theme.Base().Background(m.theme.Highlight()).Foreground(m.theme.Accent()).Padding(0, 1).Width(leftWidth - 2).Align(lipgloss.Left)
-			leftPanel += style.Render(item) + "\n"
+			menu = append(menu, lipgloss.NewStyle().Width(menuW).
+				Background(cPill).Foreground(cWhite).Bold(true).
+				Render(" "+item))
 		} else {
-			style := m.theme.TextBody().Padding(0, 1).Width(leftWidth - 2).Align(lipgloss.Left)
-			leftPanel += style.Render(item) + "\n"
+			menu = append(menu, lipgloss.NewStyle().Width(menuW).
+				Render(" "+pBody.Render(item)))
 		}
 	}
-
-	leftContainer := m.theme.Base().
-		Width(leftWidth)
+	menuContent := lipgloss.JoinVertical(lipgloss.Left, menu...)
 
 	// Generate detail content and set it on the viewport
 	detailContent := m.getAccountDetailContent()
@@ -168,25 +184,33 @@ func (m Model) BuildAccountView(availableHeight int) string {
 	// Viewport handles scrolling/clipping — no manual line-slicing needed
 	detailRendered := m.account.detailViewport.View()
 
-	// Responsive layout: side-by-side on large, stacked on small/medium
+	// Responsive layout: menu panel beside the unboxed detail area on large,
+	// stacked on small/medium. The detail side draws its own item boxes.
+	var body string
 	if m.size < large {
-		return lipgloss.JoinVertical(
+		body = lipgloss.JoinVertical(
 			lipgloss.Left,
-			leftContainer.Render(leftPanel),
+			panel(menuW, 0, menuContent),
 			detailRendered,
+		)
+	} else {
+		bodyH := m.accountBodyHeight()
+		// Leading newline drops the detail content one row so its title
+		// lines up with the menu panel's first item, not its top border.
+		body = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			panel(menuW, bodyH, menuContent),
+			" ",
+			"\n"+detailRendered,
 		)
 	}
 
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		leftContainer.Render(leftPanel),
-		"  ",
-		detailRendered,
-	)
+	// Blank rows separate the body from the header and footer boxes.
+	return "\n" + body + "\n"
 }
 
 func (m Model) AboutView(width int) string {
-	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(2)
+	titleStyle := accountTitleStyle(width).MarginBottom(2)
 	contentStyle := m.theme.TextBody().Width(width)
 	// USE this if wanting to add a corp name later
 	// accentStyle := m.theme.TextHighlight().Bold(true)

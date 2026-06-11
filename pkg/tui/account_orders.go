@@ -66,7 +66,7 @@ func (m Model) currentOrderList() []models.Order {
 }
 
 func (m Model) orderListView(title string, orders []models.Order, width int) string {
-	titleStyle := m.theme.TextAccent().Bold(true).MarginBottom(1)
+	titleStyle := accountTitleStyle(width).MarginBottom(1)
 	contentStyle := m.theme.TextBody().Width(width)
 
 	if !m.OrdersLoaded {
