@@ -10,11 +10,11 @@ import (
 )
 
 func (m Model) OrdersView(width int) string {
-	return m.orderListView("Order History", m.HistoryOrders(), width)
+	return m.orderListView(m.HistoryOrders(), width)
 }
 
 func (m Model) ActiveOrdersView(width int) string {
-	return m.orderListView("Active Orders", m.ActiveOrders(), width)
+	return m.orderListView(m.ActiveOrders(), width)
 }
 
 func (m Model) ActiveOrders() []models.Order {
@@ -65,41 +65,95 @@ func (m Model) currentOrderList() []models.Order {
 	return nil
 }
 
-func (m Model) orderListView(title string, orders []models.Order, width int) string {
-	titleStyle := accountTitleStyle(width).MarginBottom(1)
+// orderCardHeight is the rendered height of one order card:
+// border (2) + content lines (2), no vertical padding.
+const orderCardHeight = 4
+
+// orderListPageSize returns how many whole order cards fit in the detail
+// area. Both scroll arrows render outside the list, in the gap rows above
+// and below the body, so the cards use the full viewport height.
+func (m Model) orderListPageSize() int {
+	n := m.account.detailViewport.Height() / orderCardHeight
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// orderHiddenAbove returns how many order cards are scrolled off above the
+// windowed list, or 0 when the windowed order list isn't showing.
+func (m Model) orderHiddenAbove() int {
+	if m.account.orderViewState != 1 || !m.OrdersLoaded {
+		return 0
+	}
+	orders := m.currentOrderList()
+	if len(orders) == 0 {
+		return 0
+	}
+	page := m.orderListPageSize()
+	start := m.account.orderWindowStart
+	if start > len(orders)-page {
+		start = len(orders) - page
+	}
+	if start < 0 {
+		start = 0
+	}
+	return start
+}
+
+// orderHiddenBelow returns how many order cards are scrolled off below the
+// windowed list, or 0 when the windowed order list isn't showing.
+func (m Model) orderHiddenBelow() int {
+	if m.account.orderViewState == 2 || !m.OrdersLoaded {
+		return 0
+	}
+	orders := m.currentOrderList()
+	if len(orders) == 0 {
+		return 0
+	}
+	below := len(orders) - (m.orderHiddenAbove() + m.orderListPageSize())
+	if below < 0 {
+		below = 0
+	}
+	return below
+}
+
+// orderScrollIndicator renders the dim "more items" arrow row, centered
+// across the card width.
+func orderScrollIndicator(arrow string, count, width int) string {
+	return pDim.Width(width).Align(lipgloss.Center).
+		Render(fmt.Sprintf("%s %d more", arrow, count))
+}
+
+func (m Model) orderListView(orders []models.Order, width int) string {
 	contentStyle := m.theme.TextBody().Width(width)
 
 	if !m.OrdersLoaded {
-		return titleStyle.Render(title) + "\n" + contentStyle.Render("Loading orders...")
+		return contentStyle.Render("Loading orders...")
 	}
 	if len(orders) == 0 {
-		return titleStyle.Render(title) + "\n" + contentStyle.Render("No orders yet")
+		return contentStyle.Render("No orders yet")
 	}
 	if m.account.orderViewState == 2 {
 		return m.buildOrderDetailView(orders[m.account.orderCursor], width)
 	}
 
-	boxWidth := width - 2
+	// Whole-card windowing: render only fully-visible cards, never clipping a
+	// card mid-border. Both scroll arrows render in BuildAccountView's gap
+	// rows, so the cards span exactly the menu panel's rows.
+	page := m.orderListPageSize()
+	start := m.orderHiddenAbove()
+	end := start + page
+	if end > len(orders) {
+		end = len(orders)
+	}
 
-	// Build cards and join vertically — no manual "\n" gaps means fixed spacing
-	var cards []string
-	for i, order := range orders {
+	var rows []string
+	for i := start; i < end; i++ {
 		isSelected := m.account.orderViewState == 1 && i == m.account.orderCursor
-		cards = append(cards, m.buildOrderCard(order, boxWidth, isSelected))
+		rows = append(rows, m.buildOrderCard(orders[i], width, isSelected))
 	}
-	cardList := lipgloss.JoinVertical(lipgloss.Left, cards...)
-
-	// In preview mode (viewState 0), show title + hint
-	if m.account.orderViewState == 0 {
-		hintStyle := m.theme.TextDim()
-		return titleStyle.Render(title) + "\n" +
-			cardList + "\n" +
-			hintStyle.Render("enter: browse orders")
-	}
-
-	// In list browsing mode (viewState 1), just show cards — no title
-	// (the left panel menu already shows "order history" as selected)
-	return cardList
+	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
 // buildOrderCard renders a single order as a bordered box with fixed height.

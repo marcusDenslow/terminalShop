@@ -5,10 +5,9 @@ import (
 )
 
 func (m Model) CardsView(width int) string {
-	titleSTyle := accountTitleStyle(width).MarginBottom(2)
 	contentStyle := m.theme.TextBody().Width(width)
 
-	lines := titleSTyle.Render("Cards") + "\n\n"
+	lines := ""
 	if m.SavedCardsIsEmpty() {
 		lines += contentStyle.Render("No saved cards")
 	} else {
