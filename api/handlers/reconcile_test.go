@@ -518,3 +518,81 @@ func seedRequiresActionOrder(t *testing.T, userID uint, piID string, updatedAt t
 	}
 	return order
 }
+
+// TestReconcilePayRedirects_DeleteExpiredKeepsLive verifies the predicate
+// boundary: a row past ExpiresAt is hard-deleted while a row whose ExpiresAt
+// is still in the future survives. Seeding both sides through GORM keeps the
+// stored timestamp format identical to the one the sweep binds for time.Now(),
+// so the comparison is exercised exactly as it runs in production.
+func TestReconcilePayRedirects_DeleteExpiredKeepsLive(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+
+	now := time.Now()
+	expired := models.PayRedirect{
+		Token:     "tok_expired",
+		URL:       "https://example.test/expired",
+		Purpose:   models.RedirectPurposeCheckout3DS,
+		CreatedAt: now.Add(-20 * time.Minute),
+		ExpiresAt: now.Add(-10 * time.Minute),
+	}
+
+	live := models.PayRedirect{
+		Token:     "tok_live",
+		URL:       "https://example.test/live",
+		Purpose:   models.RedirectPurposeAddCard,
+		CreatedAt: now,
+		ExpiresAt: now.Add(10 * time.Minute),
+	}
+	if err := db.Create(&expired).Error; err != nil {
+		t.Fatalf("seed expired: %v", err)
+	}
+	if err := db.Create(&live).Error; err != nil {
+		t.Fatalf("seed live: %v", err)
+	}
+
+	ReconcilePayRedirects(context.Background())
+
+	var remaining []models.PayRedirect
+	if err := db.Find(&remaining).Error; err != nil {
+		t.Fatalf("list remaining: %v", err)
+	}
+	if len(remaining) != 1 {
+		t.Fatalf("want 1 row remaining, got %d", len(remaining))
+	}
+	if remaining[0].Token != "tok_live" {
+		t.Fatalf("wrong row survived: want tok_live, got %q", remaining[0].Token)
+	}
+}
+
+func TestReconcilePayRedirects_NoExpiredIsNoOp(t *testing.T) {
+	testDB := setupTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+
+	live := models.PayRedirect{
+		Token:     "tok_live_only",
+		URL:       "https://example.test/live",
+		Purpose:   models.RedirectPurposeCheckout3DS,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(10 * time.Minute),
+	}
+	if err := db.Create(&live).Error; err != nil {
+		t.Fatalf("seed live: %v", err)
+	}
+
+	ReconcilePayRedirects(context.Background())
+
+	var count int64
+	if err := db.Model(&models.PayRedirect{}).Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("want 1 row preserved, got %d", count)
+	}
+}

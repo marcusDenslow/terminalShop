@@ -225,6 +225,23 @@ func ReconcileExpiredCards(ctx context.Context) {
 	}
 }
 
+// ReconcilePayRedirects deletes pay_redirects rows whose ExpiresAt had passed.
+// Lazy deletion on read (PayRedirect) is the primary path, this sweep only
+// reclaims tokens nobody ever followed so the table stays bounded.
+func ReconcilePayRedirects(ctx context.Context) {
+	db := database.GetDB().WithContext(ctx)
+
+	res := db.Where("expires_at < ?", time.Now()).Delete(&models.PayRedirect{})
+	if res.Error != nil {
+		reconcileLog().Error("pay_redirects sweep failed", "error", res.Error)
+		return
+	}
+	if res.RowsAffected == 0 {
+		return
+	}
+	reconcileLog().Info("swept expired pay_redirects", "count", res.RowsAffected)
+}
+
 // ReconcileUnshipped finds paid orders older than 24h with no tracking
 // number and posts a single Slack reminder. Pure read + notify.
 func ReconcileUnshipped(ctx context.Context) {

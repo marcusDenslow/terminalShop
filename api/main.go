@@ -170,6 +170,19 @@ func main() {
 		}
 	}()
 
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				handlers.ReconcilePayRedirects(ctx)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	log.Println("API server started. Press Ctrl+C to shutdown.")
 
 	// Block until signal received
