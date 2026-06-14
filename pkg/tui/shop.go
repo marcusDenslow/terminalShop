@@ -24,9 +24,7 @@ const (
 // menu(menuW+4) + gap(1) + detail(detailW+4) = contentW = wideW + 4.
 func (m Model) shopLayout() (contentW, menuW, detailW, wideW int) {
 	contentW = m.widthContent
-	if contentW > 74 {
-		contentW = 74
-	}
+	contentW = min(contentW, 74)
 	wideW = contentW - 4
 	if m.size < large {
 		// Stacked layout: both panels span the full content width.
@@ -66,6 +64,7 @@ func clampLines(s string, n int) string {
 
 // roastMeter renders the strength dots, e.g. ● ● ● ○ ○
 func roastMeter(n int) string {
+	n = max(0, min(n, 5))
 	on := lipgloss.NewStyle().Foreground(cGold).Render(strings.Repeat("● ", n))
 	off := pDim.Render(strings.Repeat("○ ", 5-n))
 	return strings.TrimRight(on+off, " ")
@@ -218,12 +217,8 @@ func (m Model) shopMoveSelected(previous bool) Model {
 	} else {
 		next++
 	}
-	if next < 0 {
-		next = 0
-	}
-	if next >= len(m.Coffees) {
-		next = len(m.Coffees) - 1
-	}
+	next = max(next, 0)
+	next = min(next, len(m.Coffees)-1)
 	m.shop.selected = next
 	return m
 }
