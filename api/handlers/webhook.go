@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -52,8 +53,17 @@ func (h *WebhookHandler) HandleStripe(w http.ResponseWriter, r *http.Request) {
 
 	// Verify the Stripe signature. Reject anything that doesn't match.
 	if h.webhookSecret == "" {
-		// No secret configured — log a loud warning but still process in dev.
-		webhookLog().Warn("stripe webhook secret not set; skipping signature verification")
+		// Fail closed in production. config.validate() requires STRIPE_WEBHOOK_SECRET
+		// in production, so the server should never boot into this state; this is
+		// defense in depth against a misconfigured deploy. Mirrors the Shippo and
+		// Slack handlers, which already refuse to run without their secret.
+		if os.Getenv("ENVIRONMENT") == "production" {
+			webhookLog().Error("stripe webhook secret not set in production; refusing to process event")
+			utils.RespondError(w, http.StatusServiceUnavailable, "WEBHOOK_NOT_CONFIGURED", "webhook verification not configured", nil)
+			return
+		}
+		// Development only; warn loudly but still process so local testing works.
+		webhookLog().Warn("stripe webhook secret not set; skipping signature verification (development only)")
 	} else {
 		sig := r.Header.Get("Stripe-Signature")
 		if _, err := webhook.ConstructEventWithOptions(body, sig, h.webhookSecret, webhook.ConstructEventOptions{
@@ -121,6 +131,20 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(ctx context.Context, event
 
 	if order.Status == models.OrderStatusPaid {
 		// Already recorded — idempotent.
+		return
+	}
+
+	// Defense in depth: even behind a valid signature, refuse to mark an order
+	// paid unless the PaymentIntent's amount and currency match what we charged.
+	// Under ConvertCart these always match (Amount == order.Total at creation), so
+	// a mismatch means a malformed or unexpected event we should not trust.
+	if pi.Amount != int64(order.Total) {
+		webhookLog().Error("payment intent amount mismatch; refusing to mark paid", "order_id", orderIDStr, "pi", pi.ID, "pi_amount", pi.Amount, "order_total", order.Total)
+		return
+	}
+	if pi.Currency != "" && pi.Currency != stripe.CurrencyUSD {
+		webhookLog().Error("payment intent currency mismatch; refusing to mark paid",
+			"order_id", orderIDStr, "pi", pi.ID, "currency", string(pi.Currency))
 		return
 	}
 
