@@ -9,36 +9,42 @@ import (
 )
 
 func (m Model) updateCartViewport() Model {
+	contentW, _, _, _ := m.shopLayout()
 	headerH := lipgloss.Height(m.BuildHeader())
 	breadH := lipgloss.Height(m.BuildBreadcrumbs())
 	footerH := lipgloss.Height(m.BuildFooter())
-	availH := m.heightContainer - headerH - footerH - breadH
+	// 2 = blank gap rows around the cart list
+	availH := m.heightContainer - headerH - footerH - breadH - 2
 	if availH < 1 {
 		availH = 1
 	}
 	if !m.cart.viewportReady {
-		m.cart.viewport = viewport.New(viewport.WithWidth(m.widthContent), viewport.WithHeight(availH))
+		m.cart.viewport = viewport.New(viewport.WithWidth(contentW), viewport.WithHeight(availH))
 		m.cart.viewport.KeyMap = viewport.KeyMap{}
 		m.cart.viewportReady = true
 	} else {
-		m.cart.viewport.SetWidth(m.widthContent)
+		m.cart.viewport.SetWidth(contentW)
 		m.cart.viewport.SetHeight(availH)
 	}
 	return m
 }
 
 func (m Model) generateCartContent() string {
+	contentW, _, _, _ := m.shopLayout()
+
 	if m.IsCartEmpty() {
 		emptyStyle := m.theme.TextDim().
 			Align(lipgloss.Center).
-			Width(m.widthContent).
+			Width(contentW).
 			Padding(2, 0)
 		render := emptyStyle.Render("Your cart is empty\n\nPress s to go back to shop")
 		return render
 	}
 
 	cartItems := ""
-	boxWidth := m.widthContent - 4
+	// Cart cards span the full chrome width so they line up with the
+	// header and footer boxes.
+	boxWidth := contentW
 	itemSlice := m.GetCartItemsSlice()
 
 	boxPadding := 0
@@ -94,7 +100,7 @@ func (m Model) generateCartContent() string {
 			boxContent = m.theme.TextAccent().Render(boxContent)
 		}
 		box := m.createBoxInner(boxContent, isSelected, lipgloss.Left, 2, boxPadding, boxWidth)
-		cartItems += m.theme.Base().Width(m.widthContent).Align(lipgloss.Center).Render(box)
+		cartItems += box
 
 		if idx < len(itemSlice)-1 {
 			cartItems += "\n"
@@ -123,12 +129,9 @@ func (m Model) CartView() string {
 			m.cart.viewport.SetYOffset(targetY - m.cart.viewport.Height() + itemHeight)
 		}
 	}
-	return lipgloss.Place(
-		m.widthContainer,
-		lipgloss.Height(m.cart.viewport.View()),
-		lipgloss.Center, lipgloss.Center,
-		m.cart.viewport.View(),
-	)
+	// Blank rows separate the list from the chrome; no Place wrapper so the
+	// cards stay left-aligned with the header and footer boxes.
+	return "\n" + m.cart.viewport.View() + "\n"
 }
 
 func (m Model) CartUpdate(msg tea.Msg) (Model, tea.Cmd) {

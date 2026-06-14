@@ -11,6 +11,7 @@ type Coffee struct {
 	ID          uint           `gorm:"primaryKey" json:"id"`
 	Name        string         `gorm:"size:255;not null" json:"name"`
 	RoastType   string         `gorm:"size:100" json:"roast_type"`
+	RoastLevel  int            `json:"roast_level"` // 1-5 roast-intensity
 	Ounces      int            `json:"ounces"`
 	BeanType    string         `gorm:"size:100" json:"bean_type"`
 	Price       int            `gorm:"not null" json:"price"`

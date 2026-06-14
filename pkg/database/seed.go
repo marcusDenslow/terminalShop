@@ -26,6 +26,7 @@ func Seed(db *gorm.DB) error {
 		{
 			Name:        "Espresso",
 			RoastType:   "Dark Roast",
+			RoastLevel:  5,
 			Ounces:      2,
 			BeanType:    "Arabica",
 			Price:       1800, // $18.00
@@ -35,6 +36,7 @@ func Seed(db *gorm.DB) error {
 		{
 			Name:        "Americano",
 			RoastType:   "Medium Roast",
+			RoastLevel:  3,
 			Ounces:      8,
 			BeanType:    "Arabica",
 			Price:       2200, // $22.00
@@ -44,6 +46,7 @@ func Seed(db *gorm.DB) error {
 		{
 			Name:        "Cappuccino",
 			RoastType:   "Medium Roast",
+			RoastLevel:  3,
 			Ounces:      6,
 			BeanType:    "Arabica",
 			Price:       2200, // $22.00
@@ -53,6 +56,7 @@ func Seed(db *gorm.DB) error {
 		{
 			Name:        "Latte",
 			RoastType:   "Medium Roast",
+			RoastLevel:  2,
 			Ounces:      12,
 			BeanType:    "Arabica",
 			Price:       2500, // $25.00
@@ -62,6 +66,7 @@ func Seed(db *gorm.DB) error {
 		{
 			Name:        "Mocha",
 			RoastType:   "Dark Roast",
+			RoastLevel:  4,
 			Ounces:      12,
 			BeanType:    "Arabica",
 			Price:       3000, // $30.00
@@ -71,6 +76,7 @@ func Seed(db *gorm.DB) error {
 		{
 			Name:        "Macchiato",
 			RoastType:   "Dark Roast",
+			RoastLevel:  4,
 			Ounces:      3,
 			BeanType:    "Robusta Blend",
 			Price:       1800, // $18.00

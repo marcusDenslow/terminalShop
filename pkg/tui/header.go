@@ -2,57 +2,72 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
+	"strings"
 
 	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/table"
 )
 
-func (m Model) BuildHeader() string {
-	bold := m.theme.TextAccent().Bold(true).Render
-	accent := m.theme.TextAccent().Render
-	base := m.theme.Base().Render
-	cursor := m.theme.Base().Background(m.theme.Brand()).Render(" ")
-
-	mark := bold("t") + cursor
-	logo := bold("terminal")
-	menu := bold("m") + base(" ☰")
-
-	tab := func(key, name string, active bool) string {
-		if active {
-			return accent(key + " " + name)
+// cartBlendColor mixes the colors of all cart items, weighted by quantity,
+// so the header price tints toward whatever dominates the cart.
+func (m Model) cartBlendColor() color.Color {
+	var rSum, gSum, bSum, n int
+	for _, item := range m.Cart {
+		r, g, b, ok := parseHexColor(item.Coffee.Color)
+		if !ok {
+			continue
 		}
-		return accent(key) + base(" "+name)
+		rSum += r * item.Quantity
+		gSum += g * item.Quantity
+		bSum += b * item.Quantity
+		n += item.Quantity
 	}
-	shop := tab("s", "shop", m.currentPage == shopPage)
-	account := tab("a", "account", m.currentPage == accountPage)
+	if n == 0 {
+		return cWhite
+	}
+	return lipgloss.Color(fmt.Sprintf("#%02X%02X%02X", rSum/n, gSum/n, bSum/n))
+}
 
-	priceStr := fmt.Sprintf(" $%2v", m.CalculateSubtotal()/100)
-	countStr := fmt.Sprintf(" [%d]", m.CartItemCount())
-	cartLabel := base(" cart")
+// BuildHeader renders the top chrome bar: brand, tab pills, and cart summary.
+// Layout ported from the design prototype at ~/programming/test/shop.go.
+func (m Model) BuildHeader() string {
+	_, _, _, wideW := m.shopLayout()
+
+	brand := pWht.Bold(true).Render("terminal")
+
+	pill := lipgloss.NewStyle().Background(cPill).Foreground(cWhite).Bold(true).Padding(0, 1)
+	tab := func(key, label string, active bool) string {
+		if active {
+			return pill.Render(label)
+		}
+		return pDim.Render(key+" ") + pBody.Render(label)
+	}
+
+	var left string
+	if m.size == small {
+		left = brand
+	} else {
+		left = strings.Join([]string{
+			brand,
+			tab("s", "shop", m.currentPage == shopPage),
+			tab("a", "account", m.currentPage == accountPage),
+		}, "   ")
+	}
+
+	cartLabel := pDim.Render("cart  ")
 	if m.inCartFlow() {
-		cartLabel = accent(" cart")
+		cartLabel = pWht.Bold(true).Render("cart  ")
 	}
-	cart := accent("c") + cartLabel + accent(priceStr) + base(countStr)
+	cart := cartLabel +
+		lipgloss.NewStyle().Foreground(m.cartBlendColor()).Bold(true).
+			Render(fmt.Sprintf("$%d", m.CalculateSubtotal()/100)) +
+		pDim.Render(fmt.Sprintf("  ·  %d", m.CartItemCount()))
 
-	var tabs []string
-	switch m.size {
-	case small:
-		tabs = []string{mark, cart}
-	case medium:
-		tabs = []string{menu, logo, cart}
-	default:
-		tabs = []string{logo, shop, account, cart}
+	gap := wideW - lipgloss.Width(left) - lipgloss.Width(cart)
+	if gap < 1 {
+		gap = 1
 	}
+	row := left + strings.Repeat(" ", gap) + cart
 
-	tbl := table.New().Border(lipgloss.NormalBorder()).BorderStyle(lipgloss.NewStyle().Foreground(m.theme.Border())).Row(tabs...).Width(m.widthContent).StyleFunc(func(row, col int) lipgloss.Style {
-		return m.theme.Base().Padding(0, 1).AlignHorizontal(lipgloss.Center)
-	}).Render()
-
-	return lipgloss.Place(
-		m.widthContainer,
-		lipgloss.Height(tbl),
-		lipgloss.Center,
-		lipgloss.Center,
-		tbl,
-	)
+	return panel(wideW, 0, row)
 }

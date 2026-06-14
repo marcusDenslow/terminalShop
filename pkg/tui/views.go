@@ -62,7 +62,8 @@ func (m Model) renderString() string {
 	if breadcrumbs != "" {
 		breadcrumbsHeight = lipgloss.Height(breadcrumbs)
 	}
-	footerHeight := 1
+	footer := m.BuildFooter()
+	footerHeight := lipgloss.Height(footer)
 	marginTop := 1
 	marginBottom := 1
 	bufferSpace := 1
@@ -87,16 +88,14 @@ func (m Model) renderString() string {
 			errorStyle = errorStyle.Width(m.widthContent - 4)
 		}
 		errorBanner := errorStyle.Render(m.error.message)
-		content = errorBanner + "\n" + m.buildPageContent(availableContentHeight)
+		content = errorBanner + "\n" + m.buildPageContent()
 	} else if m.notice != nil {
 		noticeStyle := m.theme.TextSuccess().Border(lipgloss.NormalBorder()).BorderForeground(m.theme.Success()).Padding(0, 1).MarginBottom(1)
 		noticeBanner := noticeStyle.Render(m.notice.message)
-		content = noticeBanner + "\n" + m.buildPageContent(availableContentHeight)
+		content = noticeBanner + "\n" + m.buildPageContent()
 	} else {
-		content = m.buildPageContent(availableContentHeight)
+		content = m.buildPageContent()
 	}
-
-	footer := m.BuildFooter()
 
 	isViewportPage := m.currentPage == shopPage || m.currentPage == cartPage ||
 		m.currentPage == shippingPage || m.currentPage == paymentPage ||
@@ -137,10 +136,10 @@ func (m Model) renderString() string {
 	)
 }
 
-func (m Model) buildPageContent(height int) string {
+func (m Model) buildPageContent() string {
 	switch m.currentPage {
 	case accountPage:
-		return m.BuildAccountView(height)
+		return m.BuildAccountView()
 	case shippingPage:
 		return m.ShippingPageView()
 	case paymentPage:

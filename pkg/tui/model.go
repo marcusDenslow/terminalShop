@@ -142,10 +142,7 @@ type Model struct {
 }
 
 type shopState struct {
-	selected       int
-	menuViewport   viewport.Model
-	detailViewport viewport.Model
-	viewportsReady bool
+	selected int
 }
 
 type splashState struct {
@@ -185,6 +182,7 @@ type accountState struct {
 	cursor             int
 	orderViewState     int
 	orderCursor        int
+	orderWindowStart   int // first fully-visible card in the windowed order list
 	orderYOffset       int // saved scroll pos when entering order detail
 	faqFocused         bool
 	addressListFocused bool
@@ -240,7 +238,6 @@ func (m Model) SwitchPage(p page) Model {
 
 func (m Model) ShopSwitch() (Model, tea.Cmd) {
 	m = m.SwitchPage(shopPage)
-	m = m.updateShopViewports()
 	m.footer = []footerCommand{
 		{key: "j/k", value: "products"},
 		{key: "+/-", value: "qty"},
@@ -265,13 +262,12 @@ func (m Model) CartSwitch() (Model, tea.Cmd) {
 			{key: "q", value: "quit"},
 		}
 	} else {
+		// Keep this list short enough to fit on one footer line.
 		m.footer = []footerCommand{
 			{key: "j/k", value: "items"},
 			{key: "+/-", value: "qty"},
-			{key: "p/enter", value: "checkout"},
+			{key: "enter", value: "checkout"},
 			{key: "s", value: "shop"},
-			{key: "a", value: "account"},
-			{key: "pgup/pgdn", value: "scroll"},
 			{key: "?", value: "help"},
 			{key: "q", value: "quit"},
 		}
@@ -841,6 +837,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Espresso",
 				RoastType:   "Dark Roast",
+				RoastLevel:  5,
 				Ounces:      2,
 				BeanType:    "Arabica",
 				Price:       350, // $3.50
@@ -850,6 +847,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Latte",
 				RoastType:   "Medium Roast",
+				RoastLevel:  2,
 				Ounces:      12,
 				BeanType:    "Arabica Blend",
 				Price:       500, // $5.00
@@ -859,6 +857,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Cappuccino",
 				RoastType:   "Medium Roast",
+				RoastLevel:  3,
 				Ounces:      8,
 				BeanType:    "Italian Blend",
 				Price:       450, // $4.50
@@ -868,6 +867,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Americano",
 				RoastType:   "Dark Roast",
+				RoastLevel:  4,
 				Ounces:      16,
 				BeanType:    "Arabica",
 				Price:       400, // $4.00
@@ -877,6 +877,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Mocha",
 				RoastType:   "Medium Roast",
+				RoastLevel:  3,
 				Ounces:      16,
 				BeanType:    "Colombian",
 				Price:       550, // $5.50
@@ -886,6 +887,7 @@ func NewModel(username string) Model {
 			{
 				Name:        "Macchiato",
 				RoastType:   "Dark Roast",
+				RoastLevel:  4,
 				Ounces:      3,
 				BeanType:    "Robusta Blend",
 				Price:       425, // $4.25
@@ -928,10 +930,6 @@ func NewModelWithAuth(fingerprint string, pubKeyStr string, apiURL string, clien
 		return SplashAuthMsg{Token: token, User: user}
 	}
 	return m
-}
-
-func newViewport(w, h int) viewport.Model {
-	return viewport.New(viewport.WithWidth(w), viewport.WithHeight(h))
 }
 
 func (m Model) collectCardCmd() tea.Cmd {

@@ -16,8 +16,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if tick.seq == m.resizeSeq {
 			m = m.updateLayout(m.pendingWidth, m.pendingHeight)
 			switch m.currentPage {
-			case shopPage:
-				m = m.updateShopViewports()
 			case cartPage:
 				m = m.updateCartViewport()
 			case shippingPage:

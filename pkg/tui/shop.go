@@ -4,163 +4,173 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"terminalShop/pkg/models"
 )
 
-func (m Model) calculateShopWidths() (int, int) {
-	menuWidth := 14
-	if len(m.Coffees) == 0 {
-		if m.size < large {
-			return m.widthContent, m.widthContent
-		}
-		return menuWidth, m.widthContent - menuWidth
-	}
-	for _, c := range m.Coffees {
-		if w := lipgloss.Width(c.Name); w > menuWidth {
-			menuWidth = w
-		}
-	}
-	if menuWidth > 0 {
-		menuWidth += 4
-	}
+const (
+	// shopBodyInnerHeight fixes the inner height of the shop body panels so
+	// the detail box never resizes with the description.
+	shopBodyInnerHeight = 13
+	// shopDescLines pins the description region to an exact line count.
+	shopDescLines = 3
+)
+
+// shopLayout returns the shared chrome widths, all derived from one content
+// width so the header, body panels, and footer line up exactly.
+// Math ported from the design prototype at ~/programming/test/shop.go:
+// menu(menuW+4) + gap(1) + detail(detailW+4) = contentW = wideW + 4.
+func (m Model) shopLayout() (contentW, menuW, detailW, wideW int) {
+	contentW = m.widthContent
+	contentW = min(contentW, 74)
+	wideW = contentW - 4
 	if m.size < large {
-		menuWidth = m.widthContent
+		// Stacked layout: both panels span the full content width.
+		return contentW, wideW, wideW, wideW
 	}
-	detailWidth := m.widthContent - menuWidth
-	if m.size < large {
-		detailWidth = m.widthContent
-	}
-	return menuWidth, detailWidth
+	menuW = 16
+	detailW = contentW - 25
+	return contentW, menuW, detailW, wideW
 }
 
-func (m Model) updateShopViewports() Model {
-	headerHeight := lipgloss.Height(m.BuildHeader())
-	footerHeight := lipgloss.Height(m.BuildFooter())
-	availableHeight := m.heightContainer - headerHeight - footerHeight
-
-	if len(m.Coffees) == 0 {
-		return m
+// roastLevel maps a roast type to a 1-5 intensity for the roast meter.
+// It is the fallback for products stored before the roast_level column existed.
+func roastLevel(roastType string) int {
+	rt := strings.ToLower(roastType)
+	switch {
+	case strings.Contains(rt, "dark"):
+		return 5
+	case strings.Contains(rt, "light"):
+		return 2
+	default:
+		return 3
 	}
-
-	menuWidth, detailWidth := m.calculateShopWidths()
-
-	if !m.shop.viewportsReady {
-		m.shop.menuViewport = newViewport(menuWidth, availableHeight)
-		m.shop.menuViewport.KeyMap = viewport.KeyMap{} // menu nav is manual
-		m.shop.detailViewport = newViewport(detailWidth, availableHeight)
-		m.shop.detailViewport.KeyMap = modifiedKeyMap
-		m.shop.viewportsReady = true
-	} else {
-		m.shop.menuViewport.SetWidth(menuWidth)
-		m.shop.menuViewport.SetHeight(availableHeight)
-		m.shop.detailViewport.SetWidth(detailWidth)
-		m.shop.detailViewport.SetHeight(availableHeight)
-	}
-	return m
 }
 
-func (m Model) getShopMenuContent() string {
-	menuWidth, _ := m.calculateShopWidths()
-
-	selectedColor := m.theme.Highlight()
-	if m.shop.selected >= 0 && m.shop.selected < len(m.Coffees) {
-		if c := m.Coffees[m.shop.selected].Color; c != "" {
-			selectedColor = lipgloss.Color(c)
-		}
+// clampLines pads or truncates rendered text to exactly n lines so regions
+// like the description never change the panel height.
+func clampLines(s string, n int) string {
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[:n]
 	}
-
-	var normal, highlighted lipgloss.Style
-	if m.size < large {
-		menuWidth = m.widthContent
-		normal = m.theme.TextBody().
-			Width(menuWidth - 1).Align(lipgloss.Center)
-		highlighted = m.theme.TextAccent().
-			Width(menuWidth - 1).Align(lipgloss.Center).
-			Background(selectedColor).Bold(true)
-	} else {
-		normal = m.theme.TextBody().
-			Width(menuWidth+2).Padding(0, 1)
-		highlighted = m.theme.TextAccent().
-			Width(menuWidth+2).Padding(0, 1).
-			Background(selectedColor).Bold(true)
+	for len(lines) < n {
+		lines = append(lines, "")
 	}
+	return strings.Join(lines, "\n")
+}
 
+// roastMeter renders the strength dots, e.g. ● ● ● ○ ○
+func roastMeter(n int) string {
+	n = max(0, min(n, 5))
+	on := lipgloss.NewStyle().Foreground(cGold).Render(strings.Repeat("● ", n))
+	off := pDim.Render(strings.Repeat("○ ", 5-n))
+	return strings.TrimRight(on+off, " ")
+}
+
+func (m Model) shopMenuContent(w int) string {
 	var b strings.Builder
 	for i, c := range m.Coffees {
 		if i == m.shop.selected {
-			b.WriteString(highlighted.Render(c.Name) + "\n")
+			b.WriteString(lipgloss.NewStyle().Width(w).
+				Background(lipgloss.Color(c.Color)).
+				Foreground(contrastColor(c.Color)).
+				Bold(true).
+				Render(" · " + c.Name))
 		} else {
-			b.WriteString(normal.Render(c.Name) + "\n")
+			dot := lipgloss.NewStyle().Foreground(lipgloss.Color(c.Color)).Render("·")
+			b.WriteString(lipgloss.NewStyle().Width(w).
+				Render(" " + dot + " " + pBody.Render(c.Name)))
+		}
+		if i < len(m.Coffees)-1 {
+			b.WriteString("\n")
 		}
 	}
-	return lipgloss.NewStyle().Padding(0, 1).Render(b.String())
+	return b.String()
 }
 
-func (m Model) getShopDetailContent() string {
-	if len(m.Coffees) == 0 {
-		return ""
-	}
+func (m Model) shopDetailContent(w int) string {
 	coffee := m.Coffees[m.shop.selected]
-	_, detailWidth := m.calculateShopWidths()
-	if m.size >= large {
-		detailWidth -= 2
-	}
-
 	quantity := 0
 	if item, exists := m.Cart[coffee.ID]; exists {
 		quantity = item.Quantity
 	}
 
-	detail := lipgloss.JoinVertical(lipgloss.Left,
-		m.theme.TextAccent().Bold(true).Render(coffee.Name),
-		m.theme.TextBody().Render(
-			fmt.Sprintf("%s | %doz | %s", coffee.RoastType, coffee.Ounces, coffee.BeanType),
-		),
+	name := pWht.Bold(true).Render(coffee.Name)
+
+	sep := pDim.Render(" · ")
+	spec := pBody.Render(strings.ToUpper(coffee.RoastType)) + sep +
+		pDim.Render(fmt.Sprintf("%dOZ", coffee.Ounces)) + sep +
+		pDim.Render(strings.ToUpper(coffee.BeanType))
+
+	level := coffee.RoastLevel
+	if level < 1 || level > 5 {
+		level = roastLevel(coffee.RoastType)
+	}
+	strength := pDim.Render("roast  ") + roastMeter(level)
+
+	price := lipgloss.NewStyle().Foreground(lipgloss.Color(coffee.Color)).Bold(true).
+		Render(fmt.Sprintf("$%d.%02d", coffee.Price/100, coffee.Price%100)) +
+		pDim.Render("  usd")
+
+	// Stock is not modeled in the backend yet, so the indicator is static.
+	stock := lipgloss.NewStyle().Foreground(cGreen).Render("● in stock")
+
+	desc := clampLines(pBody.Width(w).Render(coffee.Description), shopDescLines)
+
+	// stepper: git-diff coloring — red minus, green plus
+	minus := lipgloss.NewStyle().Foreground(cRed).Bold(true).Render("−")
+	plus := lipgloss.NewStyle().Foreground(cGreen).Bold(true).Render("+")
+	count := lipgloss.NewStyle().Foreground(cWhite).Bold(true).
+		Padding(0, 2).Render(fmt.Sprintf("%d", quantity))
+	stepper := pDim.Render("qty  ") + minus + count + plus
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		name,
+		spec,
+		strength,
 		"",
-		lipgloss.NewStyle().Foreground(lipgloss.Color(coffee.Color)).Bold(true).Render(
-			fmt.Sprintf("$%.2f", float64(coffee.Price)/100),
-		),
+		price+"    "+stock,
 		"",
-		m.theme.TextAccent().Width(detailWidth).Render(coffee.Description),
+		desc,
 		"",
-		fmt.Sprintf("-  %d  +", quantity),
+		stepper,
 	)
-	return lipgloss.NewStyle().Width(detailWidth).Render(detail)
 }
 
 func (m Model) ShopView() string {
-	if !m.shop.viewportsReady {
-		m = m.updateShopViewports()
-	}
 	if len(m.Coffees) == 0 {
 		return lipgloss.Place(m.widthContent, m.heightContainer,
 			lipgloss.Center, lipgloss.Center, "No products available.")
 	}
 
-	m.shop.menuViewport.SetContent(m.getShopMenuContent())
-	m.shop.detailViewport.SetContent(m.getShopDetailContent())
+	_, menuW, detailW, _ := m.shopLayout()
 
+	mc := m.shopMenuContent(menuW)
+	dc := m.shopDetailContent(detailW)
+
+	var body string
 	if m.size < large {
-		return lipgloss.JoinVertical(lipgloss.Top,
-			m.shop.menuViewport.View(),
-			m.shop.detailViewport.View(),
+		body = lipgloss.JoinVertical(lipgloss.Left,
+			panel(menuW, 0, mc),
+			panel(detailW, 0, dc),
+		)
+	} else {
+		bodyH := max(shopBodyInnerHeight, lipgloss.Height(mc), lipgloss.Height(dc))
+		body = lipgloss.JoinHorizontal(lipgloss.Top,
+			panel(menuW, bodyH, mc),
+			" ",
+			panel(detailW, bodyH, dc),
 		)
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top,
-		m.shop.menuViewport.View(),
-		"  ",
-		m.shop.detailViewport.View(),
-	)
+
+	// Blank rows separate the body from the header and footer boxes.
+	return "\n" + body + "\n"
 }
 
 func (m Model) ShopUpdate(msg tea.Msg) (Model, tea.Cmd) {
-	var cmd tea.Cmd
-	var cmds []tea.Cmd
-
 	if len(m.Coffees) == 0 {
 		return m, nil
 	}
@@ -197,16 +207,7 @@ func (m Model) ShopUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	}
 
-	// Pass messages to the detail viewport so pgup/pgdn scroll works
-	m.shop.detailViewport, cmd = m.shop.detailViewport.Update(msg)
-	cmds = append(cmds, cmd)
-
-	if m.shop.viewportsReady {
-		m.shop.menuViewport.SetContent(m.getShopMenuContent())
-		m.shop.detailViewport.SetContent(m.getShopDetailContent())
-	}
-
-	return m, tea.Batch(cmds...)
+	return m, nil
 }
 
 func (m Model) shopMoveSelected(previous bool) Model {
@@ -216,18 +217,8 @@ func (m Model) shopMoveSelected(previous bool) Model {
 	} else {
 		next++
 	}
-	if next < 0 {
-		next = 0
-	}
-	if next >= len(m.Coffees) {
-		next = len(m.Coffees) - 1
-	}
+	next = max(next, 0)
+	next = min(next, len(m.Coffees)-1)
 	m.shop.selected = next
-
-	if m.shop.viewportsReady {
-		targetY := (m.shop.selected + 2) * 1
-		m.shop.menuViewport.SetYOffset(targetY - m.shop.menuViewport.Height()/2)
-		m.shop.detailViewport.GotoTop()
-	}
 	return m
 }
