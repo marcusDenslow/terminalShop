@@ -276,9 +276,7 @@ func (m Model) updatePaymentViewport() Model {
 	breadH := lipgloss.Height(m.BuildBreadcrumbs())
 	footerH := lipgloss.Height(m.BuildFooter())
 	availH := m.heightContainer - headerH - footerH - breadH
-	if availH < 1 {
-		availH = 1
-	}
+	availH = max(availH, 1)
 	if !m.payment.viewportReady {
 		m.payment.viewport = viewport.New(viewport.WithWidth(m.widthContent), viewport.WithHeight(availH))
 		m.payment.viewport.KeyMap = viewport.KeyMap{}
@@ -303,7 +301,7 @@ func (m Model) PaymentPageView() string {
 			m.widthContainer,
 			m.payment.viewport.Height(),
 			lipgloss.Center, lipgloss.Center,
-			m.renderPaymentHttpsView(),
+			m.renderPaymentHTTPSView(),
 		)
 	} else if m.payment.view == 0 && m.payment.form == nil {
 		content = m.RenderCardList()
@@ -374,7 +372,7 @@ func (m Model) RenderCardList() string {
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
-func (m Model) renderPaymentHttpsView() string {
+func (m Model) renderPaymentHTTPSView() string {
 	baseStyle := m.theme.TextLabel()
 	accentStyle := m.theme.TextHighlight()
 
