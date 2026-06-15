@@ -25,6 +25,25 @@ import (
 
 const version = "v0.1.0"
 
+// everyTick runs fn on its own goroutine every d until ctx is cancelled.
+// Shared by the reconciler sweeps so the ticker + shutdown plumbing lives in
+// one place. ReconcileUnshipped intentionally does not use it, it needs a
+// staggered warm-up run before its first tick.
+func everyTick(ctx context.Context, d time.Duration, fn func(context.Context)) {
+	go func() {
+		ticker := time.NewTicker(d)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				fn(ctx)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
 func main() {
 	observability.InitLogger()
 	middleware.SetBuildInfo(version)
@@ -106,20 +125,8 @@ func main() {
 		}
 	}()
 
-	// Start reconciliation job. runs every 5 minutes to catch any orders
-	// that were charged but not recorded due to a crash.
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				handlers.ReconcileOrders(ctx)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	// Catch orders charged but not recorded due to a crash. Every 5 minutes
+	everyTick(ctx, 5*time.Minute, handlers.ReconcileOrders)
 
 	go func() {
 		select {
@@ -142,46 +149,18 @@ func main() {
 
 	// Sweep saved cards whose retention deadline elapsed. Read paths filter
 	// expired rows from query results, so this sweeper only drives the Stripe
-	// detach + audit + physical row delete asynchronously.
-	go func() {
-		ticker := time.NewTicker(1 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				handlers.ReconcileExpiredCards(ctx)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	// detach + audit + physical row delete asynchronously. Hourly.
+	everyTick(ctx, 1*time.Hour, handlers.ReconcileExpiredCards)
 
-	go func() {
-		ticker := time.NewTicker(15 * time.Minute)
-		defer ticker.Stop()
-		threshold := time.Duration(cfg.Abandoned3DSThresholdMinutes) * time.Minute
-		for {
-			select {
-			case <-ticker.C:
-				handlers.ReconcileStale3DSOrders(ctx, threshold)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	// Flip abandoned 3DS orders to failed. Every 15 minutes.
+	threshold := time.Duration(cfg.Abandoned3DSThresholdMinutes) * time.Minute
+	everyTick(ctx, 15*time.Minute, func(ctx context.Context) {
+		handlers.ReconcileStale3DSOrders(ctx, threshold)
+	})
 
-	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				handlers.ReconcilePayRedirects(ctx)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	// Sweep expired pay_redirects rows so the table stays bounded. Lazy delete
+	// on read is the primary path; this only reclaims tokens nobody follows.
+	everyTick(ctx, 10*time.Minute, handlers.ReconcilePayRedirects)
 
 	log.Println("API server started. Press Ctrl+C to shutdown.")
 
