@@ -16,6 +16,7 @@ type User struct {
 	Email             string         `gorm:"size:255" json:"email,omitempty"`                          // Email (for receipts)
 	Anonymous         bool           `gorm:"default:false" json:"anonymous"`                           // True if connected without SSH key
 	StripeCustomerID  string         `gorm:"size:255" json:"-"`
+	MaxOrderCents     *int           `json:"-"`
 	CreatedAt         time.Time      `json:"created_at"`
 	UpdatedAt         time.Time      `json:"updated_at"`
 	DeletedAt         gorm.DeletedAt `gorm:"index" json:"-"`

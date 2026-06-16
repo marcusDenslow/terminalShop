@@ -380,14 +380,20 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	total := subtotal + cart.ShippingCost
 
-	if h.maxOrderCents > 0 && total > h.maxOrderCents {
+	// per-user overridable spend cap
+	capCents := h.maxOrderCents
+	if user.MaxOrderCents != nil {
+		capCents = *user.MaxOrderCents
+	}
+
+	if capCents > 0 && total > capCents {
 		middleware.RecordCartConversion("validation_over_limit")
-		audit.CartRejected(userID, total, h.maxOrderCents)
+		audit.CartRejected(userID, total, capCents)
 		utils.RespondError(w, http.StatusBadRequest, "CART_OVER_LIMIT",
-			fmt.Sprintf("order total must be at most $%.2f", float64(h.maxOrderCents)/100),
+			fmt.Sprintf("order total must be at most $%.2f", float64(capCents)/100),
 			map[string]any{
 				"total_cents": total,
-				"limit_cents": h.maxOrderCents,
+				"limit_cents": capCents,
 			})
 		return
 	}
