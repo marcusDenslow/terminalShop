@@ -23,10 +23,6 @@ func NewAdminUserHandler() *AdminUserHandler {
 	return &AdminUserHandler{}
 }
 
-// setUserOrderCapRequest is decoded into a raw map first (not this struct) so an
-// explicit JSON null (clear the override) can be told apart from an absent field
-// (a malformed request). The map carries the single key max_order_cents.
-
 // SetUserOrderCap sets or clears a user's per-user spend-cap override
 // (User.MaxOrderCents). Body: {"max_order_cents": <int|null>}.
 //   - null  -> clears the override; the user reverts to the global MAX_ORDER_CENTS
