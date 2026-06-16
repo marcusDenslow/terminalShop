@@ -53,6 +53,7 @@ func SetupRoutes(
 	viewHandler := handlers.NewViewHandler()
 	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, shippoWebhookSecret)
 	slackHandler := handlers.NewSlackHandler(slackSigningSecret, adminAPIKey, apiPort, shippoWebhookSecret)
+	adminUserHandler := handlers.NewAdminUserHandler()
 
 	// Short payment redirect and success page — no auth required.
 	r.Get("/pay/{token}", handlers.PayRedirect)
@@ -149,6 +150,8 @@ func SetupRoutes(
 			r.Use(middleware.RequireAdmin)
 			r.Patch("/orders/{id}/tracking", orderHandler.UpdateTracking)
 			r.Post("/orders/{id}/label", orderHandler.PurchaseLabel)
+			// Set or clear a user's per-user order spend-cap override.
+			r.Patch("/users/{id}/order-cap", adminUserHandler.SetUserOrderCap)
 		})
 	})
 

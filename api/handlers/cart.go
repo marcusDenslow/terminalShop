@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -380,14 +381,32 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	total := subtotal + cart.ShippingCost
 
-	if h.maxOrderCents > 0 && total > h.maxOrderCents {
+	// Per-user overridable spend cap. The override may raise OR lower the global
+	// cap — operators set it in both directions deliberately. A negative override
+	// is nonsense: ignore it and fall back to the global so an erroneous DB write
+	// cannot silently disable a fraud control (mirrors loadMaxOrderCents in
+	// pkg/config/config.go, which defaults a negative MAX_ORDER_CENTS). An explicit
+	// 0 is a valid per-user off-switch (same semantics as the global).
+	capCents := h.maxOrderCents
+	if user.MaxOrderCents != nil {
+		if *user.MaxOrderCents < 0 {
+			slog.Warn("ignoring negative per-user order cap, using global",
+				"user_id", user.ID,
+				"user_cap_cents", *user.MaxOrderCents,
+				"global_cap_cents", h.maxOrderCents)
+		} else {
+			capCents = *user.MaxOrderCents
+		}
+	}
+
+	if capCents > 0 && total > capCents {
 		middleware.RecordCartConversion("validation_over_limit")
-		audit.CartRejected(userID, total, h.maxOrderCents)
+		audit.CartRejected(userID, total, capCents)
 		utils.RespondError(w, http.StatusBadRequest, "CART_OVER_LIMIT",
-			fmt.Sprintf("order total must be at most $%.2f", float64(h.maxOrderCents)/100),
+			fmt.Sprintf("order total must be at most $%.2f", float64(capCents)/100),
 			map[string]any{
 				"total_cents": total,
-				"limit_cents": h.maxOrderCents,
+				"limit_cents": capCents,
 			})
 		return
 	}

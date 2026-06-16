@@ -670,27 +670,49 @@ func TestCartIsolation(t *testing.T) {
 	}
 }
 
+// intPtr returns a pointer to i, for seeding the nullable User.MaxOrderCents
+// per-user cap override in table tests.
+func intPtr(i int) *int { return &i }
+
 func TestConvertCartLimit(t *testing.T) {
 	cases := []struct {
 		name          string
 		capCents      int
 		quantity      int
 		expectOverCap bool
+		userCap       *int // per-user override; nil = inherit the global capCents
 	}{
-		{"over cap rejects", 20000, 41, true},   // $205
-		{"at cap accepts", 20000, 40, false},    // $200 boundary
-		{"under cap accepts", 20000, 39, false}, // $195
-		{"zero cap disables", 0, 1000, false},   // explicit off-switch
+		{"over cap rejects", 20000, 41, true, nil},   // $205 vs global $200
+		{"at cap accepts", 20000, 40, false, nil},    // $200 boundary
+		{"under cap accepts", 20000, 39, false, nil}, // $195
+		{"zero cap disables", 0, 1000, false, nil},   // explicit global off-switch
+		// Per-user override (User.MaxOrderCents) takes precedence over the global.
+		{"user override below global rejects", 20000, 12, true, intPtr(5000)},   // $60 > $50 user cap (global $200 would allow)
+		{"user override above global accepts", 20000, 41, false, intPtr(50000)}, // $205 < $500 user cap (global $200 would reject)
+		{"user override zero disables per user", 20000, 1000, false, intPtr(0)}, // per-user off-switch over a live global
+		{"nil override falls back to global", 20000, 41, true, nil},             // explicit nil == inherit global $200
+		// A negative override is nonsense and must NOT disable the cap; it falls
+		// back to the global so a bad DB write can't void a fraud control. Here
+		// $205 > global $200 still rejects, at the GLOBAL cap (not the -1).
+		{"user override negative falls back to global", 20000, 41, true, intPtr(-1)},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			// Effective cap the handler should enforce: a non-negative override
+			// wins; nil or a negative value both fall back to the global cap.
+			effectiveCap := tc.capCents
+			if tc.userCap != nil && *tc.userCap >= 0 {
+				effectiveCap = *tc.userCap
+			}
+
 			testDB, user := setupCartTestDB(t)
 			defer func() { _ = os.Remove(testDB) }()
 			defer database.ResetForTesting()
 
 			db := database.GetDB()
 			user.StripeCustomerID = "cus_test_overlimit"
+			user.MaxOrderCents = tc.userCap
 			if err := db.Save(&user).Error; err != nil {
 				t.Fatalf("saved user: %v", err)
 			}
@@ -780,8 +802,8 @@ func TestConvertCartLimit(t *testing.T) {
 				t.Fatalf("expectOverCap=%v got code=%d errCode=%q msg=%q", tc.expectOverCap, w.Code, resp.Error.Code, resp.Error.Message)
 			}
 			if tc.expectOverCap {
-				if got, _ := resp.Error.Details["limit_cents"].(float64); int(got) != tc.capCents {
-					t.Errorf("limit_cents in details: want %d, got %v", tc.capCents, resp.Error.Details["limit_cents"])
+				if got, _ := resp.Error.Details["limit_cents"].(float64); int(got) != effectiveCap {
+					t.Errorf("limit_cents in details: want %d, got %v", effectiveCap, resp.Error.Details["limit_cents"])
 				}
 				if got, _ := resp.Error.Details["total_cents"].(float64); int(got) != tc.quantity*pinnedPrice {
 					t.Errorf("total_cents in details: want %d, got %v", tc.quantity*pinnedPrice, resp.Error.Details["total_cents"])
@@ -791,12 +813,22 @@ func TestConvertCartLimit(t *testing.T) {
 					t.Fatalf("audit: expected cart_rejected slog line, got nothing")
 				}
 
+				// The buffer may hold more than one JSON line (e.g. the negative-
+				// override warning precedes the audit record), so scan for the
+				// cart_rejected event rather than assuming it's the only line.
 				var rec map[string]any
-				if err := json.Unmarshal(auditBuf.Bytes(), &rec); err != nil {
-					t.Fatalf("audit: decode slog record: %v\nraw: %s", err, auditBuf.String())
+				for line := range bytes.SplitSeq(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n")) {
+					var m map[string]any
+					if err := json.Unmarshal(line, &m); err != nil {
+						continue
+					}
+					if m["event"] == "cart_rejected" {
+						rec = m
+						break
+					}
 				}
-				if got := rec["event"]; got != "cart_rejected" {
-					t.Errorf("audit event: want cart_rejected, got %v", got)
+				if rec == nil {
+					t.Fatalf("audit: no cart_rejected slog record found\nraw: %s", auditBuf.String())
 				}
 				if n, _ := rec["user_id"].(float64); uint(n) != user.ID {
 					t.Errorf("audit user_id: want %d, got %v", user.ID, rec["user_id"])
@@ -804,8 +836,8 @@ func TestConvertCartLimit(t *testing.T) {
 				if n, _ := rec["total_cents"].(float64); int(n) != tc.quantity*pinnedPrice {
 					t.Errorf("audit total_cents: want %d, got %v", tc.quantity*pinnedPrice, rec["total_cents"])
 				}
-				if n, _ := rec["cap_cents"].(float64); int(n) != tc.capCents {
-					t.Errorf("audit cap_cents: want %d, got %v", tc.capCents, rec["cap_cents"])
+				if n, _ := rec["cap_cents"].(float64); int(n) != effectiveCap {
+					t.Errorf("audit cap_cents: want %d, got %v", effectiveCap, rec["cap_cents"])
 				}
 			}
 		})

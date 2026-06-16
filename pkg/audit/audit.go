@@ -50,6 +50,7 @@ const (
 	eventTrackingUpdated        eventType = "tracking_updated"
 	eventOrderDelivered         eventType = "order_delivered"
 	eventTrackingMarkedManually eventType = "tracking_marked_manually"
+	eventUserOrderCapSet        eventType = "user_order_cap_set"
 )
 
 type event struct {
@@ -377,6 +378,26 @@ func CartRejected(userID uint, totalCents, capCents int) {
 		UserID:     userID,
 		TotalCents: totalCents,
 		CapCents:   capCents,
+	}
+	slog.Info("audit", e.attrs()...)
+}
+
+// UserOrderCapSet records an operator changing a user's per-user order-spend
+// cap override (User.MaxOrderCents), an admin-gated action. A nil capCents means
+// the override was cleared and the user reverts to the global MAX_ORDER_CENTS;
+// Status distinguishes "set" from "cleared" so a cap set to 0 (off-switch, which
+// attrs() omits because cap_cents == 0) is still legible in the log.
+func UserOrderCapSet(actor string, userID uint, capCents *int) {
+	e := event{
+		Event:  eventUserOrderCapSet,
+		Actor:  actor,
+		UserID: userID,
+	}
+	if capCents == nil {
+		e.Status = "cleared"
+	} else {
+		e.Status = "set"
+		e.CapCents = *capCents
 	}
 	slog.Info("audit", e.attrs()...)
 }
