@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -10,7 +9,7 @@ import (
 // TestEveryTick_CallsFnOnTick verifies the helper invokes fn repeatedly on its
 // interval. A non-blocking send keeps the spawned goroutine from ever blocking
 // on a full channel, and the 1s timeout per tick is generous vs the 1ms
-// interval so the test in not timing-flaky.
+// interval so the test is not timing-flaky.
 func TestEveryTick_CallsFnOnTick(t *testing.T) {
 	ctx := t.Context()
 
@@ -32,35 +31,38 @@ func TestEveryTick_CallsFnOnTick(t *testing.T) {
 }
 
 // TestEveryTick_StopsOnContextCancel verifies cancelling ctx stops the loop.
-// Once cancel propagates the call count must stop growing. This is the property
-// that lets the reconciler goroutines exit on graceful shutdown
+// After the first tick we cancel inside the inter-tick gap, so everyTick's
+// select sees only ctx.Done ready (ticker.C is cold) and returns
+// deterministically — there is no random pick between two ready cases. We then
+// confirm no further tick arrives within a full interval, which a live loop
+// could not satisfy. This is the shutdown guarantee the reconcilers depend on.
 func TestEveryTick_StopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	var calls int64
-	started := make(chan struct{}, 1)
-	everyTick(ctx, time.Millisecond, func(context.Context) {
-		atomic.AddInt64(&calls, 1)
-		select {
-		case started <- struct{}{}:
-		default:
-		}
+	const interval = 50 * time.Millisecond
+	ticks := make(chan struct{}) // unbuffered: fn blocks until the test receives
+	everyTick(ctx, interval, func(context.Context) {
+		ticks <- struct{}{}
 	})
 
-	// Wait until the loop is actually running before cancelling.
+	// First tick proves the loop is running and leaves the goroutine back in
+	// select with ticker.C cold for the next ~interval.
 	select {
-	case <-started:
+	case <-ticks:
 	case <-time.After(time.Second):
-		t.Fatalf("everyTick never called fn")
+		t.Fatal("everyTick never called fn")
 	}
 
 	cancel()
-	time.Sleep(20 * time.Millisecond) // let cancel land + any in-flight tick finish
-	stable := atomic.LoadInt64(&calls)
 
-	time.Sleep(30 * time.Millisecond) // 30 more ticks would land if still running
-	if final := atomic.LoadInt64(&calls); final != stable {
-		t.Fatalf("everyTick kept calling fn after cancel: %d -> %d", stable, final)
+	// Cancel landed in the cold gap, so the loop must have taken ctx.Done and
+	// returned. A live loop would tick again at ~interval; a stopped one never
+	// will.
+	select {
+	case <-ticks:
+		t.Fatal("everyTick ticked again after cancel")
+	case <-time.After(interval + 50*time.Millisecond):
+		// good: silent past a full interval — the loop returned
 	}
 }
 
