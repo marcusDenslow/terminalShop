@@ -23,10 +23,11 @@ type User struct {
 	// per-user off-switch (same semantics as the global); >0 = custom ceiling. A
 	// negative value is treated as "no override" (falls back to global) with a
 	// warning — see ConvertCart. Operator-set out-of-band; kept out of API payloads.
-	MaxOrderCents *int           `json:"-"`
-	CreatedAt     time.Time      `json:"created_at"`
-	UpdatedAt     time.Time      `json:"updated_at"`
-	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+	MaxOrderCents  *int           `json:"-"`
+	SelfLimitCents *int           `json:"self_limit_cents,omitempty"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 // TableName specifies the table name for the User model

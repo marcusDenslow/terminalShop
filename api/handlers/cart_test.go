@@ -680,30 +680,47 @@ func TestConvertCartLimit(t *testing.T) {
 		capCents      int
 		quantity      int
 		expectOverCap bool
-		userCap       *int // per-user override; nil = inherit the global capCents
+		userCap       *int // per-user admin override; nil = inherit the global capCents
+		selfLimit     *int // user self-limit; nil = none. Lower-only: tightens, never raises.
 	}{
-		{"over cap rejects", 20000, 41, true, nil},   // $205 vs global $200
-		{"at cap accepts", 20000, 40, false, nil},    // $200 boundary
-		{"under cap accepts", 20000, 39, false, nil}, // $195
-		{"zero cap disables", 0, 1000, false, nil},   // explicit global off-switch
-		// Per-user override (User.MaxOrderCents) takes precedence over the global.
-		{"user override below global rejects", 20000, 12, true, intPtr(5000)},   // $60 > $50 user cap (global $200 would allow)
-		{"user override above global accepts", 20000, 41, false, intPtr(50000)}, // $205 < $500 user cap (global $200 would reject)
-		{"user override zero disables per user", 20000, 1000, false, intPtr(0)}, // per-user off-switch over a live global
-		{"nil override falls back to global", 20000, 41, true, nil},             // explicit nil == inherit global $200
+		{"over cap rejects", 20000, 41, true, nil, nil},   // $205 vs global $200
+		{"at cap accepts", 20000, 40, false, nil, nil},    // $200 boundary
+		{"under cap accepts", 20000, 39, false, nil, nil}, // $195
+		{"zero cap disables", 0, 1000, false, nil, nil},   // explicit global off-switch
+		// Per-user admin override (User.MaxOrderCents) takes precedence over the global.
+		{"user override below global rejects", 20000, 12, true, intPtr(5000), nil},   // $60 > $50 user cap (global $200 would allow)
+		{"user override above global accepts", 20000, 41, false, intPtr(50000), nil}, // $205 < $500 user cap (global $200 would reject)
+		{"user override zero disables per user", 20000, 1000, false, intPtr(0), nil}, // per-user off-switch over a live global
+		{"nil override falls back to global", 20000, 41, true, nil, nil},             // explicit nil == inherit global $200
 		// A negative override is nonsense and must NOT disable the cap; it falls
 		// back to the global so a bad DB write can't void a fraud control. Here
 		// $205 > global $200 still rejects, at the GLOBAL cap (not the -1).
-		{"user override negative falls back to global", 20000, 41, true, intPtr(-1)},
+		{"user override negative falls back to global", 20000, 41, true, intPtr(-1), nil},
+		// Self-limit (User.SelfLimitCents) is LOWER-ONLY: it can tighten the effective
+		// cap below the admin/global value but must never raise it.
+		{"self limit below global rejects", 20000, 12, true, nil, intPtr(5000)},                   // $60 > $50 self-limit (global $200 would allow)
+		{"self limit under accepts", 20000, 8, false, nil, intPtr(5000)},                          // $40 < $50 self-limit
+		{"self limit cannot raise above global", 20000, 50, true, nil, intPtr(30000)},             // $250: min($200 global,$300 self)=$200 still rejects
+		{"self limit tightens disabled global", 0, 12, true, nil, intPtr(5000)},                   // global off-switch, self-limit $50 still caps; $60 rejects
+		{"self limit zero blocks everything", 20000, 1, true, nil, intPtr(0)},                     // $5 > $0: self-limit 0 is "block all", NOT an off-switch
+		{"self limit negative ignored", 20000, 41, true, nil, intPtr(-1)},                         // self ignored; rejects at global $200
+		{"self limit tightens below user override", 10000, 12, true, intPtr(10000), intPtr(5000)}, // $60 > $50 self (under the $100 admin override)
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Effective cap the handler should enforce: a non-negative override
-			// wins; nil or a negative value both fall back to the global cap.
+			// Effective cap the handler should enforce, mirroring ConvertCart:
+			// a non-negative admin override wins over the global; then a present,
+			// non-negative self-limit folds in via min() (lower-only — 0 means
+			// "block all", a negative value is ignored).
 			effectiveCap := tc.capCents
 			if tc.userCap != nil && *tc.userCap >= 0 {
 				effectiveCap = *tc.userCap
+			}
+			if tc.selfLimit != nil && *tc.selfLimit >= 0 {
+				if effectiveCap <= 0 || *tc.selfLimit < effectiveCap {
+					effectiveCap = *tc.selfLimit
+				}
 			}
 
 			testDB, user := setupCartTestDB(t)
@@ -713,6 +730,7 @@ func TestConvertCartLimit(t *testing.T) {
 			db := database.GetDB()
 			user.StripeCustomerID = "cus_test_overlimit"
 			user.MaxOrderCents = tc.userCap
+			user.SelfLimitCents = tc.selfLimit
 			if err := db.Save(&user).Error; err != nil {
 				t.Fatalf("saved user: %v", err)
 			}
