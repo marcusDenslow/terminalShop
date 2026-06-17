@@ -22,9 +22,7 @@ func (m Model) accountBodyHeight() int {
 	footerHeight := lipgloss.Height(m.BuildFooter())
 	budget := m.heightContainer - headerHeight - footerHeight - 2
 	cards := budget / orderCardHeight
-	if cards < 1 {
-		cards = 1
-	}
+	cards = max(cards, 1)
 	return cards*orderCardHeight - 2
 }
 
@@ -468,12 +466,12 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		case "spend limit":
 			if !m.account.spendLimitFocused {
 				ti := textinput.New()
-				ti.Prompt = ""
-				ti.Placeholder = "cents (blank = no limit)"
-				ti.CharLimit = 9
+				ti.Prompt = "$"
+				ti.Placeholder = "dollars (blank = no limit)"
+				ti.CharLimit = 12
 				// Prefill with the current limit so the user edits rather than retypes.
 				if m.User != nil && m.User.SelfLimitCents != nil {
-					ti.SetValue(strconv.Itoa(*m.User.SelfLimitCents))
+					ti.SetValue(formatCentsDollars(*m.User.SelfLimitCents))
 				}
 				cmd := ti.Focus()
 				m.account.spendLimitInput = ti
@@ -559,8 +557,7 @@ func (m Model) SpendLimitView(width int) string {
 
 	current := "no limit set"
 	if m.User != nil && m.User.SelfLimitCents != nil {
-		c := *m.User.SelfLimitCents
-		current = fmt.Sprintf("$%.2f (%d cents)", float64(c)/100, c)
+		current = "$" + formatCentsDollars(*m.User.SelfLimitCents)
 	}
 
 	out := bodyStyle.Render(wordWrap(
@@ -578,7 +575,7 @@ func (m Model) SpendLimitView(width int) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.theme.Highlight()).
 		Width(max(1, width-2))
-	out += labelStyle.Render("New limit (cents)") + "\n"
+	out += labelStyle.Render("New limit (dollars)") + "\n"
 	out += box.Render(m.account.spendLimitInput.View())
 	switch {
 	case m.account.spendLimitSaving:
@@ -616,23 +613,58 @@ func (m Model) setSpendLimitCmd(cents *int) tea.Cmd {
 	}
 }
 
-// parseSpendLimitInput maps the raw input to a *int of cents. Blank clears the
-// limit (nil -> revert to admin/global). "0" is a real "block everything"
-// ceiling, NOT a clear. Negative or non-numeric input is rejected. These rules
-// match the server boundary in api/handlers/account.go:SetSpendLimit.
+// parseSpendLimitInput maps the raw dollar input to a *int of cents. Blank
+// clears the limit (nil -> revert to admin/global). "0" is a real "block
+// everything" ceiling, NOT a clear. Negative, non-numeric, or more-than-2-
+// decimal input is rejected. Parsed as integer cents (dollars*100 + cents) with
+// no float multiply, so an amount like 50.01 never loses a cent to binary
+// rounding. The server still stores cents (api/handlers/account.go).
 func parseSpendLimitInput(s string) (*int, error) {
 	s = strings.TrimSpace(s)
+	s = strings.TrimSpace(strings.TrimPrefix(s, "$"))
 	if s == "" {
 		return nil, nil
 	}
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		return nil, fmt.Errorf("enter a whole number of cents, or blank to clear")
-	}
-	if n < 0 {
+	if strings.HasPrefix(s, "-") {
 		return nil, fmt.Errorf("limit cannot be negative")
 	}
-	return &n, nil
+
+	whole, frac, hasDot := strings.Cut(s, ".")
+	if whole == "" {
+		whole = "0" // allow ".50"
+	}
+	dollars, err := strconv.Atoi(whole)
+	if err != nil {
+		return nil, fmt.Errorf("enter a dollar amount, e.g 25 or 25.50, or blank to clear")
+	}
+
+	cents := 0
+	if hasDot {
+		switch len(frac) {
+		case 0:
+			// trailing dot, e.g "25." -> treat as .00
+		case 1:
+			frac += "0" // "5" -> 50 cents
+			fallthrough
+		case 2:
+			cents, err = strconv.Atoi(frac)
+			if err != nil {
+				return nil, fmt.Errorf("enter a dollar amount, e.g 25 or 25.00, or blank to clear")
+			}
+		default:
+			return nil, fmt.Errorf("use at most two decimal places, e.g 25.00")
+		}
+	}
+
+	total := dollars*100 + cents
+	return &total, nil
+}
+
+// formatCentsDollars renders an integer cents value as a plain dollar string
+// (no leading "$"), e.g. 2500 -> "25.00", 50 -> "0.50". Used for the input
+// prefill and the current-limit display.
+func formatCentsDollars(cents int) string {
+	return fmt.Sprintf("%d.%02d", cents/100, cents%100)
 }
 
 // defaultAccountFooter is the account-menu footer shown when no sub-view owns
