@@ -399,7 +399,21 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if capCents > 0 && total > capCents {
+	// A user-set self-limit may only TIGHTEN the effective cap, never raise it.
+	// a compromised account must not be able to lift its own ceiling to drain a
+	// stolen card. Unlike the admin/global cap (where 0 is an off-switch), a
+	// present self-limit always activates a ceiling, a self-limit of 0 means
+	// "block everything", not "disable", so it folds in via min() and can only
+	// lower capCents. A negative value is ignored (mirrors the maxOrderCents
+	// guard above); this min() is the authoritative lower-only guard.
+	capActive := capCents > 0
+	if user.SelfLimitCents != nil && *user.SelfLimitCents >= 0 {
+		if self := *user.SelfLimitCents; !capActive || self < capCents {
+			capCents = self
+		}
+		capActive = true
+	}
+	if capActive && total > capCents {
 		middleware.RecordCartConversion("validation_over_limit")
 		audit.CartRejected(userID, total, capCents)
 		utils.RespondError(w, http.StatusBadRequest, "CART_OVER_LIMIT",
