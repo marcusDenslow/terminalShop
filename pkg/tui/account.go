@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -82,6 +85,8 @@ func (m Model) getAccountDetailContent() string {
 		return m.AddressesView(detailContentWidth)
 	case "cards":
 		return m.CardsView(detailContentWidth)
+	case "spend limit":
+		return m.SpendLimitView(detailContentWidth)
 	case "faq":
 		questionStyle := m.theme.TextHighlight().Bold(true)
 		contentStyle := m.theme.TextBody().Width(detailContentWidth)
@@ -170,7 +175,7 @@ func (m Model) BuildAccountView() string {
 	// the menu, and falls back to the gray pill when focus has moved into the
 	// detail area (browsing orders, managing addresses/cards, scrolling faq).
 	focusedInside := m.account.orderViewState > 0 || m.account.addressListFocused ||
-		m.account.cardListFocused || m.account.faqFocused
+		m.account.cardListFocused || m.account.faqFocused || m.account.spendLimitFocused
 	pillBg := m.theme.Highlight()
 	if focusedInside {
 		pillBg = cPill
@@ -257,11 +262,48 @@ func (m Model) AboutView(width int) string {
 }
 
 func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
+	// Async result of a spend-limit save (delivered here because the account
+	// page is active when the command resolves).
+	if saved, ok := msg.(spendLimitSavedMsg); ok {
+		m.account.spendLimitSaving = false
+		if saved.Err != nil {
+			m.account.spendLimitErr = friendlySpendLimitError(saved.Err)
+			return m, nil
+		}
+		if m.User != nil {
+			m.User.SelfLimitCents = saved.Cents
+		}
+		m.account.spendLimitFocused = false
+		m.account.spendLimitInput.Blur()
+		m.account.spendLimitErr = ""
+		m.footer = defaultAccountFooter()
+		m.notice = &VisibleNotice{message: "Spend limit updated"}
+		return m, nil
+	}
+
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
 		// Pass non-key messages to viewport (e.g. window resize)
 		var cmd tea.Cmd
 		m.account.detailViewport, cmd = m.account.detailViewport.Update(msg)
+		return m, cmd
+	}
+
+	// While the spend-limit input is focused it owns the keyboard: enter saves,
+	// esc cancels, everything else edits the field.
+	if m.account.spendLimitFocused {
+		switch keyMsg.String() {
+		case "esc":
+			m.account.spendLimitFocused = false
+			m.account.spendLimitInput.Blur()
+			m.account.spendLimitErr = ""
+			m.footer = defaultAccountFooter()
+			return m, nil
+		case "enter":
+			return m.submitSpendLimit()
+		}
+		var cmd tea.Cmd
+		m.account.spendLimitInput, cmd = m.account.spendLimitInput.Update(msg)
 		return m, cmd
 	}
 
@@ -423,6 +465,26 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 					{key: "esc", value: "back"},
 				}
 			}
+		case "spend limit":
+			if !m.account.spendLimitFocused {
+				ti := textinput.New()
+				ti.Prompt = ""
+				ti.Placeholder = "cents (blank = no limit)"
+				ti.CharLimit = 9
+				// Prefill with the current limit so the user edits rather than retypes.
+				if m.User != nil && m.User.SelfLimitCents != nil {
+					ti.SetValue(strconv.Itoa(*m.User.SelfLimitCents))
+				}
+				cmd := ti.Focus()
+				m.account.spendLimitInput = ti
+				m.account.spendLimitFocused = true
+				m.account.spendLimitErr = ""
+				m.footer = []footerCommand{
+					{key: "enter", value: "save"},
+					{key: "esc", value: "cancel"},
+				}
+				return m, cmd
+			}
 		case "faq":
 			if !m.account.faqFocused {
 				m.account.faqFocused = true
@@ -438,14 +500,7 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 	case "esc":
-		accountDefaultFooter := []footerCommand{
-			{key: "j/k", value: "navigate"},
-			{key: "enter", value: "select"},
-			{key: "s", value: "shop"},
-			{key: "c", value: "cart"},
-			{key: "?", value: "help"},
-			{key: "q", value: "quit"},
-		}
+		accountDefaultFooter := defaultAccountFooter()
 		if m.account.addressDeleting != nil {
 			m.account.addressDeleting = nil
 		} else if m.account.addressListFocused {
@@ -484,4 +539,124 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// spendLimitSavedMsg carries the result of an async SetSpendLimit call back to
+// AccountUpdate. Cents is the value that was sent (echoed so the view can update
+// without a refetch); Err is non-nil when the save failed.
+type spendLimitSavedMsg struct {
+	Cents *int
+	Err   error
+}
+
+// SpendLimitView renders the self-service spend-limit panel: the current limit,
+// and — when focused — the editable input. Layout follows the label/box idiom
+// used by the refund composer (pkg/tui/refund.go).
+func (m Model) SpendLimitView(width int) string {
+	labelStyle := m.theme.TextLabel()
+	bodyStyle := m.theme.TextBody().Width(width)
+	hintStyle := m.theme.TextDim()
+
+	current := "no limit set"
+	if m.User != nil && m.User.SelfLimitCents != nil {
+		c := *m.User.SelfLimitCents
+		current = fmt.Sprintf("$%.2f (%d cents)", float64(c)/100, c)
+	}
+
+	out := bodyStyle.Render(wordWrap(
+		"Set your own spending limit. It can only lower the cap on your account, never raise it. Leave blank to remove your limit; 0 blocks all orders.",
+		width,
+	)) + "\n\n"
+	out += labelStyle.Render("Current limit") + "\n"
+	out += m.theme.TextAccent().Render(current) + "\n\n"
+
+	if !m.account.spendLimitFocused {
+		return out + hintStyle.Render("enter: edit limit")
+	}
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme.Highlight()).
+		Width(max(1, width-2))
+	out += labelStyle.Render("New limit (cents)") + "\n"
+	out += box.Render(m.account.spendLimitInput.View())
+	switch {
+	case m.account.spendLimitSaving:
+		out += "\n" + m.theme.TextAccent().Render("saving...")
+	case m.account.spendLimitErr != "":
+		out += "\n" + m.theme.TextError().Render(m.account.spendLimitErr)
+	}
+	out += "\n" + hintStyle.Render("enter: save · esc: cancel")
+	return out
+}
+
+// submitSpendLimit validates the input and, if valid, fires the save command.
+// Validation mirrors the server's write-boundary rules so the user gets instant
+// feedback for the negative/non-numeric cases before any round-trip.
+func (m Model) submitSpendLimit() (Model, tea.Cmd) {
+	cents, err := parseSpendLimitInput(m.account.spendLimitInput.Value())
+	if err != nil {
+		m.account.spendLimitErr = err.Error()
+		return m, nil
+	}
+	m.account.spendLimitErr = ""
+	m.account.spendLimitSaving = true
+	return m, m.setSpendLimitCmd(cents)
+}
+
+// setSpendLimitCmd calls the API off the UI thread and reports back via
+// spendLimitSavedMsg. Mirrors the command shape of createRefundRequestCmd.
+func (m Model) setSpendLimitCmd(cents *int) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return spendLimitSavedMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		err := m.APIClient.SetSpendLimit(cents)
+		return spendLimitSavedMsg{Cents: cents, Err: err}
+	}
+}
+
+// parseSpendLimitInput maps the raw input to a *int of cents. Blank clears the
+// limit (nil -> revert to admin/global). "0" is a real "block everything"
+// ceiling, NOT a clear. Negative or non-numeric input is rejected. These rules
+// match the server boundary in api/handlers/account.go:SetSpendLimit.
+func parseSpendLimitInput(s string) (*int, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return nil, fmt.Errorf("enter a whole number of cents, or blank to clear")
+	}
+	if n < 0 {
+		return nil, fmt.Errorf("limit cannot be negative")
+	}
+	return &n, nil
+}
+
+// defaultAccountFooter is the account-menu footer shown when no sub-view owns
+// the keyboard. Extracted so the spend-limit save/cancel paths can restore it
+// without duplicating the slice.
+func defaultAccountFooter() []footerCommand {
+	return []footerCommand{
+		{key: "j/k", value: "navigate"},
+		{key: "enter", value: "select"},
+		{key: "s", value: "shop"},
+		{key: "c", value: "cart"},
+		{key: "?", value: "help"},
+		{key: "q", value: "quit"},
+	}
+}
+
+// friendlySpendLimitError turns a raw API error into one line of TUI copy.
+// SELF_LIMIT_ABOVE_CAP is the one case worth calling out specifically.
+func friendlySpendLimitError(err error) string {
+	if err == nil {
+		return ""
+	}
+	if strings.Contains(err.Error(), "SELF_LIMIT_ABOVE_CAP") {
+		return "limit can't exceed your account cap"
+	}
+	return "failed to save limit"
 }

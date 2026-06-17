@@ -41,6 +41,7 @@ type PublicUser struct {
 	SSHKeyFingerprint string    `json:"ssh_key_fingerprint"`
 	Name              string    `json:"name,omitempty"`
 	Email             string    `json:"email,omitempty"`
+	SelfLimitCents    *int      `json:"self_limit_cents,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
 }
 
@@ -51,6 +52,7 @@ func (u *User) ToPublic() PublicUser {
 		SSHKeyFingerprint: u.SSHKeyFingerprint,
 		Name:              u.Name,
 		Email:             u.Email,
+		SelfLimitCents:    u.SelfLimitCents,
 		CreatedAt:         u.CreatedAt,
 	}
 }

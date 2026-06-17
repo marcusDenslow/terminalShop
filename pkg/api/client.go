@@ -453,6 +453,44 @@ func (c *Client) SetCartCard(cardID uint) error {
 	return nil
 }
 
+func (c *Client) SetSpendLimit(cents *int) error {
+	url := fmt.Sprintf("%s/api/v1/account/spend-limit", c.BaseURL)
+
+	body := map[string]any{
+		"self_limit_cents": cents,
+	}
+	jsonData, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to set spend limit: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if !result.Success {
+		if result.Error != nil {
+			return fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message)
+		}
+		return fmt.Errorf("failed to set spend limit")
+	}
+
+	return nil
+}
+
 // ClearCart removes all items from the user's cart.
 func (c *Client) ClearCart() error {
 	url := fmt.Sprintf("%s/api/v1/cart", c.BaseURL)

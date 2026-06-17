@@ -54,6 +54,7 @@ func SetupRoutes(
 	webhookHandler := handlers.NewWebhookHandler(stripeWebhookSecret, shippoWebhookSecret)
 	slackHandler := handlers.NewSlackHandler(slackSigningSecret, adminAPIKey, apiPort, shippoWebhookSecret)
 	adminUserHandler := handlers.NewAdminUserHandler()
+	accountHandler := handlers.NewAccountHandler(maxOrderCents)
 
 	// Short payment redirect and success page — no auth required.
 	r.Get("/pay/{token}", handlers.PayRedirect)
@@ -104,6 +105,11 @@ func SetupRoutes(
 			r.Use(middleware.RequireAuth)
 
 			r.Get("/view/init", viewHandler.GetViewInit)
+
+			// Account self-service settings, JWT-authed, edits the callers
+			// own row (user id from context, never a URL param). Distinct from
+			// the admin /users/{id}/order-cap setter in the RequireAdmin group.
+			r.Put("/account/spend-limit", accountHandler.SetSpendLimit)
 
 			// Cart
 			r.Route("/cart", func(r chi.Router) {

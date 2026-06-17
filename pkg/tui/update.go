@@ -98,9 +98,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Data.User.ID != 0 {
 			u := models.User{
-				ID:    msg.Data.User.ID,
-				Name:  msg.Data.User.Email,
-				Email: msg.Data.User.Email,
+				ID:             msg.Data.User.ID,
+				Name:           msg.Data.User.Email,
+				Email:          msg.Data.User.Email,
+				SelfLimitCents: msg.Data.User.SelfLimitCents,
 			}
 			m.User = &u
 			m.Username = u.Name
@@ -174,6 +175,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// If a form is active, skip global keys — let the page handler own input
 		if m.shipping.form != nil || m.payment.form != nil {
+			break
+		}
+		// spend-limit input owns keys while focused - skip global nav so a
+		// keystroke edits the field instead of switching pages (s/c/a/q/etc...)
+		if m.account.spendLimitFocused {
 			break
 		}
 		// Refund overlay owns input when open; dispatched below before page handlers.
