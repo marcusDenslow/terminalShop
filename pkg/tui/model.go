@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"github.com/stripe/stripe-go/v78"
@@ -191,6 +192,10 @@ type accountState struct {
 	cardCursor         int
 	addressDeleting    *int
 	cardDeleting       *int
+	spendLimitFocused  bool
+	spendLimitInput    textinput.Model
+	spendLimitSaving   bool
+	spendLimitErr      string
 	detailViewport     viewport.Model
 	viewportReady      bool
 }

@@ -51,6 +51,7 @@ const (
 	eventOrderDelivered         eventType = "order_delivered"
 	eventTrackingMarkedManually eventType = "tracking_marked_manually"
 	eventUserOrderCapSet        eventType = "user_order_cap_set"
+	eventUserSelfLimitSet       eventType = "user_self_limit_set"
 )
 
 type event struct {
@@ -391,6 +392,29 @@ func UserOrderCapSet(actor string, userID uint, capCents *int) {
 	e := event{
 		Event:  eventUserOrderCapSet,
 		Actor:  actor,
+		UserID: userID,
+	}
+	if capCents == nil {
+		e.Status = "cleared"
+	} else {
+		e.Status = "set"
+		e.CapCents = *capCents
+	}
+	slog.Info("audit", e.attrs()...)
+}
+
+// UserSelfLimitSet records a customer changing their own self-service spend
+// limit (User.SelfLimitCents) via the JWT-authed account endpoint. Kept
+// deliberately distinct from UserOrderCapSet (the operator's admin-gated
+// override) so the customer action and the operator action are never conflated
+// in the audit trail. A nil capCents means the self-limit was cleared (the user
+// reverts to the admin/global cap). Unlike the admin cap, an explicit 0 here is
+// a real "block everything" ceiling, not an off-switch, so Status distinguishes
+// "set" from "cleared" and a cap of 0 (which attrs() omits) stays legible.
+func UserSelfLimitSet(userID uint, capCents *int) {
+	e := event{
+		Event:  eventUserSelfLimitSet,
+		Actor:  "self",
 		UserID: userID,
 	}
 	if capCents == nil {
