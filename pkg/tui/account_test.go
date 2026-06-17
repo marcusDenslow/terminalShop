@@ -15,13 +15,17 @@ func TestParseSpendLimitInput(t *testing.T) {
 		wantNil bool
 		wantErr bool
 	}{
-		{"", 0, true, false},           // blank clears
-		{"0", 0, false, false},         // 0 is block-all, NOT a clear
-		{"1500", 1500, false, false},   // plain value
-		{"  250  ", 250, false, false}, // trims whitespace
-		{"-5", 0, false, true},         // negative rejected
-		{"abc", 0, false, true},        // non-numeric rejected
-		{"12.5", 0, false, true},       // non-integer rejected
+		{"", 0, true, false},             // blank clears
+		{"0", 0, false, false},           // $0 is block-all, NOT a clear
+		{"25", 2500, false, false},       // whole dollars
+		{"25.50", 2550, false, false},    // dollars + cents
+		{"25.5", 2550, false, false},     // one decimal => tenths
+		{"0.05", 5, false, false},        // sub-dollar
+		{" $25.00 ", 2500, false, false}, // strips $ and whitespace
+		{".50", 50, false, false},        // leading dot
+		{"-5", 0, false, true},           // negative rejected
+		{"abc", 0, false, true},          // non-numeric rejected
+		{"25.999", 0, false, true},       // too many decimals rejected
 	}
 	for _, tc := range cases {
 		got, err := parseSpendLimitInput(tc.in)
@@ -80,8 +84,8 @@ func TestSpendLimitFocusFlow(t *testing.T) {
 	if !m.account.spendLimitFocused {
 		t.Fatal("enter did not focus the spend-limit input")
 	}
-	if got := m.account.spendLimitInput.Value(); got != "2500" {
-		t.Errorf("prefill: want \"2500\", got %q", got)
+	if got := m.account.spendLimitInput.Value(); got != "25.00" {
+		t.Errorf("prefill: want \"25.00\", got %q", got)
 	}
 
 	m, _ = m.AccountUpdate(tea.KeyPressMsg{Code: tea.KeyEsc})
