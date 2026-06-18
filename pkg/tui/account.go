@@ -575,6 +575,7 @@ func (m Model) SpendLimitView(width int) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(m.theme.Highlight()).
 		Width(max(1, width-2))
+	m.account.spendLimitInput.SetWidth(max(1, width-3))
 	out += labelStyle.Render("New limit (dollars)") + "\n"
 	out += box.Render(m.account.spendLimitInput.View())
 	switch {

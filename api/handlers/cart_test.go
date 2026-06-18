@@ -862,6 +862,171 @@ func TestConvertCartLimit(t *testing.T) {
 	}
 }
 
+func seedConvertReadyCart(t *testing.T, user models.User) {
+	t.Helper()
+	db := database.GetDB()
+
+	user.StripeCustomerID = "cus_test_cit"
+	if err := db.Save(&user).Error; err != nil {
+		t.Fatalf("save user: %v", err)
+	}
+
+	addr := models.Address{
+		UserID: user.ID, Name: "test", Street: "1 Main St",
+		City: "PDX", State: "OR", Zip: "97201", Country: "US",
+	}
+	if err := db.Create(&addr).Error; err != nil {
+		t.Fatalf("seed address: %v", err)
+	}
+
+	card := models.Card{
+		UserID: user.ID, StripePaymentID: "pm_test_cit",
+		Last4: "4242", Brand: "Visa", ExpMonth: 12, ExpYear: 2030,
+	}
+	if err := db.Create(&card).Error; err != nil {
+		t.Fatalf("seed card: %v", err)
+	}
+	if err := db.Model(&models.Coffee{}).Where("id = ?", 4).Update("price", 500).Error; err != nil {
+		t.Fatalf("pin coffee price: %v", err)
+	}
+
+	h := NewCartHandler("", 0)
+	body, _ := json.Marshal(map[string]any{"coffee_id": 4, "quantity": 2})
+	w := httptest.NewRecorder()
+	h.SetItem(w, authRequest("PUT", "/api/v1/cart/item", body, user.ID))
+	if w.Code != http.StatusOK {
+		t.Fatalf("SetItem: %d %s", w.Code, w.Body.String())
+	}
+	body, _ = json.Marshal(map[string]any{"address_id": addr.ID})
+	w = httptest.NewRecorder()
+	h.SetAddress(w, authRequest("PUT", "/api/v1/cart/address", body, user.ID))
+	if w.Code != http.StatusOK {
+		t.Fatalf("SetAddress: %d %s", w.Code, w.Body.String())
+	}
+	body, _ = json.Marshal(map[string]any{"card_id": card.ID})
+	w = httptest.NewRecorder()
+	h.SetCard(w, authRequest("PUT", "/api/v1/cart/card", body, user.ID))
+	if w.Code != http.StatusOK {
+		t.Fatalf("SetCard: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestConvertCartIsCustomerInitiated(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	var gotParams *stripe.PaymentIntentParams
+	orig := paymentIntentNewFn
+	defer func() { paymentIntentNewFn = orig }()
+	paymentIntentNewFn = func(p *stripe.PaymentIntentParams) (*stripe.PaymentIntent, error) {
+		gotParams = p
+		return &stripe.PaymentIntent{ID: "pi_cit", Status: stripe.PaymentIntentStatusSucceeded}, nil
+	}
+
+	seedConvertReadyCart(t, user)
+	handler := NewCartHandler("http://localhost", 0)
+
+	w := httptest.NewRecorder()
+	handler.ConvertCart(w, authRequest("POST", "/api/v1/cart/convert", nil, user.ID))
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("convert: want 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if gotParams == nil {
+		t.Fatalf("paymentIntentNewFn was never called")
+	}
+	if gotParams.OffSession != nil {
+		t.Errorf("CIT charge must not set off_session; got %v", *gotParams.OffSession)
+	}
+	if gotParams.Confirm == nil || !*gotParams.Confirm {
+		t.Error("expected Confirm=true on the charge")
+	}
+	if gotParams.ReturnURL == nil || *gotParams.ReturnURL == "" {
+		t.Error("expected ReturnURL set so redirect-based 3DS can populate next_action")
+	}
+}
+
+// TestConvertCartRequiresAction asserts that when the bank requires SCA, the
+// CIT charge returns status=requires_action (the customer-initiated shape per
+// the Stripe sample) and the handler responds 202 + redirect URL, persists the
+// order in requires_action, and records the audit event the retry cap counts.
+// next_action.redirect_to_url is pre-populated so respondRequiresAction skips
+// its re-confirm and never touches the live Stripe API (hermetic).
+func TestConvertCartRequiresAction(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	// Wire audit persistence so the order_requires_action row actually lands
+	// (audit.db is package-global and nil unless set — see api/main.go:71).
+	// Reset to nil after so it does not leak into other tests in this package.
+	audit.SetDB(database.GetDB())
+	defer audit.SetDB(nil)
+
+	orig := paymentIntentNewFn
+	defer func() { paymentIntentNewFn = orig }()
+	paymentIntentNewFn = func(_ *stripe.PaymentIntentParams) (*stripe.PaymentIntent, error) {
+		return &stripe.PaymentIntent{
+			ID:     "pi_sca",
+			Status: stripe.PaymentIntentStatusRequiresAction,
+			NextAction: &stripe.PaymentIntentNextAction{
+				RedirectToURL: &stripe.PaymentIntentNextActionRedirectToURL{
+					URL: "https://hooks.stripe.com/3ds/test",
+				},
+			},
+		}, nil
+	}
+
+	seedConvertReadyCart(t, user)
+	handler := NewCartHandler("http://localhost", 0)
+
+	w := httptest.NewRecorder()
+	handler.ConvertCart(w, authRequest("POST", "/api/v1/cart/convert", nil, user.ID))
+
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("convert: want 202, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	var resp struct {
+		Success bool `json:"success"`
+		Data    struct {
+			OrderID     uint   `json:"order_id"`
+			Status      string `json:"status"`
+			RedirectURL string `json:"redirect_url"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Data.Status != "requires_action" {
+		t.Errorf("status: want requires_action, got %q", resp.Data.Status)
+	}
+	if resp.Data.RedirectURL == "" {
+		t.Error("expected redirect_url in 202 response")
+	}
+
+	db := database.GetDB()
+	var order models.Order
+	if err := db.First(&order, resp.Data.OrderID).Error; err != nil {
+		t.Fatalf("load order: %v", err)
+	}
+	if order.Status != models.OrderStatusRequiresAction {
+		t.Errorf("order status: want requires_action, got %q", order.Status)
+	}
+	if order.StripePaymentID != "pi_sca" {
+		t.Errorf("order stripe_payment_id: want pi_sca, got %q", order.StripePaymentID)
+	}
+
+	var events int64
+	db.Model(&models.OrderEvent{}).
+		Where("order_id = ? AND type = ?", order.ID, audit.EventOrderRequiresAction).
+		Count(&events)
+	if events != 1 {
+		t.Errorf("expected 1 order_requires_action audit event, got %d", events)
+	}
+}
+
 // TestSetCard_ExpiredReturns410 verifies that selecting an already-expired
 // card on the cart returns 410 + CARD_STORAGE_EXPIRED and soft-deletes the
 // card. Exercises cart.go SetCard expired-card branch

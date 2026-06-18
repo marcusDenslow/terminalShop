@@ -138,11 +138,14 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-// loadMaxOrderCents reads MAX_ORDER_CENTS. Default $500 — aligns with the
-// PSD2 TRA exemption ceiling (above this, Stripe always requests SCA, so the
-// cap is only meaningful below it). Explicit 0 disables the cap. Garbage or
-// negative values fall back to the default with a warning so an operator
-// typo cannot silently disable a fraud control.
+// loadMaxOrderCents reads MAX_ORDER_CENTS. Default $500 — roughly tracks the
+// PSD2 TRA exemption ceiling of €500 (≈ $540, FX-dependent), above which Stripe
+// always requests SCA, so the cap is only meaningful below it. We charge in USD
+// and the regulatory ceiling is in EUR, so this is an approximate anchor, not an
+// exact equivalence — $500 trips slightly below the true ceiling, which is the
+// safe direction. Explicit 0 disables the cap. Garbage or negative values fall
+// back to the default with a warning so an operator typo cannot silently disable
+// a fraud control.
 func loadMaxOrderCents() int {
 	const defaultCap = 50000
 	raw := os.Getenv("MAX_ORDER_CENTS")

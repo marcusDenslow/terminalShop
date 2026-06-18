@@ -36,6 +36,11 @@ type CartHandler struct {
 // audit rows (audit.EventOrderRequiresAction) so the cap stays migration-free.
 const maxAuthIssuances = 4
 
+// paymentIntentNewFn lets tests stub the Stripe create call without spinning
+// up an httptest backend. Production callers go straight through to the real
+// paymentintent.New. Mirrors paymentIntentGetFn in reconcile.go.
+var paymentIntentNewFn = paymentintent.New
+
 // NewCartHandler creates a new cart handler. Stripe credentials are wired
 // once at startup via stripe.Key in api/main.go.
 func NewCartHandler(appURL string, maxOrderCents int) *CartHandler {
@@ -460,14 +465,24 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 
 	audit.OrderCreated(userID, order.ID, total)
 
-	// Charge the card. The idempotency key is tied to the order ID so retries
-	// never produce a double charge.
+	// Charge the card. This is a Customer-Initiated Transaction (CIT): the
+	// customer is present in the TUI at checkout. We deliberately do NOT set
+	// OffSession — that flag marks a Merchant-Initiated Transaction (MIT),
+	// which under PSD2/SCA may only claim an exemption when a stored mandate
+	// authorises the merchant to charge while the customer is away. We capture
+	// no mandate and run no recurring billing, so MIT would misrepresent the
+	// transaction type. As a CIT, an SCA challenge surfaces as
+	// pi.Status == requires_action (handled below), not as an
+	// authentication_required error. See docs/sca-psd2-compliance.md "Gap 1".
+	// Reference: stripe-samples accept-a-payment custom-payment-flow —
+	// php/public/google-pay.php drives 3DS off status==requires_action and sets
+	// no off_session on a customer-present confirm.
+	// The idempotency key is tied to the order ID so retries never double charge.
 	piParams := &stripe.PaymentIntentParams{
 		Amount:             stripe.Int64(int64(total)),
 		Currency:           stripe.String(string(stripe.CurrencyUSD)),
 		Customer:           stripe.String(user.StripeCustomerID),
 		PaymentMethod:      stripe.String(paymentMethodID),
-		OffSession:         stripe.Bool(true),
 		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
 		ReturnURL:          stripe.String(h.appURL + "/post-3ds"),
 		Confirm:            stripe.Bool(true),
@@ -490,11 +505,16 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	stripeStart := time.Now()
-	pi, err := paymentintent.New(piParams)
+	pi, err := paymentIntentNewFn(piParams)
 	stripeDur := time.Since(stripeStart).Seconds()
 	if err != nil {
 		middleware.ObserveStripeRequest("payment_intent_create", "error", stripeDur)
 		if stripeErr, ok := err.(*stripe.Error); ok {
+			// Defensive fallback: as CIT (no off_session) Stripe normally
+			// signals 3DS via status=requires_action below, not via this error.
+			// authentication_required can still appear if the saved card needs
+			// auth that could not run inline; respondRequiresAction re-Confirms
+			// on-session to recover. (Pre-CIT migration this was the main path.)
 			if stripeErr.Code == stripe.ErrorCodeAuthenticationRequired && stripeErr.PaymentIntent != nil {
 				h.respondRequiresAction(w, &order, paymentMethodID, stripeErr.PaymentIntent)
 				return
