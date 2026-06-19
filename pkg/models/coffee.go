@@ -34,6 +34,7 @@ var AccountMenuItems = []string{
 	"addresses",
 	"cards",
 	"spend limit",
+	"privacy",
 	"faq",
 	"about",
 }

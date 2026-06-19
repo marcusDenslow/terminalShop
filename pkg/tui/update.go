@@ -102,6 +102,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Name:           msg.Data.User.Email,
 				Email:          msg.Data.User.Email,
 				SelfLimitCents: msg.Data.User.SelfLimitCents,
+				PrivacyMode:    msg.Data.User.PrivacyMode,
 			}
 			m.User = &u
 			m.Username = u.Name

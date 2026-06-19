@@ -85,6 +85,8 @@ func (m Model) getAccountDetailContent() string {
 		return m.CardsView(detailContentWidth)
 	case "spend limit":
 		return m.SpendLimitView(detailContentWidth)
+	case "privacy":
+		return m.PrivacyView(detailContentWidth)
 	case "faq":
 		questionStyle := m.theme.TextHighlight().Bold(true)
 		contentStyle := m.theme.TextBody().Width(detailContentWidth)
@@ -276,6 +278,24 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 		m.account.spendLimitErr = ""
 		m.footer = defaultAccountFooter()
 		m.notice = &VisibleNotice{message: "Spend limit updated"}
+		return m, nil
+	}
+
+	if saved, ok := msg.(privacyModeSavedMsg); ok {
+		m.account.privacyModeSaving = false
+		if saved.Err != nil {
+			m.account.privacyModeErr = saved.Err.Error()
+			return m, nil
+		}
+		if m.User != nil {
+			m.User.PrivacyMode = saved.Enabled
+		}
+		m.account.privacyModeErr = ""
+		state := "off"
+		if saved.Enabled {
+			state = "on"
+		}
+		m.notice = &VisibleNotice{message: "Privacy mode " + state}
 		return m, nil
 	}
 
@@ -483,6 +503,8 @@ func (m Model) AccountUpdate(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				return m, cmd
 			}
+		case "privacy":
+			return m.togglePrivacyMode()
 		case "faq":
 			if !m.account.faqFocused {
 				m.account.faqFocused = true
@@ -611,6 +633,88 @@ func (m Model) setSpendLimitCmd(cents *int) tea.Cmd {
 		}
 		err := m.APIClient.SetSpendLimit(cents)
 		return spendLimitSavedMsg{Cents: cents, Err: err}
+	}
+}
+
+// privacyModeSavedMsg carries the result of an async SetPrivacyMode call back to
+// AccountUpdate. Enabled echoes the value sent so the view updates without a
+// refetch; Err is non-nil when the save failed.
+type privacyModeSavedMsg struct {
+	Enabled bool
+	Err     error
+}
+
+// PrivacyView renders the account-level privacy toggle ("keep as little as
+// possible"). A soft default: the checkout can still override it per order.
+func (m Model) PrivacyView(width int) string {
+	labelStyle := m.theme.TextLabel()
+	bodyStyle := m.theme.TextBody().Width(width)
+	hintStyle := m.theme.TextDim()
+
+	state := "off"
+	if m.User != nil && m.User.PrivacyMode {
+		state = "on"
+	}
+
+	// Privacy copy is split into short labelled sections instead of one wall of
+	// text, reusing the same labelStyle/bodyStyle pairing as the rest of the
+	// account view so it reads as scannable blocks.
+	sections := []struct{ title, body string }{
+		{
+			"Philosophy",
+			"Regardless of privacy mode, I never keep your full card number. Full stop.",
+		},
+		{
+			"Privacy disabled",
+			"Only the last 4 digits, card brand and a payment token is stored",
+		},
+		{
+			"Privacy enabled",
+			"With privacy mode ENABLED checkout uses a one-time card. All of the data is wiped the millisecond you pay",
+		},
+		{
+			"Your address",
+			"This one I have to keep. The law makes me, sometimes for years. So I store it offline, on my own network, where only I can reach it. Sorry about that.",
+		},
+	}
+
+	out := bodyStyle.Render(wordWrap("", width))
+	for _, s := range sections {
+		out += labelStyle.Render(s.title) + "\n"
+		out += bodyStyle.Render(wordWrap(s.body, width)) + "\n\n"
+	}
+	out += labelStyle.Render("Privacy mode") + "\n"
+	out += m.theme.TextAccent().Render(state) + "\n\n"
+
+	switch {
+	case m.account.privacyModeSaving:
+		out += m.theme.TextAccent().Render("saving...") + "\n"
+	case m.account.privacyModeErr != "":
+		out += m.theme.TextError().Render(m.account.privacyModeErr) + "\n"
+	}
+	return out + hintStyle.Render("enter: toggle")
+}
+
+// togglePrivacyMode flips the account privacy default and fires the save command.
+func (m Model) togglePrivacyMode() (Model, tea.Cmd) {
+	if m.account.privacyModeSaving {
+		return m, nil
+	}
+	current := m.User != nil && m.User.PrivacyMode
+	m.account.privacyModeErr = ""
+	m.account.privacyModeSaving = true
+	return m, m.setPrivacyModeCmd(!current)
+}
+
+// setPrivacyModeCmd calls the API off the UI thread and reports back via
+// privacyModeSavedMsg. Mirrors setSpendLimitCmd.
+func (m Model) setPrivacyModeCmd(on bool) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil || m.User == nil {
+			return privacyModeSavedMsg{Err: fmt.Errorf("not authenticated")}
+		}
+		err := m.APIClient.SetPrivacyMode(on)
+		return privacyModeSavedMsg{Enabled: on, Err: err}
 	}
 }
 

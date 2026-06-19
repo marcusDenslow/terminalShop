@@ -196,6 +196,8 @@ type accountState struct {
 	spendLimitInput    textinput.Model
 	spendLimitSaving   bool
 	spendLimitErr      string
+	privacyModeSaving  bool
+	privacyModeErr     string
 	detailViewport     viewport.Model
 	viewportReady      bool
 }
@@ -677,6 +679,51 @@ func (m Model) checkoutWithSavedCard() tea.Cmd {
 			}
 		}
 
+		return CheckoutResultMsg{OrderID: outcome.Order.ID, Total: outcome.Order.Total}
+	}
+}
+
+// checkoutEphemeralCmd tokenizes the entered card and charges it as a one-time,
+// never-saved card (privacy checkout). Mirrors checkoutWithSavedCard but routes
+// to ConvertCartEphemeral instead of saving the card + SetCartCard. The token is
+// produced the same way as saveCardOnlyCmd (stripetoken.New) and handed straight
+// to the charge — no Card row, no SelectedCard, and the backend detaches the
+// PaymentMethod once the charge settles.
+func (m Model) checkoutEphemeralCmd(form PaymentFormCompleteMsg) tea.Cmd {
+	return func() tea.Msg {
+		if m.APIClient == nil {
+			return CheckoutResultMsg{Err: fmt.Errorf("API client not available")}
+		}
+		if err := m.resolveCartAddress(); err != nil {
+			return CheckoutResultMsg{Err: err}
+		}
+		tok, err := stripetoken.New(&stripe.TokenParams{
+			Card: &stripe.CardParams{
+				Name:       stripe.String(form.CardName),
+				Number:     stripe.String(form.CardNumber),
+				ExpMonth:   stripe.String(form.ExpiryMonth),
+				ExpYear:    stripe.String(form.ExpiryYear),
+				CVC:        stripe.String(form.CVC),
+				AddressZip: stripe.String(form.BillingZip),
+			},
+		})
+		if err != nil {
+			if stripeErr, ok := err.(*stripe.Error); ok {
+				return CheckoutResultMsg{Err: fmt.Errorf("%s", stripeErr.Msg)}
+			}
+			return CheckoutResultMsg{Err: fmt.Errorf("failed to tokenize card: %w", err)}
+		}
+		outcome, err := m.APIClient.ConvertCartEphemeral(tok.ID)
+		if err != nil {
+			return CheckoutResultMsg{Err: err}
+		}
+		if outcome.RequiresAction {
+			return CheckoutResultMsg{
+				OrderID:        outcome.OrderID,
+				RequiresAction: true,
+				RedirectURL:    outcome.RedirectURL,
+			}
+		}
 		return CheckoutResultMsg{OrderID: outcome.Order.ID, Total: outcome.Order.Total}
 	}
 }

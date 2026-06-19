@@ -180,6 +180,13 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(ctx context.Context, event
 		}
 	}
 
+	if order.Ephemeral && pi.PaymentMethod != nil && pi.PaymentMethod.ID != "" {
+		if _, derr := paymentMethodDetachFn(pi.PaymentMethod.ID, nil); derr != nil {
+			webhookLog().Warn("failed to detach ephemeral payment method",
+				"order_id", order.ID, "pi", pi.ID, "error", derr)
+		}
+	}
+
 	audit.OrderPaid(order.UserID, order.ID, int(pi.Amount), pi.ID)
 	go notify.SlackOrderPaid(&order)
 	webhookLog().Info("order marked paid", "order_id", orderIDStr, "pi", pi.ID)

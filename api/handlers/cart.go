@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -40,6 +41,11 @@ const maxAuthIssuances = 4
 // up an httptest backend. Production callers go straight through to the real
 // paymentintent.New. Mirrors paymentIntentGetFn in reconcile.go.
 var paymentIntentNewFn = paymentintent.New
+
+var (
+	paymentMethodNewFn    = paymentmethod.New
+	paymentMethodDetachFn = paymentmethod.Detach
+)
 
 // NewCartHandler creates a new cart handler. Stripe credentials are wired
 // once at startup via stripe.Key in api/main.go.
@@ -269,6 +275,16 @@ func (h *CartHandler) ClearCart(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ConvertCartRequest carries the optional privacy-checkout controls. The body
+// is optional: a saved.card checkout sends nothing and both field stay zero.
+// Ephemeral opts a single order into privacy mode (ont-time card, no Card row,
+// PM detached after settle); CardToken supplies that one-time card. A user with
+// PrivacyMode set is ephemeral regardless of the flag.
+type ConvertCartRequest struct {
+	Ephemeral bool   `json:"ephemeral"`
+	CardToken string `json:"card_token"`
+}
+
 func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	db := database.GetDB().WithContext(r.Context())
 	userID := middleware.UserIDFromContext(r.Context())
@@ -276,6 +292,12 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	ctx, span := otel.Tracer("api").Start(r.Context(), "cart.convert")
 	defer span.End()
 	r = r.WithContext(ctx)
+
+	var req ConvertCartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_JSON", "invalid request body", nil)
+		return
+	}
 
 	cart, err := getOrCreateCart(r.Context(), userID)
 	if err != nil {
@@ -299,33 +321,10 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if cart.CardID == nil {
-		middleware.RecordCartConversion("validation_missing_card")
-		utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "payment card is required", nil)
-		return
-	}
-
 	var address models.Address
 	if err := db.First(&address, *cart.AddressID).Error; err != nil {
 		middleware.RecordCartConversion("validation_invalid_address")
 		utils.RespondError(w, http.StatusBadRequest, "INVALID_ADDRESS", "shipping address not found", nil)
-		return
-	}
-
-	var card models.Card
-	if err := db.First(&card, *cart.CardID).Error; err != nil {
-		middleware.RecordCartConversion("validation_invalid_card")
-		utils.RespondError(w, http.StatusBadRequest, "INVALID_CARD", "payment card not found", nil)
-		return
-	}
-
-	if card.IsStorageExpired(time.Now()) {
-		middleware.RecordCartConversion("validation_card_expired")
-		if err := expireStoredCard(db, &card); err != nil {
-			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
-			return
-		}
-		respondCardStorageExpired(w)
 		return
 	}
 
@@ -336,38 +335,85 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Ensure the user has a Stripe customer (shared helper with cards handler).
-	if err := ensureStripeCustomer(db, &user); err != nil {
-		middleware.RecordCartConversion("stripe_customer_failed")
-		utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create stripe customer", nil)
-		return
-	}
+	// Privacy mode is a SOFT default enforced in the TUI, not here: the backend
+	// trusts the checkout's explicit per-order intent so a customer can override
+	// their account default with "save anyway" at checkout. See
+	// AccountHandler.SetPrivacyMode.
+	ephemeral := req.Ephemeral
 
-	// All cards are now saved as pm_ PaymentMethods. This branch handles any
-	// legacy tok_ records that predate the server-side tokenization refactor.
-	paymentMethodID := card.StripePaymentID
-	if len(paymentMethodID) >= 3 && paymentMethodID[:3] == "tok" {
-		pm, pmErr := paymentmethod.New(&stripe.PaymentMethodParams{
-			Type: stripe.String("card"),
-			Card: &stripe.PaymentMethodCardParams{
-				Token: stripe.String(paymentMethodID),
-			},
-		})
-		if pmErr != nil {
-			utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create payment method", nil)
+	var card models.Card
+	var paymentMethodID string
+	if ephemeral {
+		if req.CardToken == "" {
+			middleware.RecordCartConversion("validation_missing_card")
+			utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "card token is required for private checkout", nil)
 			return
 		}
-		if _, attachErr := paymentmethod.Attach(pm.ID, &stripe.PaymentMethodAttachParams{
-			Customer: stripe.String(user.StripeCustomerID),
-		}); attachErr != nil {
-			utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to attach payment method", nil)
+		pm, pmerr := paymentMethodNewFn(&stripe.PaymentMethodParams{
+			Type: stripe.String("card"),
+			Card: &stripe.PaymentMethodCardParams{
+				Token: stripe.String(req.CardToken),
+			},
+		})
+		if pmerr != nil {
+			middleware.RecordCartConversion("stripe_error")
+			utils.RespondError(w, http.StatusBadRequest, "STRIPE_ERROR", "failed to create payment method", nil)
 			return
 		}
 		paymentMethodID = pm.ID
-		card.StripePaymentID = pm.ID
-		if err := db.Save(&card).Error; err != nil {
-			utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to save card", nil)
+	} else {
+		if cart.CardID == nil {
+			middleware.RecordCartConversion("validation_missing_card")
+			utils.RespondError(w, http.StatusBadRequest, "VALIDATION_ERROR", "payment card is required", nil)
 			return
+		}
+
+		if err := db.First(&card, *cart.CardID).Error; err != nil {
+			middleware.RecordCartConversion("validation_invalid_card")
+			utils.RespondError(w, http.StatusBadRequest, "INVALID_CARD", "payment card not found", nil)
+			return
+		}
+
+		if card.IsStorageExpired(time.Now()) {
+			middleware.RecordCartConversion("validation_card_expired")
+			if err := expireStoredCard(db, &card); err != nil {
+				utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to expire card", nil)
+				return
+			}
+			respondCardStorageExpired(w)
+			return
+		}
+
+		if err := ensureStripeCustomer(db, &user); err != nil {
+			middleware.RecordCartConversion("stripe_customer_failed")
+			utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create stripe customer", nil)
+			return
+		}
+
+		paymentMethodID = card.StripePaymentID
+		if len(paymentMethodID) >= 3 && paymentMethodID[:3] == "tok" {
+			pm, pmErr := paymentmethod.New(&stripe.PaymentMethodParams{
+				Type: stripe.String("card"),
+				Card: &stripe.PaymentMethodCardParams{
+					Token: stripe.String(paymentMethodID),
+				},
+			})
+			if pmErr != nil {
+				utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to create payment method", nil)
+				return
+			}
+			if _, attachErr := paymentmethod.Attach(pm.ID, &stripe.PaymentMethodAttachParams{
+				Customer: stripe.String(user.StripeCustomerID),
+			}); attachErr != nil {
+				utils.RespondError(w, http.StatusInternalServerError, "STRIPE_ERROR", "failed to attach payment method", nil)
+				return
+			}
+			paymentMethodID = pm.ID
+			card.StripePaymentID = pm.ID
+			if err := db.Save(&card).Error; err != nil {
+				utils.RespondError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to save card", nil)
+				return
+			}
 		}
 	}
 
@@ -442,6 +488,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		UserID:          user.ID,
 		CardID:          card.ID,
 		StripePaymentID: "",
+		Ephemeral:       ephemeral,
 		Status:          models.OrderStatusPending,
 		Subtotal:        subtotal,
 		ShippingCost:    cart.ShippingCost,
@@ -481,7 +528,6 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	piParams := &stripe.PaymentIntentParams{
 		Amount:             stripe.Int64(int64(total)),
 		Currency:           stripe.String(string(stripe.CurrencyUSD)),
-		Customer:           stripe.String(user.StripeCustomerID),
 		PaymentMethod:      stripe.String(paymentMethodID),
 		PaymentMethodTypes: stripe.StringSlice([]string{"card"}),
 		ReturnURL:          stripe.String(h.appURL + "/post-3ds"),
@@ -502,6 +548,10 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 	piParams.SetIdempotencyKey(fmt.Sprintf("order-%d", order.ID))
 	piParams.Metadata = map[string]string{
 		"order_id": fmt.Sprintf("%d", order.ID),
+	}
+
+	if !ephemeral {
+		piParams.Customer = stripe.String(user.StripeCustomerID)
 	}
 
 	stripeStart := time.Now()
@@ -573,6 +623,12 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		audit.PaymentCritical(order.ID, pi.ID, txErr)
 		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "payment succeeded but failed to record order — please contact support", nil)
 		return
+	}
+
+	if ephemeral {
+		if _, derr := paymentMethodDetachFn(paymentMethodID, nil); derr != nil {
+			slog.Warn("failed to detach ephemeral payment method", "order_id", order.ID, "error", derr)
+		}
 	}
 
 	audit.OrderPaid(userID, order.ID, total, pi.ID)

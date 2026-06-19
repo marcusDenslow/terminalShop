@@ -26,6 +26,7 @@ type PaymentFormState struct {
 	ExpiryYear  string
 	CVC         string
 	BillingZip  string
+	SaveCard    bool
 	submitting  bool
 }
 
@@ -38,6 +39,7 @@ type PaymentFormCompleteMsg struct {
 	ExpiryYear  string
 	CVC         string
 	BillingZip  string
+	SaveCard    bool
 }
 
 // CardSavedForReviewMsg is sent after a new card is tokenized and saved
@@ -77,6 +79,13 @@ type PollPaymentTimeoutMsg struct{}
 // buildPaymentForm creates the huh form bound to state's fields.
 // No field-level validators so Tab/Enter move freely.
 func (m Model) buildPaymentForm(state *PaymentFormState) *huh.Form {
+	// The save prompt doubles as the privacy "save anyway?" warning: when the
+	// account privacy default is on, the affirmative choice opposes it, so the
+	// title says so. The user can still pick Save (the per-order override).
+	savePrompt := "Save this card for next time?"
+	if m.User != nil && m.User.PrivacyMode {
+		savePrompt = "Privacy mode is on — saving keeps this card. Save anyway?"
+	}
 	f := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
@@ -109,6 +118,12 @@ func (m Model) buildPaymentForm(state *PaymentFormState) *huh.Form {
 				Title("Billing ZIP").
 				Key("billing_zip").
 				Value(&state.BillingZip),
+			huh.NewConfirm().
+				Key("save_card").
+				Title(savePrompt).
+				Affirmative("Save").
+				Negative("Don't save").
+				Value(&state.SaveCard),
 		),
 	).
 		WithShowErrors(false).
@@ -127,6 +142,11 @@ func (m Model) buildPaymentForm(state *PaymentFormState) *huh.Form {
 // InitPaymentForm creates a new heap-allocated payment form state.
 func (m Model) InitPaymentForm() *PaymentFormState {
 	state := &PaymentFormState{}
+
+	// Default the save choice from the account privacy setting: privacy users
+	// default to NOT saving (a one-time card); everyone else keeps today's
+	// behaviour of saving the entered card.
+	state.SaveCard = m.User == nil || !m.User.PrivacyMode
 
 	// Pre-fill name and email from user if available
 	if m.User != nil {
@@ -241,6 +261,7 @@ func (m Model) UpdatePaymentForm(msg tea.Msg, state *PaymentFormState) tea.Cmd {
 				ExpiryYear:  state.ExpiryYear,
 				CVC:         state.CVC,
 				BillingZip:  state.BillingZip,
+				SaveCard:    state.SaveCard,
 			}
 		}
 	}
@@ -419,7 +440,16 @@ func (m Model) PaymentUpdate(msg tea.Msg) (Model, tea.Cmd) {
 	case PaymentFormCompleteMsg:
 		if m.payment.form != nil && !m.payment.form.submitting {
 			m.payment.form.submitting = true
-			return m, m.saveCardOnlyCmd(msg)
+			if msg.SaveCard {
+				return m, m.saveCardOnlyCmd(msg)
+			}
+			// Privacy checkout: charge a one-time card without saving it. Jump to
+			// the review page in checking-out state so ReviewUpdate handles the
+			// resulting CheckoutResultMsg (same terminal handling as the saved-card
+			// path), then forget the card.
+			m, _ = m.ReviewSwitch()
+			m.CheckingOut = true
+			return m, m.checkoutEphemeralCmd(msg)
 		}
 		return m, nil
 

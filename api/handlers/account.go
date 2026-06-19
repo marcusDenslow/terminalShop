@@ -109,3 +109,53 @@ func (h *AccountHandler) SetSpendLimit(w http.ResponseWriter, r *http.Request) {
 		"self_limit_cents": limitCents,
 	})
 }
+
+// SetPrivacyMode sets the logged-in user's account-level privacy default
+// (User.PrivacyMode). Body: {"privacy_mode": <bool>}.
+//
+// PrivacyMode is a SOFT default, not a server-enforced guarantee: it only
+// pre-selects "don't keep" at checkout in the TUI. The checkout still sends an
+// explicit per-order intent which the backend honors (cart.go:ConvertCart) —
+// that is what lets a customer override the default with "save anyway". A
+// stricter server-enforced "never save" would be a separate mode.
+//
+// Mirrors SetSpendLimit: JWT-authed, edits the caller's OWN row.
+func (h *AccountHandler) SetPrivacyMode(w http.ResponseWriter, r *http.Request) {
+	db := database.GetDB().WithContext(r.Context())
+	userID := middleware.UserIDFromContext(r.Context())
+
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_BODY", "invalid request body", nil)
+		return
+	}
+	rawMode, ok := raw["privacy_mode"]
+	if !ok {
+		utils.RespondError(w, http.StatusBadRequest, "MISSING_FIELD", "privacy_mode is required", nil)
+		return
+	}
+	var enabled bool
+	if err := json.Unmarshal(rawMode, &enabled); err != nil {
+		utils.RespondError(w, http.StatusBadRequest, "INVALID_BODY", "privacy_mode must be a boolean", nil)
+		return
+	}
+
+	var user models.User
+	if err := db.First(&user, userID).Error; err != nil {
+		utils.RespondError(w, http.StatusNotFound, "USER_NOT_FOUND", "user not found", nil)
+		return
+	}
+
+	// Map form so an explicit false persists (a struct Updates skips a zero bool)
+	if err := db.Model(&user).Updates(map[string]any{"privacy_mode": enabled}).Error; err != nil {
+		utils.RespondError(w, http.StatusInternalServerError, "DATABASE_ERROR", "failed to update privacy mode", nil)
+		return
+	}
+
+	audit.UserPrivacyModeSet(user.ID, enabled)
+
+	utils.RespondSuccess(w, http.StatusOK, map[string]any{
+		"user_id":      user.ID,
+		"privacy_mode": enabled,
+	})
+}

@@ -491,6 +491,39 @@ func (c *Client) SetSpendLimit(cents *int) error {
 	return nil
 }
 
+// SetPrivacyMode sets the users account-level privacy default ("keep as little
+// as possible"). A soft default the checkout can override per order.
+func (c *Client) SetPrivacyMode(on bool) error {
+	url := fmt.Sprintf("%s/api/v1/account/privacy-mode", c.BaseURL)
+
+	jsonData, err := json.Marshal(map[string]any{"privacy_mode": on})
+	if err != nil {
+		return fmt.Errorf("failed to marshal request: %w", err)
+	}
+	req, err := http.NewRequest("PUT", url, bytes.NewReader(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return fmt.Errorf("failed to set privacy mode: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var result APIResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+	if !result.Success {
+		if result.Error != nil {
+			return fmt.Errorf("%s: %s", result.Error.Code, result.Error.Message)
+		}
+	}
+	return nil
+}
+
 // ClearCart removes all items from the user's cart.
 func (c *Client) ClearCart() error {
 	url := fmt.Sprintf("%s/api/v1/cart", c.BaseURL)
@@ -525,9 +558,38 @@ func (c *Client) ClearCart() error {
 // Returns a CheckoutOutcome that either carries the completed Order or
 // indicates the customer must complete 3DS authentication via RedirectURL.
 func (c *Client) ConvertCart() (*CheckoutOutcome, error) {
+	return c.convertCart(nil)
+}
+
+// ConvertCartEphemeral converts the cart in privacy mode: it charges a one-time
+// card (cardToken) that is never saved and is detached after the charge settles.
+// Used when the customer leaves "save this card" unchecked at checkout.
+func (c *Client) ConvertCartEphemeral(cardToken string) (*CheckoutOutcome, error) {
+	jsonData, err := json.Marshal(map[string]any{
+		"ephemeral":  true,
+		"card_token": cardToken,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+	return c.convertCart(jsonData)
+}
+
+// convertCart POSTs to /cart/convert with an optional JSON body (nil = saved-card
+// flow) parses the shared response into a CheckoutOutcome.
+func (c *Client) convertCart(jsonData []byte) (*CheckoutOutcome, error) {
 	url := fmt.Sprintf("%s/api/v1/cart/convert", c.BaseURL)
 
-	req, err := http.NewRequest("POST", url, nil)
+	var req *http.Request
+	var err error
+	if jsonData != nil {
+		req, err = http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+	} else {
+		req, err = http.NewRequest("POST", url, nil)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

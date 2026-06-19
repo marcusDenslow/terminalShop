@@ -52,6 +52,7 @@ const (
 	eventTrackingMarkedManually eventType = "tracking_marked_manually"
 	eventUserOrderCapSet        eventType = "user_order_cap_set"
 	eventUserSelfLimitSet       eventType = "user_self_limit_set"
+	eventUserPrivacyModeSet     eventType = "user_privacy_mode_set"
 )
 
 type event struct {
@@ -422,6 +423,24 @@ func UserSelfLimitSet(userID uint, capCents *int) {
 	} else {
 		e.Status = "set"
 		e.CapCents = *capCents
+	}
+	slog.Info("audit", e.attrs()...)
+}
+
+// UserPrivacyModeSet records a customer toggling their account-level privacy
+// ("keep as little as possible") default via the JWT-authed account endpoint.
+// Actor "self" mirrors UserSelfLimitSet; Status carries the new state so the
+// trail reads cleanly without a dedicated column.
+func UserPrivacyModeSet(userID uint, enabled bool) {
+	e := event{
+		Event:  eventUserPrivacyModeSet,
+		Actor:  "self",
+		UserID: userID,
+	}
+	if enabled {
+		e.Status = "enabled"
+	} else {
+		e.Status = "disabled"
 	}
 	slog.Info("audit", e.attrs()...)
 }
