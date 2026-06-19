@@ -37,6 +37,7 @@ type Order struct {
 	UserID          uint        `gorm:"not null;index" json:"user_id"`
 	CardID          uint        `gorm:"not null" json:"card_id"`
 	StripePaymentID string      `gorm:"size:255" json:"-"` // Stripe PaymentIntent ID
+	Ephemeral       bool        `gorm:"default:false" json:"ephemeral"`
 	Status          OrderStatus `gorm:"size:50;not null;default:'pending'" json:"status"`
 	Subtotal        int         `gorm:"not null" json:"subtotal"`         // Amount in cents
 	ShippingCost    int         `gorm:"default:0" json:"shipping_cost"`   // Amount in cents

@@ -16,6 +16,7 @@ type User struct {
 	Email             string `gorm:"size:255" json:"email,omitempty"`                          // Email (for receipts)
 	Anonymous         bool   `gorm:"default:false" json:"anonymous"`                           // True if connected without SSH key
 	StripeCustomerID  string `gorm:"size:255" json:"-"`
+	PrivacyMode       bool   `gorm:"default:false" json:"privacy_mode"`
 	// MaxOrderCents is an optional per-user override of the global MAX_ORDER_CENTS
 	// spend cap. It may raise OR lower the global cap — both directions are
 	// intentional (e.g. a vetted corporate buyer gets a higher ceiling; a flagged
@@ -42,6 +43,7 @@ type PublicUser struct {
 	Name              string    `json:"name,omitempty"`
 	Email             string    `json:"email,omitempty"`
 	SelfLimitCents    *int      `json:"self_limit_cents,omitempty"`
+	PrivacyMode       bool      `json:"privacy_mode"`
 	CreatedAt         time.Time `json:"created_at"`
 }
 
@@ -53,6 +55,7 @@ func (u *User) ToPublic() PublicUser {
 		Name:              u.Name,
 		Email:             u.Email,
 		SelfLimitCents:    u.SelfLimitCents,
+		PrivacyMode:       u.PrivacyMode,
 		CreatedAt:         u.CreatedAt,
 	}
 }

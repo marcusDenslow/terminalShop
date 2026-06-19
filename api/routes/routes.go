@@ -110,6 +110,7 @@ func SetupRoutes(
 			// own row (user id from context, never a URL param). Distinct from
 			// the admin /users/{id}/order-cap setter in the RequireAdmin group.
 			r.Put("/account/spend-limit", accountHandler.SetSpendLimit)
+			r.Put("/account/privacy-mode", accountHandler.SetPrivacyMode)
 
 			// Cart
 			r.Route("/cart", func(r chi.Router) {
