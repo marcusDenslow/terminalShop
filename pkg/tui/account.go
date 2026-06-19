@@ -678,7 +678,7 @@ func (m Model) PrivacyView(width int) string {
 		},
 	}
 
-	out := bodyStyle.Render(wordWrap("", width))
+	out := ""
 	for _, s := range sections {
 		out += labelStyle.Render(s.title) + "\n"
 		out += bodyStyle.Render(wordWrap(s.body, width)) + "\n\n"
