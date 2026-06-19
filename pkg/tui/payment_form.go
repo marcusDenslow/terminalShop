@@ -296,7 +296,7 @@ func (m Model) updatePaymentViewport() Model {
 	headerH := lipgloss.Height(m.BuildHeader())
 	breadH := lipgloss.Height(m.BuildBreadcrumbs())
 	footerH := lipgloss.Height(m.BuildFooter())
-	availH := m.heightContainer - headerH - footerH - breadH
+	availH := m.heightContainer - headerH - footerH - breadH - 1
 	availH = max(availH, 1)
 	if !m.payment.viewportReady {
 		m.payment.viewport = viewport.New(viewport.WithWidth(m.widthContent), viewport.WithHeight(availH))

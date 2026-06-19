@@ -20,7 +20,7 @@ import (
 func (m Model) accountBodyHeight() int {
 	headerHeight := lipgloss.Height(m.BuildHeader())
 	footerHeight := lipgloss.Height(m.BuildFooter())
-	budget := m.heightContainer - headerHeight - footerHeight - 2
+	budget := m.heightContainer - headerHeight - footerHeight - 2 - 1
 	cards := budget / orderCardHeight
 	cards = max(cards, 1)
 	return cards*orderCardHeight - 2

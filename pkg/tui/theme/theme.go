@@ -93,4 +93,8 @@ func (t Theme) PanelError() lipgloss.Style {
 	return t.Base().Background(lipgloss.Color("52")).Foreground(lipgloss.Color("196"))
 }
 
+func (t Theme) PanelNotice() lipgloss.Style {
+	return t.Base().Background(lipgloss.Color("#009000")).Foreground(lipgloss.Color("#00FF00"))
+}
+
 func (t Theme) Form() huh.Theme { return t.form }

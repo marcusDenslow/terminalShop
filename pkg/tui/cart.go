@@ -14,7 +14,7 @@ func (m Model) updateCartViewport() Model {
 	breadH := lipgloss.Height(m.BuildBreadcrumbs())
 	footerH := lipgloss.Height(m.BuildFooter())
 	// 2 = blank gap rows around the cart list
-	availH := m.heightContainer - headerH - footerH - breadH - 2
+	availH := m.heightContainer - headerH - footerH - breadH - 2 - 1
 	if availH < 1 {
 		availH = 1
 	}
