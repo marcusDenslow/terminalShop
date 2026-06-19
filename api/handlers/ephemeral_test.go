@@ -290,11 +290,14 @@ func TestHandlePaymentIntentSucceeded_EphemeralDetach(t *testing.T) {
 	}
 }
 
-// TestConvertCart_PrivacyModeSoftDefault proves PrivacyMode is NOT enforced
-// server-side: a user with privacy_mode on who explicitly checks out a saved
-// card (ephemeral=false) gets the normal kept-card charge — Customer attached,
-// PM not detached, order not Ephemeral. This is what makes "save anyway" work.
-func TestConvertCart_PrivacyModeSoftDefault(t *testing.T) {
+// TestConvertCart_PrivacyModeForgetsCard proves the privacy guarantee on the
+// saved-card path: a privacy_mode user who checks out a saved (QR-collected) card
+// is charged normally (Customer attached — the PM is customer-attached, so the
+// charge requires it), but once the charge settles the PaymentMethod is detached
+// and the local Card row is hard-deleted, and the order is marked Ephemeral. The
+// live QR add-card flow has no "save anyway" prompt, so privacy mode is the
+// authoritative signal here.
+func TestConvertCart_PrivacyModeForgetsCard(t *testing.T) {
 	testDB, user := setupCartTestDB(t)
 	defer func() { _ = os.Remove(testDB) }()
 	defer database.ResetForTesting()
@@ -306,15 +309,15 @@ func TestConvertCart_PrivacyModeSoftDefault(t *testing.T) {
 	seedConvertReadyCart(t, user) // seeds a SAVED card + address + item
 
 	var piParams *stripe.PaymentIntentParams
-	detachCalled := false
+	detached := ""
 	origPI, origDetach := paymentIntentNewFn, paymentMethodDetachFn
 	defer func() { paymentIntentNewFn, paymentMethodDetachFn = origPI, origDetach }()
 	paymentIntentNewFn = func(p *stripe.PaymentIntentParams) (*stripe.PaymentIntent, error) {
 		piParams = p
-		return &stripe.PaymentIntent{ID: "pi_kept", Status: stripe.PaymentIntentStatusSucceeded}, nil
+		return &stripe.PaymentIntent{ID: "pi_forget", Status: stripe.PaymentIntentStatusSucceeded}, nil
 	}
 	paymentMethodDetachFn = func(id string, _ *stripe.PaymentMethodDetachParams) (*stripe.PaymentMethod, error) {
-		detachCalled = true
+		detached = id
 		return &stripe.PaymentMethod{ID: id}, nil
 	}
 
@@ -325,17 +328,94 @@ func TestConvertCart_PrivacyModeSoftDefault(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("convert: want 200, got %d body=%s", w.Code, w.Body.String())
 	}
+	// The PM is attached to the Stripe customer, so the charge must still set
+	// Customer — you cannot charge an attached PM without it.
 	if piParams == nil || piParams.Customer == nil {
-		t.Error("saved-card path must attach a Customer even when privacy_mode is on")
+		t.Error("saved-card charge must attach a Customer")
 	}
-	if detachCalled {
-		t.Error("must NOT detach a saved card")
+	// ...but privacy mode forgets it afterward: detach + hard-delete.
+	if detached != "pm_test_cit" {
+		t.Errorf("forgotten card PM must be detached after settle; detached=%q", detached)
+	}
+	var cardCount int64
+	db.Unscoped().Model(&models.Card{}).Where("user_id = ?", user.ID).Count(&cardCount)
+	if cardCount != 0 {
+		t.Errorf("privacy checkout must HARD-delete the local card row; found %d", cardCount)
 	}
 	var order models.Order
 	if err := db.Where("user_id = ?", user.ID).First(&order).Error; err != nil {
 		t.Fatalf("load order: %v", err)
 	}
-	if order.Ephemeral {
-		t.Error("explicit ephemeral=false must win over privacy_mode (soft default)")
+	if !order.Ephemeral {
+		t.Error("forgotten-card order must be marked Ephemeral")
+	}
+	if order.CardID != 0 {
+		t.Errorf("forgotten-card order must null its CardID, got %d", order.CardID)
+	}
+	if order.Status != models.OrderStatusPaid {
+		t.Errorf("status: want paid, got %q", order.Status)
+	}
+}
+
+// TestHandlePaymentIntentSucceeded_ForgetsCard covers the deferred (3DS) twin of
+// the inline forget-card cleanup: an Ephemeral order that still carries a local
+// Card row (CardID != 0, the privacy + saved/QR-card case) has that row
+// hard-deleted and its CardID nulled when the webhook marks it paid.
+func TestHandlePaymentIntentSucceeded_ForgetsCard(t *testing.T) {
+	testDB, user := setupCartTestDB(t)
+	defer func() { _ = os.Remove(testDB) }()
+	defer database.ResetForTesting()
+
+	db := database.GetDB()
+	card := models.Card{
+		UserID: user.ID, StripePaymentID: "pm_forget_webhook",
+		Last4: "4242", Brand: "Visa", ExpMonth: 12, ExpYear: 2030,
+	}
+	if err := db.Create(&card).Error; err != nil {
+		t.Fatalf("seed card: %v", err)
+	}
+	order := models.Order{
+		UserID: user.ID, CardID: card.ID, Ephemeral: true,
+		StripePaymentID: "pi_forget_webhook", Status: models.OrderStatusRequiresAction,
+		Subtotal: 500, Total: 500,
+		ShippingName: "Test", ShippingStreet: "1 Main St",
+		ShippingCity: "PDX", ShippingState: "OR", ShippingZip: "97201", ShippingCountry: "US",
+	}
+	if err := db.Create(&order).Error; err != nil {
+		t.Fatalf("seed order: %v", err)
+	}
+
+	origDetach := paymentMethodDetachFn
+	defer func() { paymentMethodDetachFn = origDetach }()
+	paymentMethodDetachFn = func(id string, _ *stripe.PaymentMethodDetachParams) (*stripe.PaymentMethod, error) {
+		return &stripe.PaymentMethod{ID: id}, nil
+	}
+
+	pi := map[string]any{
+		"id":             order.StripePaymentID,
+		"amount":         order.Total,
+		"currency":       "usd",
+		"payment_method": "pm_forget_webhook",
+		"metadata":       map[string]string{"order_id": fmt.Sprintf("%d", order.ID)},
+	}
+	raw, _ := json.Marshal(pi)
+	evt := stripe.Event{Type: "payment_intent.succeeded", Data: &stripe.EventData{Raw: raw}}
+
+	NewWebhookHandler("", "").handlePaymentIntentSucceeded(context.Background(), evt)
+
+	var cardCount int64
+	db.Unscoped().Model(&models.Card{}).Where("id = ?", card.ID).Count(&cardCount)
+	if cardCount != 0 {
+		t.Errorf("webhook must hard-delete the forgotten card; found %d", cardCount)
+	}
+	var reloaded models.Order
+	if err := db.First(&reloaded, order.ID).Error; err != nil {
+		t.Fatalf("reload order: %v", err)
+	}
+	if reloaded.Status != models.OrderStatusPaid {
+		t.Errorf("status: want paid, got %q", reloaded.Status)
+	}
+	if reloaded.CardID != 0 {
+		t.Errorf("order CardID must be nulled, got %d", reloaded.CardID)
 	}
 }

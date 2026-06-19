@@ -174,7 +174,9 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(ctx context.Context, event
 		return
 	}
 
-	if order.CardID != 0 {
+	// A retained (non-ephemeral) card gets its storage TTL refreshed on use.
+	// Ephemeral orders are about to lose their card entirely, so skip the refresh.
+	if order.CardID != 0 && !order.Ephemeral {
 		if err := refreshCardStorageTTL(db, order.CardID, time.Now()); err != nil {
 			webhookLog().Warn("failed to refresh card storage ttl", "card_id", order.CardID, "error", err)
 		}
@@ -184,6 +186,18 @@ func (h *WebhookHandler) handlePaymentIntentSucceeded(ctx context.Context, event
 		if _, derr := paymentMethodDetachFn(pi.PaymentMethod.ID, nil); derr != nil {
 			webhookLog().Warn("failed to detach ephemeral payment method",
 				"order_id", order.ID, "pi", pi.ID, "error", derr)
+		}
+	}
+
+	// Deferred (3DS) twin of the inline forget-card cleanup in ConvertCart: a
+	// privacy-mode order that selected a saved/QR card carries CardID != 0. Now
+	// that it is paid, hard-delete the local row (Unscoped: Card soft-deletes by
+	// default). Token-ephemeral orders have CardID == 0 and skip this.
+	if order.Ephemeral && order.CardID != 0 {
+		if err := db.Unscoped().Delete(&models.Card{}, order.CardID).Error; err != nil {
+			webhookLog().Warn("failed to delete forgotten card", "order_id", order.ID, "card_id", order.CardID, "error", err)
+		} else if err := db.Model(&order).Update("card_id", 0).Error; err != nil {
+			webhookLog().Warn("failed to null forgotten card reference", "order_id", order.ID, "error", err)
 		}
 	}
 
