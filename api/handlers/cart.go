@@ -335,11 +335,15 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Privacy mode is a SOFT default enforced in the TUI, not here: the backend
-	// trusts the checkout's explicit per-order intent so a customer can override
-	// their account default with "save anyway" at checkout. See
-	// AccountHandler.SetPrivacyMode.
+	// Per-order intent drives the charge SHAPE: req.Ephemeral picks the one-time
+	// token path (no saved card). Privacy mode adds a second guarantee on the
+	// saved-card path — the live QR add-card flow has no "save anyway" prompt, so
+	// a privacy user who selects a (QR-collected) card still must not have it
+	// retained. forgetCard charges that card normally, then detaches the
+	// PaymentMethod and hard-deletes the local Card row once the order settles.
+	// It never applies to the token path, which has no local row.
 	ephemeral := req.Ephemeral
+	forgetCard := user.PrivacyMode && !ephemeral
 
 	var card models.Card
 	var paymentMethodID string
@@ -488,7 +492,7 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		UserID:          user.ID,
 		CardID:          card.ID,
 		StripePaymentID: "",
-		Ephemeral:       ephemeral,
+		Ephemeral:       ephemeral || forgetCard,
 		Status:          models.OrderStatusPending,
 		Subtotal:        subtotal,
 		ShippingCost:    cart.ShippingCost,
@@ -625,9 +629,23 @@ func (h *CartHandler) ConvertCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if ephemeral {
+	if ephemeral || forgetCard {
 		if _, derr := paymentMethodDetachFn(paymentMethodID, nil); derr != nil {
 			slog.Warn("failed to detach ephemeral payment method", "order_id", order.ID, "error", derr)
+		}
+	}
+	if forgetCard {
+		// Privacy mode: the card was persisted only long enough to select and
+		// charge it. Null the order's reference and hard-delete the local row so
+		// no card data (last4/brand/token) survives the checkout. Unscoped because
+		// Card uses gorm soft-delete; a plain delete would leave the data on disk.
+		// Mirrors upstream Card.remove (terminal-shop-source core/src/card/index.ts):
+		// detach the PM, drop the FK, delete the row.
+		if err := db.Model(&order).Update("card_id", 0).Error; err != nil {
+			slog.Warn("failed to null forgotten card reference", "order_id", order.ID, "error", err)
+		}
+		if err := db.Unscoped().Delete(&models.Card{}, card.ID).Error; err != nil {
+			slog.Warn("failed to delete forgotten card", "order_id", order.ID, "card_id", card.ID, "error", err)
 		}
 	}
 
