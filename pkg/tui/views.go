@@ -67,7 +67,8 @@ func (m Model) renderString() string {
 	marginTop := 1
 	marginBottom := 1
 	bufferSpace := 1
-	reservedHeight := headerHeight + breadcrumbsHeight + footerHeight + marginTop + marginBottom + bufferSpace
+	bannerHeight := 1
+	reservedHeight := bannerHeight + headerHeight + breadcrumbsHeight + footerHeight + marginBottom + marginTop + bufferSpace
 	availableContentHeight := m.heightContainer - reservedHeight
 
 	// Ensure minimum content height
@@ -81,20 +82,19 @@ func (m Model) renderString() string {
 	if m.Loading {
 		loadingStyle := m.theme.TextLoading().Padding(2, 4)
 		content = loadingStyle.Render("Loading products from API...")
-	} else if m.error != nil {
-		errorStyle := m.theme.PanelError().Padding(0, 1).MarginBottom(1)
-		// soft-wrap long messages instead of clipping.
-		if m.widthContent > 4 {
-			errorStyle = errorStyle.Width(m.widthContent - 4)
-		}
-		errorBanner := errorStyle.Render(m.error.message)
-		content = errorBanner + "\n" + m.buildPageContent()
-	} else if m.notice != nil {
-		noticeStyle := m.theme.TextSuccess().Border(lipgloss.NormalBorder()).BorderForeground(m.theme.Success()).Padding(0, 1).MarginBottom(1)
-		noticeBanner := noticeStyle.Render(m.notice.message)
-		content = noticeBanner + "\n" + m.buildPageContent()
 	} else {
 		content = m.buildPageContent()
+	}
+
+	bannerW := lipgloss.Width(header) - 2
+	var topBanner string
+	switch {
+	case m.error != nil:
+		topBanner = m.theme.PanelError().Width(bannerW).MaxWidth(bannerW).Render(m.error.message)
+	case m.notice != nil:
+		topBanner = m.theme.PanelNotice().Width(bannerW).MaxWidth(bannerW).Render(m.notice.message)
+	default:
+		topBanner = lipgloss.NewStyle().Width(m.widthContent).Render("")
 	}
 
 	isViewportPage := m.currentPage == shopPage || m.currentPage == cartPage ||
@@ -104,20 +104,21 @@ func (m Model) renderString() string {
 	var child string
 	if isViewportPage {
 		if breadcrumbs != "" {
-			child = lipgloss.JoinVertical(lipgloss.Left, header, breadcrumbs, content, footer)
+			child = lipgloss.JoinVertical(lipgloss.Left, topBanner, header, breadcrumbs, content, footer)
 		} else {
-			child = lipgloss.JoinVertical(lipgloss.Left, header, content, footer)
+			child = lipgloss.JoinVertical(lipgloss.Left, topBanner, header, content, footer)
 		}
 	} else if breadcrumbs != "" {
 		contentWithPadding := lipgloss.NewStyle().MarginTop(marginTop).MarginBottom(marginBottom).Height(availableContentHeight).Render(content)
-		child = lipgloss.JoinVertical(lipgloss.Left, header, breadcrumbs, contentWithPadding, footer)
+		child = lipgloss.JoinVertical(lipgloss.Left, topBanner, header, breadcrumbs, contentWithPadding, footer)
 	} else {
 		contentWithPadding := lipgloss.NewStyle().MarginTop(marginTop).MarginBottom(marginBottom).Height(availableContentHeight).Render(content)
-		child = lipgloss.JoinVertical(lipgloss.Left, header, contentWithPadding, footer)
+		child = lipgloss.JoinVertical(lipgloss.Left, topBanner, header, contentWithPadding, footer)
 	}
 
 	// Constrain the assembled layout to the container dimensions
 	constrained := lipgloss.NewStyle().
+		Width(m.widthContainer).
 		MaxWidth(m.widthContainer).
 		MaxHeight(m.heightContainer).
 		Render(child)

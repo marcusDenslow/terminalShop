@@ -70,7 +70,7 @@ func (m Model) updateConfirmViewport() Model {
 	headerH := lipgloss.Height(m.BuildHeader())
 	breadH := lipgloss.Height(m.BuildBreadcrumbs())
 	footerH := lipgloss.Height(m.BuildFooter())
-	availH := m.heightContainer - headerH - footerH - breadH
+	availH := m.heightContainer - headerH - footerH - breadH - 1
 	if availH < 1 {
 		availH = 1
 	}
