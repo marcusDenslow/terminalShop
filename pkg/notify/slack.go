@@ -260,7 +260,7 @@ func SlackPostLabelPurchased(orderID uint, labelURL string, costCents int) {
 		},
 	}
 
-	if strings.EqualFold(order.Carrier, "BRING") {
+	if order.TrackingNumber != "" {
 		blocks = append(blocks, markStatusActionBlock(order.ID))
 	}
 
