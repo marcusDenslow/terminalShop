@@ -253,23 +253,28 @@ func SlackPostLabelPurchased(orderID uint, labelURL string, costCents int) {
 
 	headLine := fmt.Sprintf(":white_check_mark: Labeled - %s `%s` (%s). <%s|Download label PDF>", order.Carrier, order.TrackingNumber, dollars(costCents), labelURL)
 
-	blocks := []map[string]any{
-		{
-			"type": "section",
-			"text": map[string]any{"type": "mrkdwn", "text": headLine},
-		},
-	}
-
-	if order.TrackingNumber != "" {
-		blocks = append(blocks, markStatusActionBlock(order.ID))
-	}
-
 	_, _ = postSlackMessage(token, map[string]any{
 		"channel":   channel,
 		"thread_ts": *order.SlackThreadTS,
 		"text":      headLine,
-		"blocks":    blocks,
+		"blocks":    labelPurchaseBlocks(&order, headLine),
 	})
+}
+
+// labelPurchaseBlocks assembles the Block Kit payload for the post-label thread
+// reply: a headline section plus the manual mark-status buttons for any labeled
+// order. The buttons are gtated on a present tracking number (carrier-agnostic)
+func labelPurchaseBlocks(order *models.Order, headline string) []map[string]any {
+	blocks := []map[string]any{
+		{
+			"type": "section",
+			"text": map[string]any{"type": "mrkdwn", "text": headline},
+		},
+	}
+	if order.TrackingNumber != "" {
+		blocks = append(blocks, markStatusActionBlock(order.ID))
+	}
+	return blocks
 }
 
 func markStatusActionBlock(orderID uint) map[string]any {
