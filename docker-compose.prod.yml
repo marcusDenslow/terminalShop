@@ -25,7 +25,7 @@ services:
       SSH_PORT: "22"
       API_URL: http://api:8080
     ports:
-      # hostsshd owns :22; router forwards public 22 -> 2222
+      # host sshd owns :22; router forwards public 22 -> 2222
       - "2222:22"
     volumes:
       - ./.ssh:/root/.ssh
@@ -38,6 +38,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:2026.9.3
     restart: unless-stopped
+    command: tunnel --no-autoupdate run
     # Only TUNNEL_TOKEN; keeps app secrets out of this container.
     env_file: .env.tunnel
     depends_on:
