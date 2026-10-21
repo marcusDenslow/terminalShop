@@ -4,6 +4,7 @@
 .env.production
 .env.example
 .env.prod
+.env.tunnel
 
 docs/sca-psd2-compliance.md
 accept-a-payment/
