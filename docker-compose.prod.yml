@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile.api
     restart: unless-stopped
     env_file: .env.prod
+    environment:
+      DATABASE_URL: /data/terminalshop.db
+      API_PORT: "8080"
+      APP_URL: https://api.sshops.uk
     volumes:
       - ./data:/data
     expose:
@@ -16,26 +20,26 @@ services:
       dockerfile: Dockerfile.ssh
     restart: unless-stopped
     env_file: .env.prod
+    environment:
+      SSH_HOST: 0.0.0.0
+      SSH_PORT: "22"
+      API_URL: http://api:8080
     ports:
-      - "22:22"
+      # host sshd owns :22; router forwards public 22 -> 2222
+      - "2222:22"
     volumes:
       - ./.ssh:/root/.ssh
     depends_on:
       - api
 
-  caddy:
-    image: caddy:2-alpine
+    # Outbound tunnel to CloudFlare: serves api.sshops.uk with no inbound port,
+    # TLS terminated at CloudFlare. Ingress (api.sshops.uk -> http://api:8080)
+    # is configured in the Zero Trust dashboard; the token picks the tunnel.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
+    command: tunnel --no-autoupdate run
+    # Only TUNNEL_TOKEN; keeps app secrets out of this container.
+    env_file: .env.tunnel
     depends_on:
       - api
-
-volumes:
-  caddy_data:
-  caddy_config:
